@@ -1,0 +1,28 @@
+# OS/IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/.venv/
+**/.env
+
+# Node
+**/node_modules/
+**/dist/
+**/build/
+
+# Data / Vector stores
+**/chroma/
+**/data/
+**/output/
+**/results/
+
+# Models
+**/models/
+**/*.gguf
+**/*.bin
+**/*.pt
+**/*.safetensors

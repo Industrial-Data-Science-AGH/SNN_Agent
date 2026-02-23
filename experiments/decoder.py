@@ -14,9 +14,9 @@ from typing import Optional
 
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] [%(levelname)s] %(message)s',
+    format="[%(asctime)s] [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler('/tmp/decoder.log'),
+        logging.FileHandler("/tmp/decoder.log"),
         logging.StreamHandler(sys.stdout),
     ],
 )
@@ -47,6 +47,7 @@ class GPIOController:
         self.enabled = False
         try:
             import RPi.GPIO as GPIO  # type: ignore
+
             self._gpio = GPIO
             GPIO.setmode(GPIO.BCM)
             GPIO.setup(self.pin, GPIO.OUT)
@@ -101,7 +102,9 @@ class SpiPacket:
         lo = self.timestamp & 0xFF
         expected = (self.header ^ hi ^ lo ^ self.energy_level ^ self.spike_id) & 0xFF
         if self.checksum != expected:
-            logger.warning(f"Checksum mismatch: got {hex(self.checksum)}, expected {hex(expected)}")
+            logger.warning(
+                f"Checksum mismatch: got {hex(self.checksum)}, expected {hex(expected)}"
+            )
             return False
         return True
 
@@ -151,7 +154,9 @@ class SpiReader(SpiReaderBase):
         self.packet_count = 0
         self.error_count = 0
 
-        logger.info(f"SPI Reader initialized: Bus={bus}, Device={device}, Speed={speed/1e6:.1f}MHz")
+        logger.info(
+            f"SPI Reader initialized: Bus={bus}, Device={device}, Speed={speed / 1e6:.1f}MHz"
+        )
 
     def start(self) -> None:
         self.running = True
@@ -167,7 +172,9 @@ class SpiReader(SpiReaderBase):
             self.spi.close()
         except Exception:
             pass
-        logger.info(f"SPI Reader stopped - {self.packet_count} packets received, {self.error_count} errors")
+        logger.info(
+            f"SPI Reader stopped - {self.packet_count} packets received, {self.error_count} errors"
+        )
 
     def _read_loop(self) -> None:
         last_spike_time_ms = 0.0
@@ -250,7 +257,6 @@ TCP_PORT = 9999
 
 
 class TcpReader(SpiReaderBase):
-
     def __init__(self, host: str = TCP_HOST, port: int = TCP_PORT):
         self.host = host
         self.port = port
@@ -375,9 +381,13 @@ class AnomalyDetector:
             self.spike_history.append({"energy": energy, "time": ts, "id": spike_id})
 
             if len(self.spike_history) >= self.event_threshold:
-                dt = (self.spike_history[-1]["time"] - self.spike_history[0]["time"]).total_seconds()
+                dt = (
+                    self.spike_history[-1]["time"] - self.spike_history[0]["time"]
+                ).total_seconds()
                 if dt <= self.window_s:
-                    avg_energy = sum(s["energy"] for s in self.spike_history) / len(self.spike_history)
+                    avg_energy = sum(s["energy"] for s in self.spike_history) / len(
+                        self.spike_history
+                    )
                     logger.info(
                         f"[EVENT] Spike cluster: {len(self.spike_history)} spikes in {dt:.2f}s | avg energy: {avg_energy:.0f}"
                     )
@@ -400,6 +410,7 @@ class LLMAgent:
         self.is_running = False
         try:
             import requests  # type: ignore
+
             self.requests = requests
             self.enabled = True
             logger.info(f"LLM Agent initialized: model={model}")
@@ -411,7 +422,9 @@ class LLMAgent:
     def wake_up_async(self, spike_data: float, context_buffer: list[int]) -> None:
         if not self.enabled:
             return
-        t = threading.Thread(target=self.wake_up, args=(spike_data, context_buffer), daemon=True)
+        t = threading.Thread(
+            target=self.wake_up, args=(spike_data, context_buffer), daemon=True
+        )
         t.start()
 
     def wake_up(self, spike_data: float, context_buffer: list[int]) -> None:
@@ -463,7 +476,9 @@ class LLMAgent:
                 else:
                     logger.info("NORMAL")
             else:
-                logger.error(f"Ollama error: HTTP {resp.status_code} | {resp.text[:200]}")
+                logger.error(
+                    f"Ollama error: HTTP {resp.status_code} | {resp.text[:200]}"
+                )
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
         finally:
@@ -515,7 +530,9 @@ class NeuromorphicDecoder:
             if event_detected:
                 recent = list(circular_buffer)[-256:] if circular_buffer else [0]
                 avg_energy = float(np.mean(recent)) if recent else 0.0
-                self.llm_agent.wake_up_async(spike_data=avg_energy, context_buffer=recent)
+                self.llm_agent.wake_up_async(
+                    spike_data=avg_energy, context_buffer=recent
+                )
             time.sleep(0.01)
 
     def stop(self) -> None:

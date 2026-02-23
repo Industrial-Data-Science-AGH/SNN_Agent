@@ -48,7 +48,6 @@ def make_spike_packet(**kwargs):
 
 
 class TestSpiPacket:
-
     def test_parse_valid_packet(self):
         raw = make_raw_packet(header=0xAE, timestamp=100, energy=200, spike_id=1)
         pkt = SpiPacket(raw)
@@ -97,7 +96,6 @@ class TestSpiPacket:
 
 
 class TestMockPacket:
-
     def test_always_valid(self):
         pkt = MockPacket(timestamp=1000, energy_level=255, spike_id=5)
         assert pkt.validate() is True
@@ -108,8 +106,8 @@ class TestMockPacket:
         assert "42" in r
         assert "111" in r
 
-class TestAnomalyDetector:
 
+class TestAnomalyDetector:
     def setup_method(self):
         while not SPIKE_QUEUE.empty():
             try:
@@ -120,8 +118,9 @@ class TestAnomalyDetector:
         self.detector = AnomalyDetector(SPIKE_QUEUE, self.buf)
 
     def _push_spike(self, energy, dt_offset_ms=0):
-        pkt = MockPacket(timestamp=int(time.time() * 1000) & 0xFFFF,
-                         energy_level=energy, spike_id=0)
+        pkt = MockPacket(
+            timestamp=int(time.time() * 1000) & 0xFFFF, energy_level=energy, spike_id=0
+        )
         ts = datetime.now() + timedelta(milliseconds=dt_offset_ms)
         SPIKE_QUEUE.put((pkt, ts))
 
@@ -165,7 +164,6 @@ class TestAnomalyDetector:
 
 
 class TestLLMAgent:
-
     def setup_method(self):
         self.agent = LLMAgent()
         self.agent.enabled = True
@@ -179,23 +177,27 @@ class TestLLMAgent:
 
     def test_wake_up_alarm(self):
         with patch.object(self.agent, "requests") as mock_req:
-            mock_req.post.return_value = self._mock_response("ALARM: glass breaking detected")
+            mock_req.post.return_value = self._mock_response(
+                "ALARM: glass breaking detected"
+            )
             with patch.object(self.agent, "_trigger_alarm") as mock_alarm:
-                self.agent.wake_up(spike_data=220.0, context_buffer=[220]*10)
+                self.agent.wake_up(spike_data=220.0, context_buffer=[220] * 10)
                 mock_alarm.assert_called_once()
 
     def test_wake_up_normal(self):
         with patch.object(self.agent, "requests") as mock_req:
             mock_req.post.return_value = self._mock_response("NORMAL: background noise")
             with patch.object(self.agent, "_trigger_alarm") as mock_alarm:
-                self.agent.wake_up(spike_data=30.0, context_buffer=[30]*10)
+                self.agent.wake_up(spike_data=30.0, context_buffer=[30] * 10)
                 mock_alarm.assert_not_called()
 
     def test_wake_up_warning(self):
         with patch.object(self.agent, "requests") as mock_req:
-            mock_req.post.return_value = self._mock_response("WARNING: suspicious sound")
+            mock_req.post.return_value = self._mock_response(
+                "WARNING: suspicious sound"
+            )
             with patch.object(self.agent, "_trigger_alarm") as mock_alarm:
-                self.agent.wake_up(spike_data=160.0, context_buffer=[160]*5)
+                self.agent.wake_up(spike_data=160.0, context_buffer=[160] * 5)
                 mock_alarm.assert_not_called()
 
     def test_http_error_handled(self):
@@ -221,17 +223,18 @@ class TestLLMAgent:
 
     def test_prompt_contains_energy_value(self):
         captured_prompt = {}
+
         def fake_post(url, json=None, timeout=None):
             captured_prompt["json"] = json
             return self._mock_response("NORMAL")
+
         with patch.object(self.agent, "requests") as mock_req:
             mock_req.post.side_effect = fake_post
-            self.agent.wake_up(spike_data=185.5, context_buffer=[185]*5)
+            self.agent.wake_up(spike_data=185.5, context_buffer=[185] * 5)
         assert "185.5" in captured_prompt["json"]["prompt"]
 
 
 class TestGPIOController:
-
     def test_pulse_when_disabled_does_not_raise(self):
         ctrl = GPIOController(pin=17)
         ctrl.enabled = False
@@ -254,11 +257,11 @@ class TestGPIOController:
 
 
 class TestMockSpiReader:
-
     def test_reader_generates_packets(self):
         test_queue = queue.Queue(maxsize=50)
         reader = MockSpiReader(rate_hz=100.0)
         import experiments.decoder as dec
+
         original_queue = dec.SPIKE_QUEUE
         dec.SPIKE_QUEUE = test_queue
         reader.start()
@@ -276,8 +279,12 @@ class TestMockSpiReader:
 
     def test_mock_energy_distribution(self):
         samples = [
-            int(np.random.choice([30, 40, 60, 90, 120, 180, 220],
-                                 p=[0.2, 0.2, 0.2, 0.15, 0.1, 0.1, 0.05]))
+            int(
+                np.random.choice(
+                    [30, 40, 60, 90, 120, 180, 220],
+                    p=[0.2, 0.2, 0.2, 0.15, 0.1, 0.1, 0.05],
+                )
+            )
             for _ in range(200)
         ]
         unique = set(samples)
@@ -285,15 +292,16 @@ class TestMockSpiReader:
 
 
 class TestNeuromorphicDecoder:
-
     def test_decoder_uses_mock_spi_outside_linux(self):
         import experiments.decoder as dec
+
         with patch.object(dec.sys, "platform", "win32"):
             d = NeuromorphicDecoder()
         assert isinstance(d.spi_reader, MockSpiReader)
 
     def test_decoder_uses_mock_spi_via_env(self):
         import experiments.decoder as dec
+
         with patch.dict(dec.os.environ, {"SNN_USE_MOCK_SPI": "1"}):
             d = NeuromorphicDecoder()
         assert isinstance(d.spi_reader, MockSpiReader)
@@ -332,7 +340,6 @@ class TestNeuromorphicDecoder:
 
 
 class TestEndToEnd:
-
     def test_full_pipeline_spike_to_llm(self):
         buf = deque(maxlen=16000)
         test_q = queue.Queue(maxsize=100)
@@ -344,10 +351,11 @@ class TestEndToEnd:
 
         with patch.object(agent, "requests") as mock_req:
             mock_req.post.return_value = MagicMock(
-                status_code=200,
-                json=lambda: {"response": "ALARM: test"}
+                status_code=200, json=lambda: {"response": "ALARM: test"}
             )
-            with patch.object(agent, "_trigger_alarm", side_effect=lambda: llm_called.set()):
+            with patch.object(
+                agent, "_trigger_alarm", side_effect=lambda: llm_called.set()
+            ):
                 now = datetime.now()
                 for i in range(3):
                     pkt = MockPacket(timestamp=i, energy_level=200, spike_id=i)
@@ -378,6 +386,7 @@ class TestEndToEnd:
         assert pkt.validate() is True
         assert pkt.energy_level == energy
         assert pkt.timestamp == timestamp
+
 
 class TestTcpTransport:
     """Real-time simulation tests over TCP (localhost)."""
@@ -419,6 +428,7 @@ class TestTcpTransport:
     def test_single_packet_arrives_via_tcp(self):
         self._drain_queue()
         import experiments.decoder as dec
+
         original_queue = dec.SPIKE_QUEUE
         test_q = queue.Queue(maxsize=50)
         dec.SPIKE_QUEUE = test_q
@@ -429,6 +439,7 @@ class TestTcpTransport:
 
         try:
             import socket
+
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect(("127.0.0.1", reader.bound_port))
             raw = build_packet(timestamp=100, energy=200, spike_id=1)
@@ -448,6 +459,7 @@ class TestTcpTransport:
     def test_corrupted_packet_rejected(self):
         self._drain_queue()
         import experiments.decoder as dec
+
         original_queue = dec.SPIKE_QUEUE
         test_q = queue.Queue(maxsize=50)
         dec.SPIKE_QUEUE = test_q
@@ -458,6 +470,7 @@ class TestTcpTransport:
 
         try:
             import socket
+
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.connect(("127.0.0.1", reader.bound_port))
 
@@ -476,6 +489,7 @@ class TestTcpTransport:
     def test_encoder_sim_sends_packets(self):
         self._drain_queue()
         import experiments.decoder as dec
+
         original_queue = dec.SPIKE_QUEUE
         test_q = queue.Queue(maxsize=50)
         dec.SPIKE_QUEUE = test_q
@@ -502,6 +516,7 @@ class TestTcpTransport:
     def test_tcp_end_to_end_pipeline(self):
         self._drain_queue()
         import experiments.decoder as dec
+
         original_queue = dec.SPIKE_QUEUE
         test_q = queue.Queue(maxsize=100)
         dec.SPIKE_QUEUE = test_q
@@ -539,7 +554,9 @@ class TestTcpTransport:
                         status_code=200,
                         json=lambda: {"response": "ALARM: tcp test"},
                     )
-                    with patch.object(agent, "_trigger_alarm", side_effect=lambda: llm_called.set()):
+                    with patch.object(
+                        agent, "_trigger_alarm", side_effect=lambda: llm_called.set()
+                    ):
                         avg = float(np.mean(list(buf)[-256:])) if buf else 220.0
                         agent.wake_up(spike_data=avg, context_buffer=list(buf))
                         assert llm_called.is_set()
@@ -549,6 +566,7 @@ class TestTcpTransport:
 
     def test_decoder_picks_tcp_reader_via_env(self):
         import experiments.decoder as dec
+
         with patch.dict(dec.os.environ, {"SNN_READER": "tcp", "SNN_TCP_PORT": "0"}):
             d = NeuromorphicDecoder()
         assert isinstance(d.spi_reader, TcpReader)

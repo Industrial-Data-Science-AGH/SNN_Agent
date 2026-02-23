@@ -33,7 +33,6 @@ def build_packet(timestamp: int, energy: int, spike_id: int = 0) -> bytes:
 
 
 class EncoderSim:
-
     def __init__(
         self,
         host: str = "127.0.0.1",

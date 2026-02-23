@@ -1,7 +1,19 @@
 [project]
 name = "snn-agent"
 version = "0.1.0"
-description = "Add your description here"
+description = "SNN Agent"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []
+
+[project.optional-dependencies]
+rpi = [
+    "spidev==3.8 ; sys_platform == 'linux'",
+]
+
+[dependency-groups]
+dev = [
+    "numpy>=2.4.2",
+    "pytest>=9.0.2",
+    "ruff>=0.15.2",
+]

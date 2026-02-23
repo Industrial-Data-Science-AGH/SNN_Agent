@@ -2,6 +2,7 @@
 import time
 import threading
 import queue
+import socket
 import numpy as np
 import sys
 import os
@@ -244,6 +245,114 @@ class MockSpiReader(SpiReaderBase):
             time.sleep(max(0.001, 1.0 / self.rate_hz))
 
 
+TCP_HOST = "127.0.0.1"
+TCP_PORT = 9999
+
+
+class TcpReader(SpiReaderBase):
+
+    def __init__(self, host: str = TCP_HOST, port: int = TCP_PORT):
+        self.host = host
+        self.port = port
+        self.running = False
+        self.thread: Optional[threading.Thread] = None
+        self.server_socket: Optional[socket.socket] = None
+        self.packet_count = 0
+        self.error_count = 0
+        self._ready = threading.Event()
+        logger.info(f"TcpReader initialized: {host}:{port}")
+
+    @property
+    def bound_port(self) -> int:
+        if self.server_socket is not None:
+            return self.server_socket.getsockname()[1]
+        return self.port
+
+    def start(self) -> None:
+        self.running = True
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.server_socket.settimeout(1.0)
+        self.server_socket.bind((self.host, self.port))
+        self.server_socket.listen(1)
+        self.thread = threading.Thread(target=self._accept_loop, daemon=True)
+        self.thread.start()
+        self._ready.set()
+        logger.info(f"TcpReader listening on {self.host}:{self.bound_port}")
+
+    def wait_ready(self, timeout: float = 5.0) -> bool:
+        return self._ready.wait(timeout)
+
+    def stop(self) -> None:
+        self.running = False
+        if self.server_socket:
+            try:
+                self.server_socket.close()
+            except Exception:
+                pass
+        if self.thread:
+            self.thread.join(timeout=2)
+        logger.info(
+            f"TcpReader stopped – {self.packet_count} packets, {self.error_count} errors"
+        )
+
+    def _accept_loop(self) -> None:
+        while self.running:
+            try:
+                conn, addr = self.server_socket.accept()  # type: ignore[union-attr]
+                logger.info(f"TcpReader: client connected from {addr}")
+                self._handle_client(conn)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+
+    def _handle_client(self, conn: socket.socket) -> None:
+        conn.settimeout(1.0)
+        buf = b""
+        last_spike_time_ms = 0.0
+        try:
+            while self.running:
+                try:
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        break
+                    buf += chunk
+                except socket.timeout:
+                    continue
+
+                while len(buf) >= SpiPacket.SIZE:
+                    raw = buf[: SpiPacket.SIZE]
+                    buf = buf[SpiPacket.SIZE :]
+
+                    try:
+                        pkt = SpiPacket(raw)
+                    except ValueError:
+                        self.error_count += 1
+                        continue
+
+                    if not pkt.validate():
+                        self.error_count += 1
+                        continue
+
+                    self.packet_count += 1
+                    now_ms = time.time() * 1000.0
+                    if now_ms - last_spike_time_ms < SPIKE_COOLDOWN_MS:
+                        continue
+                    last_spike_time_ms = now_ms
+
+                    try:
+                        SPIKE_QUEUE.put_nowait((pkt, datetime.now()))
+                        logger.info(f"[SPIKE] {pkt} | via TCP")
+                        gpio.pulse(0.05)
+                    except queue.Full:
+                        logger.warning("Spike queue full – dropping TCP packet")
+        except Exception as e:
+            logger.error(f"TcpReader client error: {e}")
+        finally:
+            conn.close()
+
+
 class AnomalyDetector:
     def __init__(self, spike_queue: queue.Queue, buffer: deque):
         self.spike_queue = spike_queue
@@ -372,6 +481,13 @@ class NeuromorphicDecoder:
         self.running = False
 
     def _make_spi_reader(self) -> SpiReaderBase:
+        mode = str(os.environ.get("SNN_READER", "")).strip().lower()
+
+        if mode == "tcp":
+            tcp_host = os.environ.get("SNN_TCP_HOST", TCP_HOST)
+            tcp_port = int(os.environ.get("SNN_TCP_PORT", str(TCP_PORT)))
+            return TcpReader(host=tcp_host, port=tcp_port)
+
         if str(os.environ.get("SNN_USE_MOCK_SPI", "")).strip() == "1":
             return MockSpiReader()
 

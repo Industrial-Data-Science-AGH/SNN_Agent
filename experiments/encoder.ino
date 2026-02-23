@@ -1,3 +1,4 @@
+// experiments/encoder.ino
 #include <SPI.h>
 
 #define MIC_PIN A0
@@ -50,7 +51,6 @@ ISR(TIMER1_COMPA_vect) {
     uint8_t avgEnergy = sumEnergy / WINDOW_SIZE;
     
     if (avgEnergy > ENERGY_THRESHOLD) {
-      // Wykryto anomalię! Przygotuj pakiet
       currentSpike.timestamp = sampleCounter;
       currentSpike.energy = avgEnergy;
       currentSpike.checksum = currentSpike.header ^ (currentSpike.timestamp & 0xFF) ^ 

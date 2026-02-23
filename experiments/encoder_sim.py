@@ -8,7 +8,6 @@ Usage:
 import argparse
 import logging
 import socket
-import sys
 import threading
 import time
 from typing import Optional

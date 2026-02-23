@@ -6,7 +6,7 @@ import time
 import threading
 from collections import deque
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 import pytest
 import numpy as np
 

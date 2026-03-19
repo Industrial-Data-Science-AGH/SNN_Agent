@@ -26,3 +26,9 @@
 **/*.bin
 **/*.pt
 **/*.safetensors
+
+#moje
+notebooks/dataset/glass/*
+notebooks/dataset/negative/*
+dataset/testing/*
+

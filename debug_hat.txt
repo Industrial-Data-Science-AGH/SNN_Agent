@@ -1,0 +1,63 @@
+
+######################################################################
+  SNN HARDWARE-AWARE TRAINING PIPELINE
+  Phase: B | Encoding: ttfs | Device: cpu
+  Seed: 42 | Quick: True
+  Data limit: 50 files
+######################################################################
+
+[INFO] £adujê dataset...
+[INFO] ESC-50 ju¿ istnieje w C:\Users\Patryk\Documents\SNN_Agent\data\ESC-50-master — pomijam pobieranie.
+[INFO] Znaleziono 2000 plików audio w katalogu.
+[INFO] Pozytywne (glass_break): 12, Negatywne: 38
+[INFO] Split — Train: 4+ / 14-, Val: 4+ / 12-, Test: 4+ / 12-
+[INFO] Przetwarzam zbiór treningowy...
+[INFO] Przetwarzam zbiór walidacyjny...
+[INFO] Przetwarzam zbiór testowy...
+[INFO] Datasety gotowe — Train: 58, Val: 16, Test: 16
+
+======================================================================
+  FAZA B — HARDWARE-AWARE TRAINING (HAT)
+======================================================================
+======================================================================
+  HARDWARE-AWARE TRAINING (HAT) v2 — Fixed
+  Epochs: 1, LR: 0.001
+  Loss: BCE + F1 penalty + precision penalty + recall penalty + E24
+  Temperature: 5.0 -> 0.1
+  Mismatch: ±1.0% wag, ±5.0mV V_th
+  Checkpoint: max F1 (nie max recall)
+======================================================================
+  Epoch   0/1 | T=5.00 | Loss: 14.6295 | Val P/R/F1: 1.00/0.00/0.00 | inh=0.330/-0.498
+[HAT DONE] Najlepsze F1: 0.000 (epoch 0)
+[HAT DONE] Wagi: {'w_n1': 0.6980016827583313, 'w_n2': 0.501995861530304, 'w_n3_from_n1': 0.7219989895820618, 'w_n3_from_n2': 0.43800413608551025, 'w_inh': 0.3297434151172638, 'w_inh_to_n3': -0.4980040490627289}
+[HAT DONE] Progi: {'vth_n1': 0.6000000238418579, 'vth_n2': 0.5, 'vth_n3': 0.800000011920929, 'vth_inh': 0.4000000059604645}
+[INFO] Learning curves saved to C:\Users\Patryk\Documents\SNN_Agent\output\hat_learning_curves.png
+
+================================================================================
+Neuron       Synapsa            Baseline   Trened.    E24        B³¹d %  
+--------------------------------------------------------------------------------
+N1           w_n1               0.700      0.698     0.680     2.6     
+N2           w_n2               0.500      0.502     0.510     1.6     
+N3           w_n3_from_n1       0.720      0.722     0.750     3.9     
+N3           w_n3_from_n2       0.440      0.438     0.430     1.8     
+N_inh        w_inh              0.330      0.330     0.330     0.1     
+N_inh->N3    w_inh_to_n3        -0.500     -0.498     -0.510     2.4     
+================================================================================
+
+==================================================
+  EWALUACJA: Po HAT
+==================================================
+  Precision:    1.0000
+  Recall:       0.0000
+  F1:           0.0000
+  Accuracy:     0.7500
+  FNR:          1.0000
+  Avg latency:  8.5 ms
+  Confusion matrix:
+    TN=  12  FP=   0
+    FN=   4  TP=   0
+==================================================
+
+[FAZA B] Zakoñczona w 4.2s
+
+[TOTAL] Pipeline zakoñczony w 10.4s (0.2 min)

@@ -82,8 +82,7 @@ Jeśli falszywe alarmy - zwiększ threshold:
 ## PARAMETRY DO WYREGULOWANIA
 
 ```cpp
-#define SAMPLE_RATE 8000        // Hz - czę
-stotliwość próbkowania
+#define SAMPLE_RATE 8000        // Hz - częstotliwość próbkowania
 #define ENERGY_THRESHOLD 150    // Próg anomalii (wyżej = rzadziej reaguje)
 #define NOISE_THRESHOLD 50      // Próg szumu tła
 ```

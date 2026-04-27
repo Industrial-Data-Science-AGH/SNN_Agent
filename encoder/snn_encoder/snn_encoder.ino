@@ -81,6 +81,8 @@ void setup() {
 
   lastWindowStart = millis();
   ttfsWindowStart = millis();
+
+  Serial.println("READY");
 }
 
 // ============================================================

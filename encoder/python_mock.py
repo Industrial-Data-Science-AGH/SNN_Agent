@@ -2,22 +2,24 @@ import serial
 import wave
 import numpy as np
 import time
-import pandas as pd
 
 # --- KONFIGURACJA ---
-PORT = '/dev/ttyACM0'  # port arduino na linuksie
+# PORT = '/dev/ttyACM0'  # linux
+PORT = 'COM3' # windows
 BAUD = 115200
+
 DOG = "sounds/dog.wav"
 DOOR = "sounds/door.wav"
 GLASS1 = "sounds/glass1.wav"
-SOUND_FILE = GLASS1
+SOUND_FILE = GLASS1 # ten plik jest grany
+
 WINDOW_MS = 10         # Musi być zgodne z RC_WINDOW_MS w Arduino
 OUTPUT_FILE = "output/data.txt"
 
 def play_wav_to_arduino():
     try:
         ser = serial.Serial(PORT, BAUD, timeout=1)
-        time.sleep(2) # Czekaj na restart Arduino
+        time.sleep(1) # Czekaj na restart Arduino
         
         with wave.open(SOUND_FILE, 'rb') as wav:
             fps = wav.getframerate()
@@ -30,12 +32,20 @@ def play_wav_to_arduino():
                 print(f"Start wysyłania: {SOUND_FILE}")
                 print(f"Parametry: {fps}Hz, Okno: {WINDOW_MS}ms")
 
+                is_ready = False
+
                 while True:
+                    line = ser.readline().decode(errors="ignore").strip()
+                    if line == "READY": 
+                        is_ready = True
+                        file.write("[ms] | AMP | [ISI] - czas miedzy spike'ami | SPIKES_total\n")
+                    if not is_ready: continue
+                    
                     data = wav.readframes(samples_per_window)
                     if not data: break
                     
                     # Konwersja bajtów na liczby
-                    samples = np.frombuffer(data, dtype=np.int16)
+                    samples = np.frombuffer(data, dtype=np.int16).astype(np.int32)
                     if n_channels > 1: samples = samples[::n_channels] # Jeśli stereo, bierz jeden kanał
                     
                     if len(samples) > 0:
@@ -54,10 +64,10 @@ def play_wav_to_arduino():
                         
                         # Czytamy co Arduino odpowiedziało (opcjonalnie do debugu)
                         if ser.in_waiting:
-                            response = ser.readline().decode().strip()
-                            info = f"Wysłano: {scaled_amp} | Arduino: {response}"
-                            print(info)
-                            file.write(f"{info}\n")
+                            response = ser.readline().decode("utf-8", errors="replace").strip()
+                            info = f"Wyslano: {scaled_amp} | Arduino: {response}"
+                            print(info.replace("\t", " | "))
+                            file.write(f"{info.replace("\t", " | ")}\n")
 
                 print("Koniec pliku.")
 

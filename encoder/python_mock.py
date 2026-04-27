@@ -14,7 +14,7 @@ GLASS1 = "sounds/glass1.wav"
 SOUND_FILE = GLASS1 # ten plik jest grany
 
 WINDOW_MS = 10         # Musi być zgodne z RC_WINDOW_MS w Arduino
-OUTPUT_FILE = "output/data.txt"
+OUTPUT_FILE = "output/data2.txt"
 
 def play_wav_to_arduino():
     try:
@@ -38,6 +38,7 @@ def play_wav_to_arduino():
                     line = ser.readline().decode(errors="ignore").strip()
                     if line == "READY": 
                         is_ready = True
+                        file.write(f"SOUND={SOUND_FILE}\n")
                         file.write("[ms] | AMP | [ISI] - czas miedzy spike'ami | SPIKES_total\n")
                     if not is_ready: continue
                     

@@ -5,7 +5,7 @@ import time
 import pandas as pd
 
 # --- KONFIGURACJA ---
-PORT = '/dev/ttyACM0'  # port arduino
+PORT = '/dev/ttyACM0'  # port arduino na linuksie
 BAUD = 115200
 DOG = "sounds/dog.wav"
 DOOR = "sounds/door.wav"

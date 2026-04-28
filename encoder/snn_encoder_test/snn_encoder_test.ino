@@ -24,11 +24,11 @@
 #define RC_WINDOW_MS      10      // ms — okno zbierania próbek
 #define RC_MIN_RATE_HZ    5       // Hz — minimalna częstotliwość spike'ów
 #define RC_MAX_RATE_HZ    200     // Hz — maksymalna (ograniczona przez PCB neuron)
-#define RC_NOISE_FLOOR    40      // ADC counts poniżej których = cisza
+#define RC_NOISE_FLOOR    10    // ADC counts poniżej których = cisza
 
 // ---- PARAMETRY TTFS ----
 #define TTFS_WINDOW_MS    20      // ms — czas jednej "ramki" TTFS
-#define TTFS_THRESHOLD    50      // ADC counts — poniżej: brak spike'a (cisza)
+#define TTFS_THRESHOLD    40    // ADC counts — poniżej: brak spike'a (cisza) 
 #define TTFS_MAX_AMP      400     // ADC counts — amplituda = maksymalny sygnał
 
 // ---- PARAMETRY IMPULSU ----
@@ -77,6 +77,7 @@ void setup() {
 
   lastWindowStart = millis();
   ttfsWindowStart = millis();
+  Serial.println("READY");
 }
 
 // ============================================================

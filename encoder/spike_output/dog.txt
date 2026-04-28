@@ -1,0 +1,12 @@
+Wyslano: 50 | Arduino: 4452 | 40 | 146077 | 1
+Wyslano: 475 | Arduino: 4513 | 315 | 26053 | 2
+Wyslano: 745 | Arduino: 4554 | 475 | 18969 | 3
+Wyslano: 783 | Arduino: 4587 | 452 | 16242 | 5
+Wyslano: 967 | Arduino: 4629 | 560 | 15874 | 6
+Wyslano: 367 | Arduino: 4672 | 284 | 16555 | 8
+Wyslano: 235 | Arduino: 4694 | 235 | 22152 | 9
+Wyslano: 127 | Arduino: 4747 | 129 | 35604 | 10
+Wyslano: 61 | Arduino: 4799 | 68 | 58402 | 11
+Wyslano: 16 | Arduino: 4943 | 17 | 158777 | 12
+
+Dzwiek sounds/dog.wav wywolal 12 spike'ow

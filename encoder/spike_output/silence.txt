@@ -1,0 +1,2 @@
+
+Dzwiek sounds/silence.wav wywolal 0 spike'ow

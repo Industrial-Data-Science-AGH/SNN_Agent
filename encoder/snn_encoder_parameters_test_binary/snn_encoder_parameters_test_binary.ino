@@ -1,82 +1,66 @@
 // ============================================================
-//  ULTRA-FAST SNN Encoder — Arduino Mega
-//  Optymalizacja: Binarna transmisja + Fixed-Point
+//  SNN Encoder - 3 Channel Tensor Generator (Peak, Mean, Std)
 // ============================================================
 
-#define BAUD_RATE 250000 
-#define PIN_SPIKE 6
+#define PIN_SPIKE_CH0  6 // Peak Energy
+#define PIN_SPIKE_CH1  7 // Mean Energy
+#define PIN_SPIKE_CH2  8 // Std Energy (Burst detection)
 
-// Struktura binarna - 8 bajtów zamiast ~30 bajtów tekstu
-struct __attribute__((packed)) Report {
-  uint16_t peak;
-  uint16_t mean;
-  uint16_t std;
-  uint16_t total_spikes;
-} report;
-
-// Zmienne do statystyk (Fixed-point zamiast float)
-long sum_x = 0;
-long sum_x2 = 0;
-uint16_t count = 0;
-uint16_t current_peak = 0;
-
-// AFE i SNN
-int last_raw = 512;
-uint32_t currentISI_us = 0;
-uint32_t lastSpikeTime = 0;
+#define STATS_WINDOW 15 // Okno statystyk (15 klatek po 10ms = 150ms kontekstu)
+int energyHistory[STATS_WINDOW];
+int hIdx = 0;
 
 void setup() {
-  Serial.begin(BAUD_RATE);
-  pinMode(PIN_SPIKE, OUTPUT);
+  Serial.begin(115200);
+  pinMode(PIN_SPIKE_CH0, OUTPUT);
+  pinMode(PIN_SPIKE_CH1, OUTPUT);
+  pinMode(PIN_SPIKE_CH2, OUTPUT);
 }
 
 void loop() {
-  // 1. Szybki odczyt binarny (jeśli czekają 2 bajty próbki)
-  if (Serial.available() >= 2) {
-    uint16_t raw = (Serial.read() << 8) | Serial.read();
+  if (Serial.available() > 0) {
+    String input = Serial.readStringUntil('\n');
+    if (input == "SYN") { Serial.println("READY"); return; }
+    
+    int currentEnergy = input.toInt();
 
-    // Prostym filtrem HP jest różnica próbek (najszybsza możliwa opcja)
-    int filtered = abs((int)raw - last_raw);
-    last_raw = raw;
+    // 1. Aktualizacja historii energii
+    energyHistory[hIdx] = currentEnergy;
+    hIdx = (hIdx + 1) % STATS_WINDOW;
 
-    // Statystyki (akumulacja)
-    count++;
-    sum_x += filtered;
-    sum_x2 += (long)filtered * filtered;
-    if (filtered > current_peak) current_peak = filtered;
-
-    // Co 32 próbki (potęga 2 = szybkie dzielenie) wysyłamy raport
-    if (count >= 32) {
-      report.peak = current_peak;
-      report.mean = sum_x >> 5; // Szybkie dzielenie przez 32
-      
-      // Przybliżone STD (wariancja uproszczona dla szybkości)
-      long var = (sum_x2 >> 5) - ((long)report.mean * report.mean);
-      report.std = (var > 0) ? sqrt(var) : 0;
-      report.total_spikes = (uint16_t)0; // Tu opcjonalnie licznik
-
-      // SNN Rate Coding
-      uint16_t rate = 5 + (report.peak / 6); // Uproszczone mapowanie
-      currentISI_us = (report.peak > 15) ? (1000000UL / rate) : 0;
-
-      // WYSYŁKA BINARNA - błyskawiczna
-      Serial.write((byte*)&report, sizeof(report));
-
-      // Reset
-      sum_x = sum_x2 = count = current_peak = 0;
+    // 2. Obliczanie parametrów tensora wejściowego [Peak, Mean, Std]
+    long sum = 0;
+    int peak = 0;
+    for(int i=0; i<STATS_WINDOW; i++) {
+      sum += energyHistory[i];
+      if(energyHistory[i] > peak) peak = energyHistory[i];
     }
-  }
+    int mean = sum / STATS_WINDOW;
 
-  // Generowanie impulsów (bez delay!)
-  if (currentISI_us > 0) {
-    uint32_t now = micros();
-    if (now - lastSpikeTime >= currentISI_us) {
-      lastSpikeTime = now;
-      PORTD |= (1 << 6);  // Szybki zapis do portu (Pin 6 na Mega to PORTH lub PORTD zależy od mapowania)
-      // Dla uproszczenia zostajemy przy digitalWrite, ale bez delay:
-      digitalWrite(PIN_SPIKE, HIGH);
-      // Impuls wyłączy się w następnym cyklu lub po krótkim czasie
-      digitalWrite(PIN_SPIKE, LOW);
+    long sqSum = 0;
+    for(int i=0; i<STATS_WINDOW; i++) {
+      long d = energyHistory[i] - mean;
+      sqSum += d * d;
     }
+    int std = sqrt(sqSum / STATS_WINDOW);
+
+    // 3. Raportowanie do Pythona (3 parametry tensora)
+    Serial.print(peak); Serial.print('\t');
+    Serial.print(mean); Serial.print('\t');
+    Serial.println(std);
+
+    // 4. KODOWANIE RATE CODING (3 kanały fizyczne)
+    // Kanał 0: Peak
+    if (peak > 50) triggerSpike(PIN_SPIKE_CH0);
+    // Kanał 1: Mean (tylko jeśli stabilne)
+    if (mean > 30) triggerSpike(PIN_SPIKE_CH1);
+    // Kanał 2: Std (detekcja gwałtownych zmian / szumu pękania)
+    if (std > 20)  triggerSpike(PIN_SPIKE_CH2);
   }
+}
+
+void triggerSpike(int pin) {
+  digitalWrite(pin, HIGH);
+  delayMicroseconds(50); // Bardzo krótki impuls
+  digitalWrite(pin, LOW);
 }

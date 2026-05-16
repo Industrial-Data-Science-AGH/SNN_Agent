@@ -16,7 +16,8 @@ def play_wav_fast():
         ser.write(b'SYN\n')
         print("Synchronizacja...")
     except Exception as e:
-        print(f"Blad: {e}"); return
+        print(f"Blad: {e}")
+        return
 
     # 1. Wczytanie i obliczenie ENERGII w oknach 10ms
     with wave.open(SOUND_FILE, 'rb') as wav:
@@ -30,7 +31,8 @@ def play_wav_fast():
         energy_frames = []
         for i in range(0, len(samples), chunk_size):
             chunk = samples[i : i + chunk_size]
-            if len(chunk) == 0: break
+            if len(chunk) == 0: 
+                break
             rms = np.sqrt(np.mean(chunk**2))
             # Mapujemy na 0-1023 dla Arduino
             energy_frames.append(int(min(rms * 5000, 1023)))

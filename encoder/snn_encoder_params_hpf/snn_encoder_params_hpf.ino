@@ -27,9 +27,9 @@ const uint8_t SPIKE_PINS[3] = {PIN_SPIKE_PEAK, PIN_SPIKE_MEAN, PIN_SPIKE_STD};
 
 // Znormalizowane maksima dla poszczególnych cech (do kalibracji)
 // Pozwalają mapować wartości z ADC na zakres [0.0 - 1.0]
-#define MAX_PEAK_VAL   200.0f 
-#define MAX_MEAN_VAL   40.0f
-#define MAX_STD_VAL    30.0f
+#define MAX_PEAK_VAL   100.0f 
+#define MAX_MEAN_VAL   20.0f
+#define MAX_STD_VAL    20.0f
 const float MAX_VALS[3] = {MAX_PEAK_VAL, MAX_MEAN_VAL, MAX_STD_VAL};
 
 // ---- PARAMETRY RATE CODING ----
@@ -54,10 +54,14 @@ static uint32_t spikeCount[3]    = {0, 0, 0};
 float channelValues[3] = {0.0f, 0.0f, 0.0f}; // [Peak, Mean, Std]
 float smoothedVals[3]  = {0.0f, 0.0f, 0.0f}; // Filtracja Low-pass dla RC
 
-// ---- ZMIENNE FILTRA HPF ----
+// ---- ZMIENNE FILTRA HPF - po to, by cały czas wyliczać wartość A0 spoczynkową ----
 float hp_filtered = 0.0f;
-float prev_raw = 610.0f; // spodziewana wartość spoczynkowa: 610 dla 3.3V, 940 dla 5V
+float prev_raw = 450.0f; // spodziewana wartość spoczynkowa - żeby od czegoś zacząć
 #define ALPHA 0.99f // współczynnik odcięcia DC (ok 0.95-0.99)
+
+// debugowanie
+#define PRINT_SPIKES 1
+#define PRINT_STATS_FLOOR 0.0f
 
 
 // ============================================================
@@ -99,6 +103,7 @@ void extractFrameFeatures(uint16_t windowMs) {
   float sumSq = 0;
   uint16_t count = 0;
 
+  // prz
   while (millis() - start < windowMs) {
     float raw = (float) analogRead(PIN_MIC);
 
@@ -116,7 +121,7 @@ void extractFrameFeatures(uint16_t windowMs) {
   // Zabezpieczenie przed dzieleniem przez zero (w razie zacięcia zegara)
   if(count == 0) count = 1;
 
-  // Obliczenia końcowe (float używany tylko tu, raz na okno)
+  // Obliczenia końcowe
   channelValues[0] = maxAc;         // PEAK
   channelValues[1] = sumAc / (float) count; // MEAN
   float variance = sumSq / (float) count;
@@ -127,7 +132,12 @@ void extractFrameFeatures(uint16_t windowMs) {
 //  GENERUJ SPIKE NA KONKRETNYM KANALE
 // ============================================================
 void fireSpike(uint8_t channel) {
-  Serial.print("SPIKE "); Serial.println(channel);
+  // debug
+  #if PRINT_SPIKES == 1
+    Serial.print("---SPIKE "); Serial.print(channel); Serial.println(" ---");
+  #endif
+
+  // spike
   digitalWrite(SPIKE_PINS[channel], SPIKE_VOLTAGE);
   digitalWrite(PIN_DEBUG_LED, HIGH);
   delayMicroseconds(SPIKE_WIDTH_US);
@@ -174,16 +184,13 @@ void loopRateCoding() {
   }
 
   //  debug
-  if(smoothedVals[2] > 1.0) {
+  if(smoothedVals[0] > PRINT_STATS_FLOOR) {
     Serial.print("A0 = "); Serial.print(analogRead(0));
-  Serial.print(" Peak = "); Serial.print(smoothedVals[0]);
-  Serial.print(" Mean = "); Serial.print(smoothedVals[1]);
-  Serial.print(" Stdev = "); Serial.print(smoothedVals[2]);
-  Serial.println();
+    Serial.print(" Peak = "); Serial.print(smoothedVals[0]);
+    Serial.print(" Mean = "); Serial.print(smoothedVals[1]);
+    Serial.print(" Stdev = "); Serial.print(smoothedVals[2]);
+    Serial.println();
   }
-  
-
-
 }
 
 // ============================================================

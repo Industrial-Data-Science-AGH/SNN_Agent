@@ -42,14 +42,13 @@ const float MAX_VALS[3] = {MAX_PEAK_VAL, MAX_MEAN_VAL, MAX_STD_VAL};
 
 // ---- PARAMETRY IMPULSU ----
 #define SPIKE_WIDTH_US 500    // µs (0.5ms)
-#define SPIKE_VOLTAGE  HIGH
 
 // ---- STAN GLOBALNY ----
 static uint32_t lastWindowStart  = 0;
 static uint32_t lastSpikeTime[3] = {0, 0, 0};
 static uint32_t currISI_us[3] = {0, 0, 0}; // Inter-spike interval lub timestamp TTFS
 static bool     ttfsSpiked[3]    = {false, false, false};
-static uint32_t spikeCount[3]    = {0, 0, 0};
+static uint32_t spikesampleCnt[3]    = {0, 0, 0};
 
 float channelValues[3] = {0.0f, 0.0f, 0.0f}; // [Peak, Mean, Std]
 float smoothedVals[3]  = {0.0f, 0.0f, 0.0f}; // Filtracja Low-pass dla RC
@@ -58,6 +57,14 @@ float smoothedVals[3]  = {0.0f, 0.0f, 0.0f}; // Filtracja Low-pass dla RC
 float hp_filtered = 0.0f;
 float prev_raw = 450.0f; // spodziewana wartość spoczynkowa - żeby od czegoś zacząć
 #define ALPHA 0.99f // współczynnik odcięcia DC (ok 0.95-0.99)
+
+// ---- ZMIENNE RAMKI ----
+uint32_t frameStartMs = 0;
+float maxAc = 0.0f;
+float sumAc = 0.0f;
+float sumSq = 0.0f;
+uint16_t sampleCnt = 0;
+bool newFrameReady = false; // Flaga informująca, czy trójka [Peak, Mean, Std] jest gotowa
 
 // debugowanie
 #define PRINT_SPIKES 1
@@ -92,40 +99,42 @@ void setup() {
 
 // ============================================================
 //  ODCZYT STATYSTYK MIKROFONU (Energy Extraction)
-//  Wylicza parametry na liczbach całkowitych dla oszczędności CPU.
 // zastosowano filtr HPF
 // ============================================================
 
-void extractFrameFeatures(uint16_t windowMs) {
-  uint32_t start = millis();
-  float maxAc = 0;
-  float sumAc = 0;
-  float sumSq = 0;
-  uint16_t count = 0;
+void processAudio(uint16_t windowMs) {
+  float raw = (float) analogRead(PIN_MIC);
 
-  // prz
-  while (millis() - start < windowMs) {
-    float raw = (float) analogRead(PIN_MIC);
+  hp_filtered = ALPHA * (hp_filtered + raw - prev_raw);
+  prev_raw = raw;
 
-    hp_filtered = ALPHA * (hp_filtered + raw - prev_raw);
-    prev_raw = raw;
+  float val = abs(hp_filtered);
+  
+  maxAc = max(maxAc, val);
+  sumAc += val;
+  sumSq += val * val;
+  sampleCnt ++;
+  
+  uint32_t now = millis();
+  if(now - frameStartMs >= windowMs) {
+    // Zabezpieczenie przed dzieleniem przez zero
+    if(sampleCnt == 0) sampleCnt = 1;
 
-    float val = abs(hp_filtered);
-    
-    maxAc = max(maxAc, val);
-    sumAc += val;
-    sumSq += val * val;
-    count++;
+    // wpisanie danych do kanałów
+    channelValues[0] = maxAc;                 // PEAK
+    channelValues[1] = sumAc / (float) sampleCnt; // MEAN
+    float variance = sumSq / (float) sampleCnt;
+    channelValues[2] = sqrt(variance);        // STD
+
+    // reset
+    maxAc = 0;
+    sumAc = 0;
+    sumSq = 0;
+    frameStartMs = now;
+    newFrameReady = true;
   }
 
-  // Zabezpieczenie przed dzieleniem przez zero (w razie zacięcia zegara)
-  if(count == 0) count = 1;
-
-  // Obliczenia końcowe
-  channelValues[0] = maxAc;         // PEAK
-  channelValues[1] = sumAc / (float) count; // MEAN
-  float variance = sumSq / (float) count;
-  channelValues[2] = sqrt(variance);        // STD
+  
 }
 
 // ============================================================
@@ -137,25 +146,26 @@ void fireSpike(uint8_t channel) {
     Serial.print("---SPIKE "); Serial.print(channel); Serial.println(" ---");
   #endif
 
-  // spike
-  digitalWrite(SPIKE_PINS[channel], SPIKE_VOLTAGE);
+  // spike wysyłam do odpowiedniego kanału: peak -> 6, mean -> 7, std -> 8
+  digitalWrite(SPIKE_PINS[channel], HIGH);
   digitalWrite(PIN_DEBUG_LED, HIGH);
+
   delayMicroseconds(SPIKE_WIDTH_US);
+
   digitalWrite(SPIKE_PINS[channel], LOW);
   digitalWrite(PIN_DEBUG_LED, LOW);
-  spikeCount[channel] ++;
+  spikesampleCnt[channel] ++;
 }
 
 // ============================================================
-//  ENKODER 1: RATE CODING (Dla 3 Kanałów)
+//  TRYB RATE CODING 
 // ============================================================
 void loopRateCoding() {
-  uint32_t now = millis();
+  processAudio(FRAME_WINDOW_MS);
 
-  // ---- Odśwież cechy co ramkę czasową ----
-  if (now - lastWindowStart >= FRAME_WINDOW_MS) {
-    lastWindowStart = now;
-    extractFrameFeatures(FRAME_WINDOW_MS);
+  // aktualizuj parametry, gdy pojawiły się nowe dane
+  if (newFrameReady) {
+    newFrameReady = false;
 
     for(int i=0; i<3; i++) {
       // Filtracja LP wygładzająca dla rate-coding (alpha=0.3)
@@ -163,8 +173,9 @@ void loopRateCoding() {
 
       // Normalizacja do zakresu [0.0 - 1.0]
       float normalised = min(smoothedVals[i] / MAX_VALS[i], 1.0f);
+
       if(normalised < RC_NOISE_FLOOR) {
-        currISI_us[i] = 0; // cisza
+        currISI_us[i] = 0;
       } else {
         float rate_hz = RC_MIN_RATE_HZ + normalised * (RC_MAX_RATE_HZ - RC_MIN_RATE_HZ);
         currISI_us[i] = (uint32_t)(1e6f / rate_hz);
@@ -194,20 +205,16 @@ void loopRateCoding() {
 }
 
 // ============================================================
-//  ENKODER 2: TIME-TO-FIRST-SPIKE (TTFS) (Dla 3 Kanałów)
+//  TRYB TIME-TO-FIRST-SPIKE (TTFS)
 // ============================================================
 void loopTTFS() {
-  uint32_t now = millis();
-  uint32_t elapsed = now - lastWindowStart;
+  processAudio(FRAME_WINDOW_MS);
 
   // ---- Nowa Ramka ----
-  if(elapsed >= (uint32_t) FRAME_WINDOW_MS) {
-    lastWindowStart = now;
+  if(newFrameReady) {
+    newFrameReady = false;
 
-    /* W trybie TTFS okno ekstrakcji musi być krótsze, żeby zostawić
-      miejsce w czasie rzeczywistym na wysłanie impulsów.
-      Analizujemy tylko pierwsze 4ms z ramki 20ms */
-    extractFrameFeatures(4);
+    uint32_t curFrameStart = millis();
 
     for(int i=0; i<3; i++) {
       ttfsSpiked[i] = false;
@@ -220,12 +227,16 @@ void loopTTFS() {
         currISI_us[i] = (uint32_t)(lastWindowStart + delay_ms);
       }
     }
+
+    lastWindowStart = curFrameStart;
   }
 
-  // ---- Sprawdź czy nadszedł czas wysłania spike'ów ----
+  // generauję spike'i, a w tle tworzy się nowa ramka
+  uint32_t now = millis();
+
   for(int i=0; i<3; i++) {
     if(!ttfsSpiked[i] && currISI_us[i] > 0) {
-      if(millis() >= currISI_us[i]) {
+      if(now >= currISI_us[i]) {
         fireSpike(i);
         ttfsSpiked[i] = true;
       }

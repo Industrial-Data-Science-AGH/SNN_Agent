@@ -1,0 +1,2 @@
+- https://github.com/karolpiczak/ESC-50 - 50 dźwięków szkła na 2000 różnych dźwięków
+- https://zenodo.org/records/401395?preview_file=TUT-rare-sound-events-2017-development.mixture_data.2.zip - 500 dźwięków szkła

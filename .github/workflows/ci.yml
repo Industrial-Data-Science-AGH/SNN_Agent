@@ -67,4 +67,9 @@ jobs:
             reports/
             results/
             outputs/
+             *.txt
+            *.csv
+            *.json
+            *.png
+            *.h
           if-no-files-found: ignore

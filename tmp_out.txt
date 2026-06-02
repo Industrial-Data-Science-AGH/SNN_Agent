@@ -1,0 +1,10 @@
+HVAC | 100210-A-36.wav: Max RMS = 0.4609, Mean RMS = 0.2694
+          Max dB = -6.7, Mean dB = -11.6
+HVAC | 100210-B-36.wav: Max RMS = 0.4610, Mean RMS = 0.2735
+          Max dB = -6.7, Mean dB = -11.7
+HVAC | -19840-A-36.wav: Max RMS = 0.0391, Mean RMS = 0.0263
+          Max dB = -28.2, Mean dB = -31.7
+HVAC | -19872-A-36.wav: Max RMS = 0.1566, Mean RMS = 0.1014
+          Max dB = -16.1, Mean dB = -20.0
+HVAC | -19872-B-36.wav: Max RMS = 0.1211, Mean RMS = 0.0767
+          Max dB = -18.3, Mean dB = -22.4

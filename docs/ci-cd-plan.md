@@ -169,3 +169,18 @@ These files should be uploaded as GitHub Actions artifacts.
 4. Add full pipeline integration tests after SNN/model integration.
 5. Add metrics report generation.
 6. Add quality gates based on technical and business metrics.
+
+
+## TODO
+
+- Everyone should do PR into dev.
+```text
+1. feat/encoder → dev
+2. feat/decoder → dev
+3. neuron-architecture → dev
+4. hat-metrics-work → dev
+5. feat/sim_train → dev
+6. feat/ci-cd-pipeline → dev
+```
+
+- branch `integration/ci-cd-test` is only to test if everything will go right

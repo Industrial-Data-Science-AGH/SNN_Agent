@@ -1,66 +1,12 @@
-#include <iostream>
-#include <cmath>
-#include <cassert>
-#include <vector>
-#include <cstdint>
-
-// ============================================================
-//  1. MOCKOWANIE ŚRODOWISKA ARDUINO
-// ============================================================
-
-#define INPUT 0
-#define OUTPUT 1
-#define LOW 0
-#define HIGH 1
-#define A0 0
-
-// Definicja min/max jako makra preprocesora chroni przed konfliktami z std::min/max
-#define min(a,b) ((a)<(b)?(a):(b))
-#define max(a,b) ((a)>(b)?(a):(b))
-
-uint8_t ADCSRA = 0; 
-
-unsigned long mock_millis = 0;
-unsigned long mock_micros = 0;
-int mock_analog_read_val = 450;
-int pin_states[100] = {0};
-
-bool delay_was_called = false;
-unsigned long total_delay_time_us = 0;
-
-unsigned long millis() { return mock_millis; }
-unsigned long micros() { return mock_micros; }
-int analogRead(int pin) { return mock_analog_read_val; }
-void pinMode(int pin, int mode) {}
-void digitalWrite(int pin, int val) { pin_states[pin] = val; }
-
-// Przechwytywanie funkcji opóźniających w celu weryfikacji przerw w działaniu
-void delayMicroseconds(unsigned int us) {
-    delay_was_called = true;
-    total_delay_time_us += us;
-    mock_micros += us; 
-}
-
-#define F(x) x
-struct MockSerial {
-    void begin(unsigned long speed) {}
-    void print(const char* s) {}
-    void print(int n) {}
-    void print(float f) {}
-    void println(const char* s = "") {}
-    void println(int n) {}
-    void println(float f) {}
-};
-MockSerial Serial;
-
-// ============================================================
+#include "mock_params.h"
 //  2. INKLUZJA FAKTYCZNEGO KODU ENKODERA
-//  Ścieżka zgodna z konfiguracją katalogów w projekcie
 // ============================================================
-#include "../snn_encoder_params_hpf/snn_encoder_params_hpf.ino"
+#include "../snn_encoder_params_hpf/snn_encoder_params_hpf.ino" // dekoder arudino
+
+#define LOOP_LEN 1000
 
 // ============================================================
-//  3. FUNKCJE TESTOWE I RESET STANU SPIEKA
+// FUNKCJE TESTOWE I RESET STANU SPIKE'A
 // ============================================================
 
 void reset_mock_env() {
@@ -69,7 +15,7 @@ void reset_mock_env() {
     mock_analog_read_val = 450;
     delay_was_called = false;
     total_delay_time_us = 0;
-    for(int i = 0; i < 100; i++) pin_states[i] = 0;
+    for(int i = 0; i < PIN_CNT; i++) pin_states[i] = 0;
     
     // Reset stanu zmiennych globalnych zaimportowanych z pliku .ino
     frameStartMs = 0;
@@ -97,7 +43,7 @@ void test_heavy_blocking_detection() {
     reset_mock_env();
     std::cout << "[TEST] Uruchamianie oryginalnej funkcji fireSpike(0)...\n";
     
-    // Wywołanie produkcyjnej funkcji z pliku .ino
+    // Wywołanie z pliku .ino
     fireSpike(0); 
 
     assert(pin_states[6] == 0 && "Pin powinien zostać opuszczony na koniec funkcji");
@@ -115,11 +61,11 @@ void test_heavy_blocking_detection() {
 void test_continuous_generation_and_metrics() {
     reset_mock_env();
     
-    // Wywołanie oryginalnej funkcji setup z pliku .ino
+    // Wywołanie  setup z pliku .ino
     setup(); 
     
     // Symulacja dostarczania danych audio przez 25 kroków (ponad okno FRAME_WINDOW_MS = 20)
-    for (int i = 0; i < 25; i++) {
+    for (int i = 0; i < LOOP_LEN; i++) {
         mock_analog_read_val = 450 + (i % 2 == 0 ? 50 : -50); 
         
         // Wywołanie pętli adekwatnej do wybranego trybu
@@ -145,7 +91,7 @@ void test_continuous_generation_and_metrics() {
     std::cout << "-> Test ciągłości i metryk: ZALICZONY\n";
 }
 
-// Punkt wejścia dla kompilatora g++
+
 int main() {
     std::cout << "=== URUCHAMIANIE INTEGRACYJNYCH TESTÓW KODU .INO ===\n";
     

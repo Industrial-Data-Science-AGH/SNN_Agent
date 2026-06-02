@@ -50,6 +50,9 @@ static uint32_t currISI_us[3] = {0, 0, 0}; // Inter-spike interval lub timestamp
 static bool     ttfsSpiked[3]    = {false, false, false};
 static uint32_t spikesampleCnt[3]    = {0, 0, 0};
 
+static bool spikeActive[3] = {false, false, false};
+static uint32_t spikeStartUs[3] = {0,0,0};
+
 float channelValues[3] = {0.0f, 0.0f, 0.0f}; // [Peak, Mean, Std]
 float smoothedVals[3]  = {0.0f, 0.0f, 0.0f}; // Filtracja Low-pass dla RC
 
@@ -139,6 +142,7 @@ void processAudio(uint16_t windowMs) {
 
 // ============================================================
 //  GENERUJ SPIKE NA KONKRETNYM KANALE
+// wersja nieblokująca, bez delay
 // ============================================================
 void fireSpike(uint8_t channel) {
   // debug
@@ -150,11 +154,27 @@ void fireSpike(uint8_t channel) {
   digitalWrite(SPIKE_PINS[channel], HIGH);
   digitalWrite(PIN_DEBUG_LED, HIGH);
 
-  delayMicroseconds(SPIKE_WIDTH_US);
-
-  digitalWrite(SPIKE_PINS[channel], LOW);
-  digitalWrite(PIN_DEBUG_LED, LOW);
+  spikeActive[channel] = true;
+  spikeStartUs[channel] = micros();
   spikesampleCnt[channel] ++;
+}
+
+void updateSpike() {
+  uint32_t now_us = micros();
+  bool anySpikeActive = false;
+
+  for(int i=0; i<3; i++) {
+    if(spikeActive[i]) {
+      if(now_us - spikeStartUs[i] >= SPIKE_WIDTH_US) {
+        digitalWrite(SPIKE_PINS[i], LOW);
+        spikeActive[i] = false;
+      } else {
+        anySpikeActive = true;
+      }
+    }
+  }
+
+  if(!anySpikeActive) digitalWrite(PIN_DEBUG_LED, LOW);
 }
 
 // ============================================================
@@ -248,6 +268,7 @@ void loopTTFS() {
 //  GŁÓWNA PĘTLA
 // ============================================================
 void loop() {
+  updateSpike();
   #if ENCODER_MODE == RATE_CODING
     loopRateCoding();
   #else

@@ -5,12 +5,15 @@ on:
     branches:
     - dev
     - "feat/**"
+    - "integration/**"
   pull_request:
     branches:
     - dev
+    - main
 
 jobs:
   lint:
+    name: Lint and format check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,7 +25,9 @@ jobs:
       - run: uv run ruff format --check .
 
   test:
+    name: Unit tests
     runs-on: ubuntu-latest
+    needs: lint
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -30,3 +35,36 @@ jobs:
           version: "latest"
       - run: uv sync --group dev
       - run: uv run pytest tests/ -v
+
+  simulation:
+    name: SNN simulation pipeline
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - run: uv sync --group dev
+
+      - name: Run SNN simulation if available
+        run: |
+          if [ -f "snn_pipeline/run_pipeline.py" ]; then
+            uv run python -m snn_pipeline.run_pipeline
+          else
+            echo "snn_pipeline/run_pipeline.py not found - skipping simulation"
+          fi
+
+      - name: Upload simulation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snn-simulation-results
+          path: |
+            reports/
+            results/
+            outputs/
+          if-no-files-found: ignore

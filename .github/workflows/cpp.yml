@@ -25,6 +25,6 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y build-essential
     - name: Compile and Run
       run: |
-        cd encoder_tests
+        cd encoder/encoder_tests
         g++ -O2 test_encoder.cpp -o test_runner
         ./test_runner

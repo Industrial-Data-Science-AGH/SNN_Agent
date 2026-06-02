@@ -11,12 +11,16 @@ from collections import deque
 from datetime import datetime
 import logging
 from typing import Optional
+from pathlib import Path
+
+LOG_DIR=Path("logs")
+LOG_DIR.mkdir(exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler("/tmp/decoder.log"),
+        logging.FileHandler(LOG_DIR / "decoder.log"),
         logging.StreamHandler(sys.stdout),
     ],
 )

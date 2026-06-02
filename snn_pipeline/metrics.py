@@ -8,7 +8,7 @@ ale sklearn.metrics używamy do pretty-print confusion matrix.
 
 import torch
 import numpy as np
-from typing import Dict, Optional, Tuple
+from typing import Dict
 from sklearn.metrics import confusion_matrix as sk_confusion_matrix
 
 
@@ -220,5 +220,5 @@ def latency_ms(
 
     spike_indices = torch.nonzero(spike_train, as_tuple=True)[0]
     if len(spike_indices) == 0:
-        return float('inf')
+        return float("inf")
     return spike_indices[0].item() * dt_ms

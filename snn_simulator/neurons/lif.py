@@ -1,5 +1,3 @@
-import numpy as np
-
 class LIFNeuron:
     def __init__(self, beta, threshold):
         self.beta = beta
@@ -9,8 +7,8 @@ class LIFNeuron:
     def reset(self):
         self.V = 0
 
-    def step(self, I):
-        self.V = self.beta * self.V + I
+    def step(self, input_current):
+        self.V = self.beta * self.V + input_current
 
         spike = 0
         if self.V >= self.threshold:

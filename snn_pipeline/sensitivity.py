@@ -5,10 +5,10 @@ zostanie zaokrąglona do E24. Generuje heatmapę wrażliwości i identyfikuje
 synapsy wymagające potencjometrów cyfrowych (MCP4151).
 """
 
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -97,7 +97,7 @@ def sensitivity_analysis(
         param.data.copy_(original_val)
         sensitivities[name] = worst_degradation * 100  # w procentach
 
-    print(f"\n[Sensitivity] Wyniki (max degradacja recall %):")
+    print("\n[Sensitivity] Wyniki (max degradacja recall %):")
     for name, deg in sorted(sensitivities.items(), key=lambda x: -x[1]):
         flag = " ⚠️ KRYTYCZNA → MCP4151" if deg > 5.0 else ""
         print(f"  {name:<18}: {deg:.1f}%{flag}")
@@ -141,21 +141,39 @@ def generate_heatmap(
         else:
             colors.append("#dc3545")  # czerwony — krytyczne
 
-    bars = ax.barh(sorted_names, sorted_values, color=colors, edgecolor="black", linewidth=0.5)
+    bars = ax.barh(
+        sorted_names, sorted_values, color=colors, edgecolor="black", linewidth=0.5
+    )
 
     # Linia progowa 5%
-    ax.axvline(x=5.0, color="red", linestyle="--", linewidth=1.5, alpha=0.7, label="Próg MCP4151 (5%)")
+    ax.axvline(
+        x=5.0,
+        color="red",
+        linestyle="--",
+        linewidth=1.5,
+        alpha=0.7,
+        label="Próg MCP4151 (5%)",
+    )
 
     ax.set_xlabel("Max degradacja recall (%)", fontsize=11)
-    ax.set_title("Analiza wrażliwości wag synaptycznych na kwantyzację E24", fontsize=13, fontweight="bold")
+    ax.set_title(
+        "Analiza wrażliwości wag synaptycznych na kwantyzację E24",
+        fontsize=13,
+        fontweight="bold",
+    )
     ax.legend(loc="lower right")
     ax.grid(axis="x", alpha=0.3)
     ax.invert_yaxis()
 
     # Adnotacje na barach
     for bar, val in zip(bars, sorted_values):
-        ax.text(bar.get_width() + 0.3, bar.get_y() + bar.get_height() / 2,
-                f"{val:.1f}%", va='center', fontsize=10)
+        ax.text(
+            bar.get_width() + 0.3,
+            bar.get_y() + bar.get_height() / 2,
+            f"{val:.1f}%",
+            va="center",
+            fontsize=10,
+        )
 
     plt.tight_layout()
     plt.savefig(save_path, dpi=150, bbox_inches="tight")
@@ -187,7 +205,9 @@ def identify_mcp4151_candidates(
     if candidates:
         print(f"[MCP4151] {len(candidates)} synaps wymaga potencjometrów: {candidates}")
     else:
-        print("[MCP4151] Żadna synapsa nie wymaga potencjometru cyfrowego (wszystkie <5%).")
+        print(
+            "[MCP4151] Żadna synapsa nie wymaga potencjometru cyfrowego (wszystkie <5%)."
+        )
     return candidates
 
 

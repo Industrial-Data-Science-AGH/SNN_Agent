@@ -7,10 +7,8 @@ Augmentacja rozbudowuje 40 próbek glass_break do 400+ przez time stretch, pitch
 additive noise, volume scaling i syntetyczny Room Impulse Response.
 """
 
-import os
 import zipfile
 import urllib.request
-import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -18,7 +16,6 @@ import librosa
 import numpy as np
 import torch
 from scipy.signal import butter, sosfilt, fftconvolve
-from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
 
@@ -29,7 +26,6 @@ from snn_pipeline.config import (
     PATH_CONFIG,
     RANDOM_SEED,
     TRAIN_CONFIG,
-    DEVICE,
 )
 from snn_pipeline.spike_encoders import RateCodingEncoder, TTFSEncoder
 
@@ -37,6 +33,7 @@ from snn_pipeline.spike_encoders import RateCodingEncoder, TTFSEncoder
 # =============================================================================
 # POBIERANIE DATASETU ESC-50
 # =============================================================================
+
 
 def download_esc50(data_dir: Optional[Path] = None) -> Path:
     """Pobiera dataset ESC-50 z GitHub jeśli jeszcze nie istnieje.
@@ -72,7 +69,7 @@ def download_esc50(data_dir: Optional[Path] = None) -> Path:
         print("[INFO] Pobieranie zakończone.")
 
     print("[INFO] Rozpakowuję archiwum ZIP...")
-    with zipfile.ZipFile(str(zip_path), 'r') as zf:
+    with zipfile.ZipFile(str(zip_path), "r") as zf:
         zf.extractall(str(data_dir))
     print(f"[INFO] ESC-50 rozpakowany do {esc50_dir}")
 
@@ -85,6 +82,7 @@ def download_esc50(data_dir: Optional[Path] = None) -> Path:
 # =============================================================================
 # LOADING I PREPROCESSING AUDIO
 # =============================================================================
+
 
 def load_audio(
     path: str,
@@ -140,7 +138,7 @@ def bandpass_filter(
     # Clamp do bezpiecznego zakresu
     low = max(low, 0.001)
     high = min(high, 0.999)
-    sos = butter(order, [low, high], btype='band', output='sos')
+    sos = butter(order, [low, high], btype="band", output="sos")
     return sosfilt(sos, audio).astype(np.float32)
 
 
@@ -230,7 +228,7 @@ def extract_features(
     # Self-normalizacja sprawiała, że cisza i szum miały szczyt 1.0, przez co
     # TTFS nie mógł odróżnić tła od prawdziwych peaków.
     rms_db = librosa.amplitude_to_db(rms, ref=1.0)
-    
+
     # Mapowanie: tło (<-50dB) -> 0.0, szczyty (>-10dB) -> 1.0
     rms_norm = (rms_db + 50.0) / 40.0
     rms_norm = np.clip(rms_norm, 0.0, 1.0)
@@ -255,6 +253,7 @@ def extract_features(
 # =============================================================================
 # AUGMENTACJA DANYCH
 # =============================================================================
+
 
 def _generate_synthetic_rir(
     sr: int = AUDIO_CONFIG.sample_rate,
@@ -348,13 +347,15 @@ def augment_glass_break(
     for snr_db in [10, 5]:
         # Dopasuj długość szumu
         if len(noise_audio) < len(audio):
-            noise_rep = np.tile(noise_audio, int(np.ceil(len(audio) / len(noise_audio))))[:len(audio)]
+            noise_rep = np.tile(
+                noise_audio, int(np.ceil(len(audio) / len(noise_audio)))
+            )[: len(audio)]
         else:
-            noise_rep = noise_audio[:len(audio)]
+            noise_rep = noise_audio[: len(audio)]
 
         # Oblicz SNR i skaluj szum
-        signal_power = np.mean(audio ** 2)
-        noise_power = np.mean(noise_rep ** 2)
+        signal_power = np.mean(audio**2)
+        noise_power = np.mean(noise_rep**2)
         if noise_power > 0:
             scale = np.sqrt(signal_power / (noise_power * (10 ** (snr_db / 10))))
             noisy = audio + noise_rep * scale
@@ -363,7 +364,7 @@ def augment_glass_break(
 
     # 5. Room Impulse Response
     rir = _generate_synthetic_rir(sr, rt60=0.3)
-    convolved = fftconvolve(audio, rir, mode='same').astype(np.float32)
+    convolved = fftconvolve(audio, rir, mode="same").astype(np.float32)
     convolved = convolved / (np.abs(convolved).max() + 1e-8)
     augmented.append((convolved, "rir_rt60_0.3s"))
 
@@ -373,6 +374,7 @@ def augment_glass_break(
 # =============================================================================
 # PARSOWANIE ESC-50 METADANYCH
 # =============================================================================
+
 
 def parse_esc50_filename(filename: str) -> Dict:
     """Parsuje nazwę pliku ESC-50 na składowe.
@@ -403,6 +405,7 @@ def parse_esc50_filename(filename: str) -> Dict:
 # =============================================================================
 # BUDOWANIE DATASETU
 # =============================================================================
+
 
 def build_dataset(
     esc50_dir: Optional[Path] = None,
@@ -442,8 +445,8 @@ def build_dataset(
     print(f"[INFO] Znaleziono {len(all_files)} plików audio w katalogu.")
 
     # Parsuj metadane
-    positives: List[Path] = []   # glass_breaking
-    negatives: List[Path] = []   # inne klasy
+    positives: List[Path] = []  # glass_breaking
+    negatives: List[Path] = []  # inne klasy
     for f in all_files:
         info = parse_esc50_filename(f.name)
         if info["target"] == ESC50_GLASS_BREAKING_CLASS:
@@ -459,7 +462,9 @@ def build_dataset(
         positives = positives[:pos_limit]
         negatives = negatives[:neg_limit]
 
-    print(f"[INFO] Pozytywne (glass_break): {len(positives)}, Negatywne: {len(negatives)}")
+    print(
+        f"[INFO] Pozytywne (glass_break): {len(positives)}, Negatywne: {len(negatives)}"
+    )
 
     # 3. Stratified split
     rng = np.random.default_rng(RANDOM_SEED)
@@ -470,8 +475,8 @@ def build_dataset(
     n_pos_test = min(10, len(pos_shuffled) // 3)
     n_pos_val = min(10, len(pos_shuffled) // 3)
     pos_test = pos_shuffled[:n_pos_test]
-    pos_val = pos_shuffled[n_pos_test:n_pos_test + n_pos_val]
-    pos_train = pos_shuffled[n_pos_test + n_pos_val:]
+    pos_val = pos_shuffled[n_pos_test : n_pos_test + n_pos_val]
+    pos_train = pos_shuffled[n_pos_test + n_pos_val :]
 
     # Negatywne: 100 test, 100 val, reszta train
     neg_shuffled = list(negatives)
@@ -479,12 +484,14 @@ def build_dataset(
     n_neg_test = min(100, len(neg_shuffled) // 3)
     n_neg_val = min(100, len(neg_shuffled) // 3)
     neg_test = neg_shuffled[:n_neg_test]
-    neg_val = neg_shuffled[n_neg_test:n_neg_test + n_neg_val]
-    neg_train = neg_shuffled[n_neg_test + n_neg_val:]
+    neg_val = neg_shuffled[n_neg_test : n_neg_test + n_neg_val]
+    neg_train = neg_shuffled[n_neg_test + n_neg_val :]
 
-    print(f"[INFO] Split — Train: {len(pos_train)}+ / {len(neg_train)}-, "
-          f"Val: {len(pos_val)}+ / {len(neg_val)}-, "
-          f"Test: {len(pos_test)}+ / {len(neg_test)}-")
+    print(
+        f"[INFO] Split — Train: {len(pos_train)}+ / {len(neg_train)}-, "
+        f"Val: {len(pos_val)}+ / {len(neg_val)}-, "
+        f"Test: {len(pos_test)}+ / {len(neg_test)}-"
+    )
 
     # 4. Preprocessing — załaduj i przekonwertuj na spike trains
     encoder = TTFSEncoder() if encoding == "ttfs" else RateCodingEncoder()
@@ -518,22 +525,21 @@ def build_dataset(
         return results
 
     print("[INFO] Przetwarzam zbiór treningowy...")
-    train_data = (
-        process_files(pos_train, label=1, do_augment=augment)
-        + process_files(neg_train, label=0)
+    train_data = process_files(pos_train, label=1, do_augment=augment) + process_files(
+        neg_train, label=0
     )
     print("[INFO] Przetwarzam zbiór walidacyjny...")
-    val_data = (
-        process_files(pos_val, label=1, do_augment=False)
-        + process_files(neg_val, label=0)
+    val_data = process_files(pos_val, label=1, do_augment=False) + process_files(
+        neg_val, label=0
     )
     print("[INFO] Przetwarzam zbiór testowy...")
-    test_data = (
-        process_files(pos_test, label=1, do_augment=False)
-        + process_files(neg_test, label=0)
+    test_data = process_files(pos_test, label=1, do_augment=False) + process_files(
+        neg_test, label=0
     )
 
-    print(f"[INFO] Datasety gotowe — Train: {len(train_data)}, Val: {len(val_data)}, Test: {len(test_data)}")
+    print(
+        f"[INFO] Datasety gotowe — Train: {len(train_data)}, Val: {len(val_data)}, Test: {len(test_data)}"
+    )
 
     return {
         "train": GlassBreakDataset(train_data, apply_jitter=True),
@@ -545,6 +551,7 @@ def build_dataset(
 # =============================================================================
 # PyTorch DATASET
 # =============================================================================
+
 
 class GlassBreakDataset(Dataset):
     """PyTorch Dataset dla spike trains glass break detection.
@@ -615,6 +622,7 @@ def get_dataloaders(
         ...     print(batch_spikes.shape)
         ...     break
     """
+
     def collate_fn(batch):
         """Custom collate — pad spike trains do jednakowej długości."""
         spikes_list, labels_list = zip(*batch)
@@ -623,7 +631,7 @@ def get_dataloaders(
         max_timesteps = max(s.shape[1] for s in spikes_list)
         padded_spikes = torch.zeros(len(batch), max_channels, max_timesteps)
         for i, s in enumerate(spikes_list):
-            padded_spikes[i, :s.shape[0], :s.shape[1]] = s
+            padded_spikes[i, : s.shape[0], : s.shape[1]] = s
         labels = torch.stack(labels_list)
         return padded_spikes, labels
 

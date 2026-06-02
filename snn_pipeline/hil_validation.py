@@ -8,16 +8,15 @@ i tabelę programowania potencjometrów cyfrowych.
 """
 
 import csv
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from snn_pipeline.config import DEVICE, HW_CONFIG, PATH_CONFIG
-from snn_pipeline.e24_quantizer import weight_to_resistance, weight_to_nearest_e24_resistance
+from snn_pipeline.config import DEVICE, PATH_CONFIG
+from snn_pipeline.e24_quantizer import weight_to_resistance
 from snn_pipeline.metrics import recall_score
 from snn_pipeline.snn_model import GlassBreakSNN
 
@@ -56,14 +55,20 @@ def hil_simulation(
     model.set_quantize_mode("none")
 
     weight_params = [
-        model.w_n1, model.w_n2, model.w_n3_from_n1,
-        model.w_n3_from_n2, model.w_inh, model.w_inh_to_n3,
+        model.w_n1,
+        model.w_n2,
+        model.w_n3_from_n1,
+        model.w_n3_from_n2,
+        model.w_inh,
+        model.w_inh_to_n3,
     ]
     original_weights = [p.data.clone() for p in weight_params]
 
     recalls = []
 
-    print(f"\n[HIL] Symulacja {n_scenarios} scenariuszy z ±{noise_pct}% szumem rezystorów...")
+    print(
+        f"\n[HIL] Symulacja {n_scenarios} scenariuszy z ±{noise_pct}% szumem rezystorów..."
+    )
 
     for scenario in tqdm(range(n_scenarios), desc="HIL simulation"):
         # Dodaj szum ±noise_pct% do każdej wagi
@@ -113,12 +118,16 @@ def hil_simulation(
 
     # Raport
     print(f"\n{'=' * 60}")
-    print(f"  HARDWARE-IN-THE-LOOP VALIDATION REPORT")
+    print("  HARDWARE-IN-THE-LOOP VALIDATION REPORT")
     print(f"  {n_scenarios} scenariuszy, ±{noise_pct}% szum rezystorów")
     print(f"{'=' * 60}")
-    print(f"  Mean recall:     {result['mean_recall']:.4f} ± {result['std_recall']:.4f}")
+    print(
+        f"  Mean recall:     {result['mean_recall']:.4f} ± {result['std_recall']:.4f}"
+    )
     print(f"  Median recall:   {result['median_recall']:.4f}")
-    print(f"  Min / Max:       [{result['min_recall']:.4f}, {result['max_recall']:.4f}]")
+    print(
+        f"  Min / Max:       [{result['min_recall']:.4f}, {result['max_recall']:.4f}]"
+    )
     print(f"  5th percentile:  {result['percentile_5']:.4f}")
     print()
     print(f"  {'Próg recall':<15} {'Prawdop. osiągnięcia':>22}")
@@ -154,18 +163,22 @@ def identify_critical_synapses(
     critical = []
     for name, deg in sensitivities.items():
         if deg > threshold_pct:
-            critical.append({
-                "name": name,
-                "sensitivity": deg,
-                "recommendation": "MCP4151 potencjometr cyfrowy",
-            })
+            critical.append(
+                {
+                    "name": name,
+                    "sensitivity": deg,
+                    "recommendation": "MCP4151 potencjometr cyfrowy",
+                }
+            )
 
     if critical:
         print(f"\n[KRYTYCZNE] {len(critical)} synaps wymaga MCP4151:")
         for s in critical:
             print(f"  ⚠ {s['name']}: {s['sensitivity']:.1f}% wrażliwości recall")
     else:
-        print("[INFO] Żadna synapsa nie wymaga MCP4151 — wszystkie stabilne z rezystorami E24.")
+        print(
+            "[INFO] Żadna synapsa nie wymaga MCP4151 — wszystkie stabilne z rezystorami E24."
+        )
 
     return critical
 
@@ -206,8 +219,17 @@ def generate_mcp4151_table(
     R_W = 75.0  # Typowa rezystancja wipera MCP4151
 
     rows = [
-        ["Neuron", "Synapsa", "Waga", "R_target_ohm", "Wiper_value_0_255",
-         "R_actual_ohm", "SPI_byte0_hex", "SPI_byte1_hex", "SPI_command"],
+        [
+            "Neuron",
+            "Synapsa",
+            "Waga",
+            "R_target_ohm",
+            "Wiper_value_0_255",
+            "R_actual_ohm",
+            "SPI_byte0_hex",
+            "SPI_byte1_hex",
+            "SPI_command",
+        ],
     ]
 
     for syn_name in critical_synapses:
@@ -239,17 +261,19 @@ def generate_mcp4151_table(
         elif "inh" in syn_name:
             neuron = "N_INH"
 
-        rows.append([
-            neuron,
-            syn_name,
-            f"{w_val:.4f}",
-            f"{r_target:.0f}",
-            f"{wiper_value}",
-            f"{r_actual:.0f}",
-            f"0x{spi_byte0:02X}",
-            f"0x{spi_byte1:02X}",
-            f"SPI.transfer(0x{spi_byte0:02X}); SPI.transfer(0x{spi_byte1:02X});",
-        ])
+        rows.append(
+            [
+                neuron,
+                syn_name,
+                f"{w_val:.4f}",
+                f"{r_target:.0f}",
+                f"{wiper_value}",
+                f"{r_actual:.0f}",
+                f"0x{spi_byte0:02X}",
+                f"0x{spi_byte1:02X}",
+                f"SPI.transfer(0x{spi_byte0:02X}); SPI.transfer(0x{spi_byte1:02X});",
+            ]
+        )
 
     with open(save_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
@@ -259,9 +283,13 @@ def generate_mcp4151_table(
     print(f"[MCP4151] {len(rows) - 1} potencjometrów do zaprogramowania.")
 
     # Pretty print
-    print(f"\n  {'Neuron':<8} {'Synapsa':<18} {'R_target':>10} {'Wiper':>6} {'R_actual':>10} {'SPI Command'}")
+    print(
+        f"\n  {'Neuron':<8} {'Synapsa':<18} {'R_target':>10} {'Wiper':>6} {'R_actual':>10} {'SPI Command'}"
+    )
     print(f"  {'-' * 72}")
     for row in rows[1:]:
-        print(f"  {row[0]:<8} {row[1]:<18} {row[3]:>10}Ω {row[4]:>6} {row[5]:>10}Ω {row[8]}")
+        print(
+            f"  {row[0]:<8} {row[1]:<18} {row[3]:>10}Ω {row[4]:>6} {row[5]:>10}Ω {row[8]}"
+        )
 
     return save_path

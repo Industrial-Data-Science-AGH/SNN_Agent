@@ -1,6 +1,5 @@
 import sys
 import torch
-import numpy as np
 
 # Dodaj główny folder
 sys.path.insert(0, ".")

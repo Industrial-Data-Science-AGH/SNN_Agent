@@ -57,6 +57,7 @@ float channelValues[3] = {0.0f, 0.0f, 0.0f}; // [Peak, Mean, Std]
 float smoothedVals[3]  = {0.0f, 0.0f, 0.0f}; // Filtracja Low-pass dla RC
 
 // ---- ZMIENNE FILTRA HPF - po to, by cały czas wyliczać wartość A0 spoczynkową ----
+#define HPF 1 // czy wykorzystać 
 float hp_filtered = 0.0f;
 float prev_raw = 450.0f; // spodziewana wartość spoczynkowa - żeby od czegoś zacząć
 #define ALPHA 0.99f // współczynnik odcięcia DC (ok 0.95-0.99)
@@ -108,10 +109,13 @@ void setup() {
 void processAudio(uint16_t windowMs) {
   float raw = (float) analogRead(PIN_MIC);
 
-  hp_filtered = ALPHA * (hp_filtered + raw - prev_raw);
-  prev_raw = raw;
-
-  float val = abs(hp_filtered);
+  #if HPF
+    hp_filtered = ALPHA * (hp_filtered + raw - prev_raw);
+    prev_raw = raw;
+    float val = fabs(hp_filtered);
+  #else
+    float val = raw;
+  #endif
   
   maxAc = max(maxAc, val);
   sumAc += val;
@@ -133,6 +137,7 @@ void processAudio(uint16_t windowMs) {
     maxAc = 0;
     sumAc = 0;
     sumSq = 0;
+    sampleCnt = 0;
     frameStartMs = now;
     newFrameReady = true;
   }
@@ -181,7 +186,7 @@ void updateSpike() {
 //  TRYB RATE CODING 
 // ============================================================
 void loopRateCoding() {
-  processAudio(FRAME_WINDOW_MS);
+    processAudio(FRAME_WINDOW_MS);
 
   // aktualizuj parametry, gdy pojawiły się nowe dane
   if (newFrameReady) {
@@ -228,7 +233,7 @@ void loopRateCoding() {
 //  TRYB TIME-TO-FIRST-SPIKE (TTFS)
 // ============================================================
 void loopTTFS() {
-  processAudio(FRAME_WINDOW_MS);
+    processAudio(FRAME_WINDOW_MS);
 
   // ---- Nowa Ramka ----
   if(newFrameReady) {

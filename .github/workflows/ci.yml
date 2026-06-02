@@ -47,7 +47,7 @@ jobs:
     # PR on dev/main          → lint + test + optional simulation
     if: >
       startsWith(github.ref, 'refs/heads/integration/') ||
-      github.event_name == 'pull_request
+      github.event_name == 'pull_request'
 
     steps:
       - uses: actions/checkout@v4

@@ -10,7 +10,9 @@ experiments/
 └── __init__.py
 
 tests/
-└── test_decoder.py    # 46 tests (unit + integration + TCP transport)
+├── test_decoder.py    # 46 tests (unit + integration + TCP transport)
+└── test_ci_basics.py  # 3 tests
+
 ```
 
 ### Components

@@ -1,0 +1,25 @@
+# rpi_agents runtime dependencies — RPi 5 / Raspberry Pi OS (Bookworm, 64-bit)
+#
+# Pi-only packages (picamera2, gpiozero, lgpio) are installed via apt +
+# --system-site-packages venv on the Pi.  They will NOT install on macOS.
+# For Mac dev / CI (eval harness + unit tests), only numpy and pytest are needed.
+#
+# Install on the Pi:
+#   sudo apt install -y python3-picamera2 python3-gpiozero python3-lgpio
+#   python -m venv --system-site-packages .venv
+#   source .venv/bin/activate
+#   pip install -r requirements.txt
+#
+# Install on Mac (eval harness only):
+#   pip install numpy pytest python-dotenv
+
+# --- Pi-only (apt-managed; listed for documentation) ---
+# picamera2          # CSI camera capture (apt: python3-picamera2)
+# gpiozero           # GPIO LED + buzzer (apt: python3-gpiozero)
+# lgpio              # low-level GPIO for trigger read (apt: python3-lgpio)
+
+# --- pip-installable (Pi + Mac) ---
+opencv-python-headless>=4.9
+google-genai>=0.8
+python-dotenv>=1.0
+numpy>=1.26

@@ -1,0 +1,8 @@
+var/
+tests/fixtures/images/
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/

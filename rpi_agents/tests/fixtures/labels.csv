@@ -1,0 +1,5 @@
+id,path,label,split
+img_001,tests/fixtures/images/break_001.jpg,intrusion,tune
+img_002,tests/fixtures/images/break_002.jpg,intrusion,eval
+img_003,tests/fixtures/images/false_001.jpg,false,tune
+img_004,tests/fixtures/images/false_002.jpg,false,eval

@@ -58,6 +58,18 @@ GEMINI_MODEL: str = "gemini-2.0-flash"
 GEMINI_TIMEOUT_S: float = 10.0
 """Timeout for Gemini API calls (seconds). On timeout, default to ALARM."""
 
+GEMINI_MAX_OUTPUT_TOKENS: int = 256
+"""Maximum output tokens for Gemini API calls. Verdict JSON is tiny; cap cost."""
+
+GMAIL_SMTP_HOST: str = "smtp.gmail.com"
+"""Gmail SMTP server hostname for alert emails."""
+
+GMAIL_SMTP_PORT: int = 465
+"""Gmail SMTP_SSL port (implicit TLS)."""
+
+ALERT_SUBJECT_PREFIX: str = "[Wake-Up AI]"
+"""Subject-line prefix for all alarm email alerts."""
+
 
 CAPTURE_FRAMES_N: int = 10
 """Number of frames to capture for prefilter + snapshot for vision."""

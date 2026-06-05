@@ -1,5 +1,9 @@
 id,path,label,split
-img_001,tests/fixtures/images/break_001.jpg,intrusion,tune
-img_002,tests/fixtures/images/break_002.jpg,intrusion,eval
-img_003,tests/fixtures/images/false_001.jpg,false,tune
-img_004,tests/fixtures/images/false_002.jpg,false,eval
+clip_001,tests/fixtures/clips/break_001.npy,intrusion,tune
+clip_002,tests/fixtures/clips/break_002.npy,intrusion,tune
+clip_003,tests/fixtures/clips/break_003.npy,intrusion,eval
+clip_004,tests/fixtures/clips/break_004.npy,intrusion,eval
+clip_005,tests/fixtures/clips/false_001.npy,false,tune
+clip_006,tests/fixtures/clips/false_002.npy,false,tune
+clip_007,tests/fixtures/clips/false_003.npy,false,eval
+clip_008,tests/fixtures/clips/false_004.npy,false,eval

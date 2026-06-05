@@ -148,13 +148,14 @@ def test_empty_false_class_no_exception() -> None:
 def test_load_manifest_parses_csv() -> None:
     samples = load_manifest(_FIXTURES_CSV)
 
-    assert len(samples) == 4
-    ids = {s.id for s in samples}
-    assert ids == {"img_001", "img_002", "img_003", "img_004"}
+    # 4 intrusion + 4 false clips, 2 tune + 2 eval per class
+    assert len(samples) == 8
     labels = {s.label for s in samples}
     assert labels == {"intrusion", "false"}
     splits = {s.split for s in samples}
     assert splits == {"tune", "eval"}
+    # P2 format: clip paths are .npy frame-stacks, not images
+    assert all(s.path.endswith(".npy") for s in samples)
 
 
 def test_load_manifest_sample_types() -> None:

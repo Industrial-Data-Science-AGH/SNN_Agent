@@ -42,6 +42,15 @@ CLIPS_DIR: Path = VAR_DIR / "clips"
 EVENT_LOG: Path = VAR_DIR / "event.log"
 """Event journal (tap, spike, wake, alarm, notification)."""
 
+PREFILTER_PERSON_CONF: float = 0.45
+"""Minimum MobileNet-SSD confidence to count a 'person' detection."""
+
+PREFILTER_PERSON_ENABLED: bool = True
+"""If False, use motion-only gate (no person DNN). Still permissive."""
+
+PERSON_MODEL_DIR: Path = Path(os.getenv("SNN_AGENT_MODEL_DIR", str(VAR_DIR / "models")))
+"""Directory containing MobileNetSSD_deploy.prototxt + .caffemodel (git-ignored)."""
+
 
 GEMINI_MODEL: str = "gemini-2.0-flash"
 """Gemini model name for vision classification."""

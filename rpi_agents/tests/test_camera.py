@@ -4,6 +4,9 @@ picamera2 is never imported at module top — it is monkey-patched inside tests.
 opencv-python-headless is available on Mac so the save_clip cv2 paths run for real.
 """
 
+import sys
+import types
+
 import numpy as np
 import pytest
 
@@ -42,11 +45,24 @@ class FakeCam:
         self.closed = True
 
 
+def _inject_picamera2(monkeypatch: pytest.MonkeyPatch, cam: FakeCam) -> None:
+    """Inject a fake picamera2 stub into sys.modules so the lazy import succeeds.
+
+    camera.py does ``from picamera2 import Picamera2`` lazily inside capture().
+    monkeypatch.setattr("picamera2.Picamera2", ...) requires picamera2 to be
+    importable first.  We satisfy that by pre-seeding sys.modules with a stub
+    module whose Picamera2 attribute is a factory that returns *cam*.
+    """
+    stub = types.ModuleType("picamera2")
+    stub.Picamera2 = lambda: cam  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "picamera2", stub)
+
+
 @pytest.fixture()
 def fake_cam(monkeypatch: pytest.MonkeyPatch) -> FakeCam:
-    """Patch picamera2.Picamera2 with a FakeCam and return the instance."""
+    """Inject a stub picamera2 module and return the FakeCam instance."""
     cam = FakeCam()
-    monkeypatch.setattr("picamera2.Picamera2", lambda: cam)
+    _inject_picamera2(monkeypatch, cam)
     return cam
 
 
@@ -69,7 +85,7 @@ def test_capture_converts_rgb_to_bgr(monkeypatch: pytest.MonkeyPatch) -> None:
 
     cam = FakeCam()
     cam.capture_array = lambda: rgb.copy()  # type: ignore[method-assign]
-    monkeypatch.setattr("picamera2.Picamera2", lambda: cam)
+    _inject_picamera2(monkeypatch, cam)
 
     frames = camera.capture(n_frames=1)
     # BGR[0] should be the original B value (30); BGR[2] the original R value (10)
@@ -93,7 +109,7 @@ def test_capture_closes_camera_on_error(monkeypatch: pytest.MonkeyPatch) -> None
         raise RuntimeError("sensor error")
 
     cam.capture_array = _boom  # type: ignore[method-assign]
-    monkeypatch.setattr("picamera2.Picamera2", lambda: cam)
+    _inject_picamera2(monkeypatch, cam)
 
     with pytest.raises(RuntimeError, match="sensor error"):
         camera.capture(n_frames=1)

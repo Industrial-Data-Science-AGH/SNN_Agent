@@ -77,6 +77,12 @@ CAPTURE_FRAMES_N: int = 10
 COOLDOWN_S: float = 5.0
 """Seconds to wait before re-armed after wake (debounce SNN chatter)."""
 
+ALARM_HOLD_S: float = 10.0
+"""Seconds to sound the local LED+buzzer siren before actuators.close() and re-halt."""
+
+LOG_LEVEL: str = os.getenv("SNN_AGENT_LOG_LEVEL", "INFO")
+"""Root log level for main (env-overridable). Set via SNN_AGENT_LOG_LEVEL env var."""
+
 
 POWER_MODE: str = os.getenv("SNN_AGENT_POWER_MODE", "warm")
 """Power state strategy: 'warm' (stay on, dev mode) or 'halt' (sleep → wake).

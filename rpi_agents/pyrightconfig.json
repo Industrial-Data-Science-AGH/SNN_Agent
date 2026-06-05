@@ -1,0 +1,19 @@
+{
+  "include": [
+    "agent",
+    "tests"
+  ],
+  "exclude": [
+    ".venv",
+    "**/__pycache__",
+    ".pytest_cache"
+  ],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.12",
+  "pythonPlatform": "Linux",
+  "typeCheckingMode": "standard",
+  "extraPaths": [
+    "."
+  ]
+}

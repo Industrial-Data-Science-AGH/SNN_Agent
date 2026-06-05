@@ -44,6 +44,30 @@ def _smoke_test() -> None:
     print("\n[--test] All agent modules imported successfully.")
 
 
+def _configure_logging() -> None:
+    import logging
+    from agent import config
+    logging.basicConfig(
+        level=getattr(logging, config.LOG_LEVEL, logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+
+
+def _run_production() -> None:
+    from agent import actuators, config, machine, power, trigger
+
+    wake = trigger.read_wake_context()
+    decision = None
+    try:
+        decision = machine.run_cycle(wake)
+    finally:
+        if decision is not None and decision.alarm:
+            power.cooldown(config.ALARM_HOLD_S)
+        actuators.close()
+        power.cooldown(config.COOLDOWN_S)
+        power.resleep()
+
+
 def main() -> None:
     args = _parse_args()
 
@@ -51,11 +75,9 @@ def main() -> None:
         _smoke_test()
         sys.exit(0)
 
-    # Production path — P1 fills this.
-    raise NotImplementedError(
-        "P1: main() production cycle not yet implemented. "
-        "Run with --test for smoke-test."
-    )
+    _configure_logging()
+    _run_production()
+    sys.exit(0)
 
 
 if __name__ == "__main__":

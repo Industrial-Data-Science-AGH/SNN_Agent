@@ -1,0 +1,18 @@
+[Unit]
+Description=Wake-Up AI RPi5 Reactor agent (one wake cycle)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__WORKDIR__
+Environment=SNN_AGENT_POWER_MODE=halt
+Environment=SNN_AGENT_LOG_LEVEL=INFO
+Environment=SNN_AGENT_VAR_DIR=__VAR_DIR__
+ExecStart=__VENV__/bin/python -m agent.main
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

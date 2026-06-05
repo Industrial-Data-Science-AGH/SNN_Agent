@@ -1,0 +1,9 @@
+# rpi_agents deploy — NOPASSWD sudoers drop-in for Wake-Up AI service user
+#
+# agent/power.py:resleep() runs `subprocess.run(["sudo", "halt"])` as the
+# non-root service user.  Without this rule the Pi never re-halts after a
+# wake cycle, defeating the power contract.
+#
+# install.sh resolves __HALT__ via `command -v halt` (Bookworm: /usr/sbin/halt)
+# and substitutes __USER__ + __HALT__ before activating this file via visudo.
+__USER__ ALL=(root) NOPASSWD: __HALT__

@@ -2,24 +2,25 @@
 #
 # Pi-only packages (picamera2, gpiozero, lgpio) are installed via apt +
 # --system-site-packages venv on the Pi.  They will NOT install on macOS.
-# For Mac dev / CI (eval harness + unit tests), only numpy and pytest are needed.
+# For Mac dev / CI (unit tests + eval harness): gpiozero, pytest, numpy, python-dotenv.
 #
 # Install on the Pi:
-#   sudo apt install -y python3-picamera2 python3-gpiozero python3-lgpio
+#   sudo apt install -y python3-picamera2 python3-lgpio
 #   python -m venv --system-site-packages .venv
 #   source .venv/bin/activate
 #   pip install -r requirements.txt
 #
-# Install on Mac (eval harness only):
-#   pip install numpy pytest python-dotenv
+# Install on Mac (unit tests + eval harness):
+#   pip install gpiozero pytest numpy python-dotenv opencv-python-headless google-genai
 
 # --- Pi-only (apt-managed; listed for documentation) ---
 # picamera2          # CSI camera capture (apt: python3-picamera2)
-# gpiozero           # GPIO LED + buzzer (apt: python3-gpiozero)
-# lgpio              # low-level GPIO for trigger read (apt: python3-lgpio)
+# lgpio>=0.2         # Pi 5 RP1-compatible GPIO backend (apt: python3-lgpio)
 
 # --- pip-installable (Pi + Mac) ---
+gpiozero>=2.0
 opencv-python-headless>=4.9
 google-genai>=0.8
 python-dotenv>=1.0
 numpy>=1.26
+pytest>=8.0

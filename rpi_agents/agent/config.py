@@ -74,6 +74,18 @@ ALERT_SUBJECT_PREFIX: str = "[Wake-Up AI]"
 CAPTURE_FRAMES_N: int = 10
 """Number of frames to capture for prefilter + snapshot for vision."""
 
+CAMERA_BACKEND: str = os.getenv("SNN_AGENT_CAMERA_BACKEND", "csi")
+"""Camera capture backend: 'csi' (picamera2) or 'usb' (OpenCV VideoCapture).
+Set via SNN_AGENT_CAMERA_BACKEND env var."""
+
+CAMERA_USB_INDEX: int = int(os.getenv("SNN_AGENT_CAMERA_INDEX", "0"))
+"""V4L2 device index for USB camera (/dev/video<N>).
+Set via SNN_AGENT_CAMERA_INDEX env var."""
+
+CAMERA_USB_WARMUP_FRAMES: int = int(os.getenv("SNN_AGENT_CAMERA_WARMUP", "5"))
+"""Number of frames to discard on USB camera open (first frames are dark/garbage).
+Set via SNN_AGENT_CAMERA_WARMUP env var."""
+
 COOLDOWN_S: float = 5.0
 """Seconds to wait before re-armed after wake (debounce SNN chatter)."""
 

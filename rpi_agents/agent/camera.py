@@ -1,7 +1,8 @@
-"""Camera capture via picamera2 (P2).
+"""Camera capture via picamera2 (CSI) or OpenCV VideoCapture (USB).
 
 Top-level imports remain hardware-free; picamera2 and cv2 are imported lazily
-inside functions.
+inside functions.  The active backend is selected at call time via
+config.CAMERA_BACKEND so tests can monkeypatch the mode.
 """
 
 import time
@@ -13,16 +14,35 @@ from agent import config
 
 
 def capture(n_frames: int = config.CAPTURE_FRAMES_N) -> np.ndarray:
-    """Capture frames from the CSI camera via picamera2.
+    """Capture frames from the configured camera backend.
 
-    picamera2 delivers RGB arrays; this function flips each frame to BGR so
-    all downstream cv2 operations have a consistent channel order.
+    Dispatches to _capture_csi or _capture_usb based on config.CAMERA_BACKEND
+    (read at call time so tests can monkeypatch).
 
     Args:
         n_frames: Number of frames to capture.
 
     Returns:
         Array of shape (n_frames, H, W, 3) in BGR uint8.
+
+    Raises:
+        ValueError: If config.CAMERA_BACKEND is not 'csi' or 'usb'.
+    """
+    backend = config.CAMERA_BACKEND
+    if backend == "csi":
+        return _capture_csi(n_frames)
+    if backend == "usb":
+        return _capture_usb(n_frames)
+    raise ValueError(
+        f"Unknown CAMERA_BACKEND: {backend!r} (expected 'csi' or 'usb')"
+    )
+
+
+def _capture_csi(n_frames: int) -> np.ndarray:
+    """Capture frames from the CSI camera via picamera2.
+
+    picamera2 delivers RGB arrays; this function flips each frame to BGR so
+    all downstream cv2 operations have a consistent channel order.
     """
     from picamera2 import Picamera2  # type: ignore[import-untyped]
 
@@ -37,6 +57,34 @@ def capture(n_frames: int = config.CAPTURE_FRAMES_N) -> np.ndarray:
         return np.stack(frames).astype(np.uint8)
     finally:
         cam.close()
+
+
+def _capture_usb(n_frames: int) -> np.ndarray:
+    """Capture frames from a USB webcam via OpenCV VideoCapture.
+
+    cv2.VideoCapture returns BGR natively — no channel flip needed.
+    Warmup frames are discarded to skip dark/garbage frames on open.
+    """
+    import cv2  # type: ignore[import-untyped]  # lazy: not required for CSI path
+
+    cap = cv2.VideoCapture(config.CAMERA_USB_INDEX)
+    try:
+        if not cap.isOpened():
+            raise RuntimeError(
+                f"USB camera index {config.CAMERA_USB_INDEX} could not be opened"
+                " (check /dev/video*, 'video' group)"
+            )
+        for _ in range(config.CAMERA_USB_WARMUP_FRAMES):
+            cap.read()
+        frames = []
+        for _ in range(n_frames):
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                raise RuntimeError("USB camera read failed")
+            frames.append(frame)
+        return np.stack(frames).astype(np.uint8)
+    finally:
+        cap.release()
 
 
 def save_clip(frames: np.ndarray, path: Path | None = None) -> Path:

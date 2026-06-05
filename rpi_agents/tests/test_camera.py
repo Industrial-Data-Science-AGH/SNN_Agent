@@ -6,6 +6,7 @@ opencv-python-headless is available on Mac so the save_clip cv2 paths run for re
 
 import sys
 import types
+from typing import Optional
 
 import numpy as np
 import pytest
@@ -137,3 +138,104 @@ def test_save_clip_accepts_explicit_path(tmp_path: pytest.TempPathFactory) -> No
     out = camera.save_clip(frames, path=dest)
     assert out == dest
     assert dest.exists()
+
+
+# USB backend — fake VideoCapture + helpers
+
+
+class FakeUSBCap:
+    """Minimal cv2.VideoCapture stand-in for USB backend tests."""
+
+    def __init__(
+        self,
+        frame: np.ndarray,
+        opened: bool = True,
+        read_ok: bool = True,
+    ) -> None:
+        self._frame = frame
+        self._opened = opened
+        self._read_ok = read_ok
+        self.released = False
+
+    def isOpened(self) -> bool:
+        return self._opened
+
+    def read(self) -> tuple[bool, Optional[np.ndarray]]:
+        if self._read_ok:
+            return True, self._frame.copy()
+        return False, None
+
+    def release(self) -> None:
+        self.released = True
+
+
+def _inject_cv2_cap(
+    monkeypatch: pytest.MonkeyPatch,
+    cap: FakeUSBCap,
+) -> None:
+    """Patch cv2.VideoCapture to return *cap* and set backend to 'usb'."""
+    import cv2
+
+    monkeypatch.setattr(cv2, "VideoCapture", lambda _idx: cap)
+    monkeypatch.setattr(config, "CAMERA_BACKEND", "usb")
+    monkeypatch.setattr(config, "CAMERA_USB_WARMUP_FRAMES", 0)
+
+
+# USB tests
+
+
+def test_usb_capture_shape_and_dtype(monkeypatch: pytest.MonkeyPatch) -> None:
+    frame = np.zeros((_H, _W, 3), dtype=np.uint8)
+    cap = FakeUSBCap(frame)
+    _inject_cv2_cap(monkeypatch, cap)
+    frames = camera.capture(n_frames=_N)
+    assert frames.shape == (_N, _H, _W, 3)
+    assert frames.dtype == np.uint8
+
+
+def test_usb_capture_is_bgr_passthrough(monkeypatch: pytest.MonkeyPatch) -> None:
+    """cv2 returns BGR natively; capture() must NOT flip channels."""
+    # Asymmetric BGR: idx0=30, idx2=10.  After a no-flip path both stay unchanged.
+    bgr = np.zeros((_H, _W, 3), dtype=np.uint8)
+    bgr[:, :, 0] = 30  # B channel
+    bgr[:, :, 1] = 20  # G channel
+    bgr[:, :, 2] = 10  # R channel
+
+    cap = FakeUSBCap(bgr)
+    _inject_cv2_cap(monkeypatch, cap)
+
+    frames = camera.capture(n_frames=1)
+    assert int(frames[0, 0, 0, 0]) == 30   # B unchanged
+    assert int(frames[0, 0, 0, 2]) == 10   # R unchanged (proves no flip)
+
+
+def test_usb_capture_releases(monkeypatch: pytest.MonkeyPatch) -> None:
+    frame = np.zeros((_H, _W, 3), dtype=np.uint8)
+    cap = FakeUSBCap(frame)
+    _inject_cv2_cap(monkeypatch, cap)
+    camera.capture(n_frames=1)
+    assert cap.released is True
+
+
+def test_usb_capture_releases_on_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    """cap.release() must be called even when read() fails."""
+    frame = np.zeros((_H, _W, 3), dtype=np.uint8)
+    cap = FakeUSBCap(frame, read_ok=False)
+    _inject_cv2_cap(monkeypatch, cap)
+    with pytest.raises(RuntimeError, match="USB camera read failed"):
+        camera.capture(n_frames=1)
+    assert cap.released is True
+
+
+def test_usb_capture_raises_when_not_opened(monkeypatch: pytest.MonkeyPatch) -> None:
+    frame = np.zeros((_H, _W, 3), dtype=np.uint8)
+    cap = FakeUSBCap(frame, opened=False)
+    _inject_cv2_cap(monkeypatch, cap)
+    with pytest.raises(RuntimeError, match="could not be opened"):
+        camera.capture(n_frames=1)
+
+
+def test_unknown_backend_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config, "CAMERA_BACKEND", "bogus")
+    with pytest.raises(ValueError, match="Unknown CAMERA_BACKEND"):
+        camera.capture(n_frames=1)

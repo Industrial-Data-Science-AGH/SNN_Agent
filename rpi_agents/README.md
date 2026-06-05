@@ -32,6 +32,25 @@ cd rpi_agents
 python -m agent.main --test
 ```
 
+## USB camera for first tests (before the CSI module is wired)
+
+The default backend is `csi` (picamera2).  To use a USB webcam during
+bring-up, opt in with env vars — no code change needed:
+
+```bash
+ls /dev/video*                        # confirm the camera enumerated
+export SNN_AGENT_CAMERA_BACKEND=usb   # default is 'csi'
+export SNN_AGENT_CAMERA_INDEX=0       # /dev/video0
+SNN_AGENT_POWER_MODE=warm python -m agent.main
+```
+
+Requirements: the service user must be in the `video` group (the P5
+`install.sh` adds it — re-login required after first install).
+
+To switch back to the CSI camera: `unset SNN_AGENT_CAMERA_BACKEND`.
+USB is a bring-up/test affordance; CSI remains the default and the
+deployed configuration.
+
 ## Pi setup
 
 ```bash

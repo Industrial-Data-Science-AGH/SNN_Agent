@@ -46,7 +46,7 @@ def run_audio_logger():
         if n_channels > 1:
             data = data[::n_channels]
 
-    print(f"=== Audio Feature Logger START ===")
+    print("=== Audio Feature Logger START ===")
     print(f"Plik: {INPUT_WAV} | Próbkowanie: {fs} Hz")
 
     # ---- INICJALIZACJA STANU GLOBALNEGO (Dokładnie jak w Arduino) ----
@@ -84,7 +84,8 @@ def run_audio_logger():
         
         # Czy upłynął czas ramki (np. 20ms)?
         if (curr_time_ms - frame_start_ms) >= FRAME_WINDOW_MS:
-            if sample_cnt == 0: sample_cnt = 1
+            if sample_cnt == 0: 
+               sample_cnt = 1
             
             # Wyliczanie cech (dokładnie jak w processAudio na Arduino)
             peak_val = maxAc
@@ -115,7 +116,7 @@ def run_audio_logger():
         writer.writerow(['Timestamp_ms', 'Peak', 'Mean', 'Std'])
         writer.writerows(features_log)
         
-    print(f"=== Zakończono sukcesem ===")
+    print("=== Zakończono sukcesem ===")
     print(f"Zapisano {len(features_log)} punktów czasowych.")
     print(f"Wyniki znajdziesz w: {OUTPUT_CSV}\n")
 

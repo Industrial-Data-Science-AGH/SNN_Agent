@@ -34,10 +34,7 @@ def process_single_wav(file_path):
 
         # Konwersja bajtów na tablicę numpy w zależności od formatu
         if sampwidth == 2:
-            data = (
-                np.frombuffer(raw_bytes, dtype=np.int16).astype(np.float32)
-                / 32768.0
-            )
+            data = np.frombuffer(raw_bytes, dtype=np.int16).astype(np.float32) / 32768.0
         elif sampwidth == 4:
             data = (
                 np.frombuffer(raw_bytes, dtype=np.int32).astype(np.float32)
@@ -45,8 +42,7 @@ def process_single_wav(file_path):
             )
         else:
             data = (
-                np.frombuffer(raw_bytes, dtype=np.uint8).astype(np.float32)
-                - 128.0
+                np.frombuffer(raw_bytes, dtype=np.uint8).astype(np.float32) - 128.0
             ) / 128.0
 
         # Jeśli stereo, bierzemy tylko pierwszy kanał (mono)
@@ -138,9 +134,7 @@ def run_batch_audio_logger():
     wav_files = glob.glob(search_path)
 
     if not wav_files:
-        print(
-            f"[BŁĄD] Brak plików .wav w katalogu '{INPUT_DIR}'!"
-        )
+        print(f"[BŁĄD] Brak plików .wav w katalogu '{INPUT_DIR}'!")
         return
 
     print(f"=== Audio Feature Batch Logger START ===")

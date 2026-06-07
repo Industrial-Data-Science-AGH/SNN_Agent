@@ -137,7 +137,7 @@ def run_batch_audio_logger():
         print(f"[BŁĄD] Brak plików .wav w katalogu '{INPUT_DIR}'!")
         return
 
-    print(f"=== Audio Feature Batch Logger START ===")
+    print("=== Audio Feature Batch Logger START ===")
     print(f"Znaleziono plików do przetworzenia: {len(wav_files)}")
     print("-" * 50)
 

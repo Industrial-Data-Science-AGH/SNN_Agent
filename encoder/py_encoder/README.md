@@ -1,0 +1,2 @@
+# Plik ```py_encoder.py``` bierze wszystkie pliki .wav z folderu ```snn_input/``` i wylicza dla każdego z nich statystyki, które zapisuje w plikach .csv w folderze ```output/```
+## Wszystko dzieje się w folderze ```encoder/```

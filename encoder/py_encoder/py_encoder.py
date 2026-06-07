@@ -1,4 +1,5 @@
 import csv
+import glob
 import math
 import os
 import wave
@@ -12,24 +13,19 @@ FRAME_WINDOW_MS = 20
 ALPHA = 0.99  # Współczynnik odcięcia DC dla HPF
 
 # ---- PARAMETRY PLIKÓW ----
-INPUT_WAV = "dataset/glass1.wav"  # Ścieżka do Twojego pliku dźwiękowego
-OUTPUT_DIR = "output"
-OUTPUT_CSV = os.path.join(OUTPUT_DIR, "features_log.csv")
+INPUT_DIR = "encoder/snn_input"
+OUTPUT_DIR = "encoder/output"
 
 # Współczynnik wzmocnienia (Gain) - dopasuj, jeśli wartości są za niskie
 INPUT_GAIN = 1.0
 
 
 # ============================================================
-#  PROCES PRZETWARZANIA AUDIO i ZAPISU DO CSV
+#  PROCES PRZETWARZANIA POJEDYNCZEGO PLIKU AUDIO
 # ============================================================
-def run_audio_logger():
-    if not os.path.exists(INPUT_WAV):
-        print(f"[BŁĄD] Plik wejściowy '{INPUT_WAV}' nie istnieje!")
-        return
-
+def process_single_wav(file_path):
     # 1. Wczytanie pliku WAV przez moduł wave
-    with wave.open(INPUT_WAV, "rb") as w:
+    with wave.open(file_path, "rb") as w:
         fs = w.getframerate()
         n_channels = w.getnchannels()
         n_samples = w.getnframes()
@@ -38,18 +34,26 @@ def run_audio_logger():
 
         # Konwersja bajtów na tablicę numpy w zależności od formatu
         if sampwidth == 2:
-            data = np.frombuffer(raw_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+            data = (
+                np.frombuffer(raw_bytes, dtype=np.int16).astype(np.float32)
+                / 32768.0
+            )
         elif sampwidth == 4:
-            data = np.frombuffer(raw_bytes, dtype=np.int32).astype(np.float32) / 2147483648.0
+            data = (
+                np.frombuffer(raw_bytes, dtype=np.int32).astype(np.float32)
+                / 2147483648.0
+            )
         else:
-            data = (np.frombuffer(raw_bytes, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
+            data = (
+                np.frombuffer(raw_bytes, dtype=np.uint8).astype(np.float32)
+                - 128.0
+            ) / 128.0
 
         # Jeśli stereo, bierzemy tylko pierwszy kanał (mono)
         if n_channels > 1:
             data = data[::n_channels]
 
-    print("=== Audio Feature Logger START ===")
-    print(f"Plik: {INPUT_WAV} | Próbkowanie: {fs} Hz")
+    print(f"Przetwarzanie: {os.path.basename(file_path)} | Próbkowanie: {fs} Hz")
 
     # ---- INICJALIZACJA STANU GLOBALNEGO (Dokładnie jak w Arduino) ----
     hp_filtered = 0.0
@@ -96,12 +100,14 @@ def run_audio_logger():
             std_val = math.sqrt(variance)
 
             # Zapis do pamięci podręcznej (zaokrąglony timestamp)
-            features_log.append([
-                round(curr_time_ms, 2),
-                round(peak_val, 4),
-                round(mean_val, 4),
-                round(std_val, 4),
-            ])
+            features_log.append(
+                [
+                    round(curr_time_ms, 2),
+                    round(peak_val, 4),
+                    round(mean_val, 4),
+                    round(std_val, 4),
+                ]
+            )
 
             # Reset parametrów okna dla kolejnej ramki
             maxAc = 0.0
@@ -110,18 +116,43 @@ def run_audio_logger():
             sample_cnt = 0
             frame_start_ms = curr_time_ms
 
-    # ---- ZAPIS CAŁOŚCI DO CSV ----
+    # ---- ZAPIS CAŁOŚCI DO DEDYkowanego PLIKU CSV ----
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    with open(OUTPUT_CSV, mode="w", newline="") as file:
+    base_name = os.path.splitext(os.path.basename(file_path))[0]
+    output_csv = os.path.join(OUTPUT_DIR, f"{base_name}_features.csv")
+
+    with open(output_csv, mode="w", newline="") as file:
         writer = csv.writer(file)
-        # Nagłówki kolumn
         writer.writerow(["Timestamp_ms", "Peak", "Mean", "Std"])
         writer.writerows(features_log)
 
-    print("=== Zakończono sukcesem ===")
-    print(f"Zapisano {len(features_log)} punktów czasowych.")
-    print(f"Wyniki znajdziesz w: {OUTPUT_CSV}\n")
+    print(f" -> Zapisano punktów: {len(features_log)} do {output_csv}")
+
+
+# ============================================================
+#  GŁÓWNA FUNKCJA URUCHAMIAJĄCA DLA KATALOGU
+# ============================================================
+def run_batch_audio_logger():
+    # Szukanie wszystkich plików .wav w katalogu wejściowym
+    search_path = os.path.join(INPUT_DIR, "*.wav")
+    wav_files = glob.glob(search_path)
+
+    if not wav_files:
+        print(
+            f"[BŁĄD] Brak plików .wav w katalogu '{INPUT_DIR}'!"
+        )
+        return
+
+    print(f"=== Audio Feature Batch Logger START ===")
+    print(f"Znaleziono plików do przetworzenia: {len(wav_files)}")
+    print("-" * 50)
+
+    for wav_file in sorted(wav_files):
+        process_single_wav(wav_file)
+
+    print("-" * 50)
+    print("=== Wszystkie pliki zostały przetworzone pomyślnie ===")
 
 
 if __name__ == "__main__":
-    run_audio_logger()
+    run_batch_audio_logger()

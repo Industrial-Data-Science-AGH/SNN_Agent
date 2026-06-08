@@ -7,10 +7,11 @@ import wave
 import numpy as np
 
 # ============================================================
-#  KONFIGURACJA ENKODERA
+#  KONFIGURACJA ENKODERA (Zgodna z Wersją 2 Arduino)
 # ============================================================
 FRAME_WINDOW_MS = 20
-ALPHA = 0.99  # Współczynnik odcięcia DC dla HPF
+HPF_ENABLED = False  # W nowej wersji Arduino domyślnie wyłączony
+ALPHA = 0.99         # Współczynnik odcięcia DC dla HPF (jeśli włączony)
 
 # ---- PARAMETRY PLIKÓW ----
 INPUT_DIR = "encoder/snn_input"
@@ -51,18 +52,19 @@ def process_single_wav(file_path):
 
     print(f"Przetwarzanie: {os.path.basename(file_path)} | Próbkowanie: {fs} Hz")
 
-    # ---- INICJALIZACJA STANU GLOBALNEGO (Dokładnie jak w Arduino) ----
+    # ---- INICJALIZACJA STANU GLOBALNEGO (Dokładnie jak w Arduino v2) ----
     hp_filtered = 0.0
-    prev_raw = 512.0  # Spodziewana wartość spoczynkowa ADC
+    prev_raw = 450.0  # Zmieniono z 512.0 na 450.0 zgodnie z nowym kodem
 
     frame_start_ms = 0.0
-    maxAc = 0.0
-    sumAc = 0.0
-    sumSq = 0.0
-    sample_cnt = 0
+    
+    # Stan algorytmu Welforda Online dla średniej i wariancji
+    wf_mean = 0.0
+    wf_M2 = 0.0
+    wf_n = 0
+    frame_max = 0.0
 
-    features_log = []  # Lista na zebrane statystyki dla każdego timestampu
-
+    features_log = []  # Lista na zebrane statystyki (Peak, Mean, CV)
     dt_ms = 1000.0 / fs
 
     # ---- PĘTLA GŁÓWNA (Próbka po próbce) ----
@@ -73,53 +75,62 @@ def process_single_wav(file_path):
         raw = 512.0 + (sample * 512.0 * INPUT_GAIN)
         raw = max(0.0, min(1023.0, raw))
 
-        # Filtr HPF usuwający składową stałą
-        hp_filtered = ALPHA * (hp_filtered + raw - prev_raw)
-        prev_raw = raw
-        val = abs(hp_filtered)
+        # Filtr HPF (zależny od konfiguracji HPF_ENABLED)
+        if HPF_ENABLED:
+            hp_filtered = ALPHA * (hp_filtered + raw - prev_raw)
+            prev_raw = raw
+            val = abs(hp_filtered)
+        else:
+            val = raw
 
-        # Akumulacja danych wewnątrz ramki czasowej
-        maxAc = max(maxAc, val)
-        sumAc += val
-        sumSq += val * val
-        sample_cnt += 1
+        # Algorytm Welforda Online — inkrementacja "w locie"
+        wf_n += 1
+        delta = val - wf_mean
+        wf_mean += delta / wf_n
+        delta2 = val - wf_mean
+        wf_M2 += delta * delta2
+
+        if val > frame_max:
+            frame_max = val
 
         # Czy upłynął czas ramki (np. 20ms)?
         if (curr_time_ms - frame_start_ms) >= FRAME_WINDOW_MS:
-            if sample_cnt == 0:
-                sample_cnt = 1
+            # Guard (zabezpieczenie przed dzieleniem przez zero/ujemną próbą)
+            if wf_n < 2:
+                wf_n = 2
+                wf_M2 = 0.001
 
-            # Wyliczanie cech (dokładnie jak w processAudio na Arduino)
-            peak_val = maxAc
-            mean_val = sumAc / sample_cnt
-            variance = sumSq / sample_cnt
-            std_val = math.sqrt(variance)
+            mean_val = wf_mean
+            std_val = math.sqrt(wf_M2 / (wf_n - 1))  # Próbkowe odchylenie standardowe
+            
+            # Współczynnik zmienności (CV = std / mean) uniezależniający od gainu mikrofonu
+            cv_val = (std_val / mean_val) if mean_val > 1.0 else 0.0
 
-            # Zapis do pamięci podręcznej (zaokrąglony timestamp)
+            # Zapis do pamięci podręcznej (Zastąpiono kolumnę Std przez CV)
             features_log.append(
                 [
                     round(curr_time_ms, 2),
-                    round(peak_val, 4),
+                    round(frame_max, 4),
                     round(mean_val, 4),
-                    round(std_val, 4),
+                    round(cv_val, 4),
                 ]
             )
 
-            # Reset parametrów okna dla kolejnej ramki
-            maxAc = 0.0
-            sumAc = 0.0
-            sumSq = 0.0
-            sample_cnt = 0
+            # Reset parametrów okna Welforda dla kolejnej ramki
+            wf_mean = 0.0
+            wf_M2 = 0.0
+            wf_n = 0
+            frame_max = 0.0
             frame_start_ms = curr_time_ms
 
-    # ---- ZAPIS CAŁOŚCI DO DEDYkowanego PLIKU CSV ----
+    # ---- ZAPIS CAŁOŚCI DO DEDYKOWANEGO PLIKU CSV ----
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     base_name = os.path.splitext(os.path.basename(file_path))[0]
     output_csv = os.path.join(OUTPUT_DIR, f"{base_name}_features.csv")
 
     with open(output_csv, mode="w", newline="") as file:
         writer = csv.writer(file)
-        writer.writerow(["Timestamp_ms", "Peak", "Mean", "Std"])
+        writer.writerow(["Timestamp_ms", "Peak", "Mean", "CV"])  # Zmiana nagłówka ze Std na CV
         writer.writerows(features_log)
 
     print(f" -> Zapisano punktów: {len(features_log)} do {output_csv}")
@@ -129,7 +140,6 @@ def process_single_wav(file_path):
 #  GŁÓWNA FUNKCJA URUCHAMIAJĄCA DLA KATALOGU
 # ============================================================
 def run_batch_audio_logger():
-    # Szukanie wszystkich plików .wav w katalogu wejściowym
     search_path = os.path.join(INPUT_DIR, "*.wav")
     wav_files = glob.glob(search_path)
 
@@ -137,7 +147,7 @@ def run_batch_audio_logger():
         print(f"[BŁĄD] Brak plików .wav w katalogu '{INPUT_DIR}'!")
         return
 
-    print("=== Audio Feature Batch Logger START ===")
+    print("=== Audio Feature Batch Logger (Wersja v2 - CV & Welford) START ===")
     print(f"Znaleziono plików do przetworzenia: {len(wav_files)}")
     print("-" * 50)
 

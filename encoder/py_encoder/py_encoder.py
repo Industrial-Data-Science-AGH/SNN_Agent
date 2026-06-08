@@ -11,7 +11,7 @@ import numpy as np
 # ============================================================
 FRAME_WINDOW_MS = 20
 HPF_ENABLED = False  # W nowej wersji Arduino domyślnie wyłączony
-ALPHA = 0.99         # Współczynnik odcięcia DC dla HPF (jeśli włączony)
+ALPHA = 0.99  # Współczynnik odcięcia DC dla HPF (jeśli włączony)
 
 # ---- PARAMETRY PLIKÓW ----
 INPUT_DIR = "encoder/snn_input"
@@ -57,7 +57,7 @@ def process_single_wav(file_path):
     prev_raw = 450.0  # Zmieniono z 512.0 na 450.0 zgodnie z nowym kodem
 
     frame_start_ms = 0.0
-    
+
     # Stan algorytmu Welforda Online dla średniej i wariancji
     wf_mean = 0.0
     wf_M2 = 0.0
@@ -102,7 +102,7 @@ def process_single_wav(file_path):
 
             mean_val = wf_mean
             std_val = math.sqrt(wf_M2 / (wf_n - 1))  # Próbkowe odchylenie standardowe
-            
+
             # Współczynnik zmienności (CV = std / mean) uniezależniający od gainu mikrofonu
             cv_val = (std_val / mean_val) if mean_val > 1.0 else 0.0
 
@@ -130,7 +130,9 @@ def process_single_wav(file_path):
 
     with open(output_csv, mode="w", newline="") as file:
         writer = csv.writer(file)
-        writer.writerow(["Timestamp_ms", "Peak", "Mean", "CV"])  # Zmiana nagłówka ze Std na CV
+        writer.writerow(
+            ["Timestamp_ms", "Peak", "Mean", "CV"]
+        )  # Zmiana nagłówka ze Std na CV
         writer.writerows(features_log)
 
     print(f" -> Zapisano punktów: {len(features_log)} do {output_csv}")

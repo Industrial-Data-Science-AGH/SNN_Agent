@@ -298,5 +298,3 @@ void loop() {
   loopTTFS();
 #endif
 }
-
-

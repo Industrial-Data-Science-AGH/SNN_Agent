@@ -169,3 +169,27 @@ def test_person_escalation_populates_bbox(monkeypatch: pytest.MonkeyPatch) -> No
     assert "bbox" in ld
     assert ld["bbox"] is not None
     assert "confidence" in ld
+
+
+# Motion threshold boundary tests (new default 0.08)
+
+
+def _uniform_pair(delta: int) -> np.ndarray:
+    """Two frames of shape (2, H, W, 3) differing uniformly by *delta* pixel values."""
+    f0 = np.full((_H, _W, 3), 100, dtype=np.uint8)
+    f1 = np.full((_H, _W, 3), 100 + delta, dtype=np.uint8)
+    return np.stack([f0, f1])
+
+
+def test_motion_below_new_threshold() -> None:
+    """Uniform diff of 15 → score ≈ 0.0588 < 0.08 → motion is False."""
+    result = prefilter.run(_uniform_pair(15))
+    assert result.motion is False
+    assert result.score == pytest.approx(15 / 255.0, abs=1e-4)
+
+
+def test_motion_above_new_threshold() -> None:
+    """Uniform diff of 23 → score ≈ 0.0902 > 0.08 → motion is True."""
+    result = prefilter.run(_uniform_pair(23))
+    assert result.motion is True
+    assert result.score == pytest.approx(23 / 255.0, abs=1e-4)

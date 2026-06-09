@@ -51,7 +51,9 @@ def _capture_csi(n_frames: int) -> np.ndarray:
         cam.configure(cam.create_still_configuration())
         cam.start()
         frames = []
-        for _ in range(n_frames):
+        for i in range(n_frames):
+            if i > 0 and config.CAPTURE_INTERVAL_S > 0:
+                time.sleep(config.CAPTURE_INTERVAL_S)
             frame = cam.capture_array()          # RGB uint8 (H, W, 3)
             frames.append(frame[..., ::-1])      # RGB → BGR
         return np.stack(frames).astype(np.uint8)
@@ -74,10 +76,15 @@ def _capture_usb(n_frames: int) -> np.ndarray:
                 f"USB camera index {config.CAMERA_USB_INDEX} could not be opened"
                 " (check /dev/video*, 'video' group)"
             )
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # best-effort; V4L2 may ignore
         for _ in range(config.CAMERA_USB_WARMUP_FRAMES):
             cap.read()
         frames = []
-        for _ in range(n_frames):
+        for i in range(n_frames):
+            if i > 0 and config.CAPTURE_INTERVAL_S > 0:
+                time.sleep(config.CAPTURE_INTERVAL_S)
+                for _ in range(config.CAMERA_USB_DRAIN_FRAMES):
+                    cap.grab()
             ok, frame = cap.read()
             if not ok or frame is None:
                 raise RuntimeError("USB camera read failed")

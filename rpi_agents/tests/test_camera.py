@@ -59,6 +59,12 @@ def _inject_picamera2(monkeypatch: pytest.MonkeyPatch, cam: FakeCam) -> None:
     monkeypatch.setitem(sys.modules, "picamera2", stub)
 
 
+@pytest.fixture(autouse=True)
+def zero_capture_interval(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Zero CAPTURE_INTERVAL_S for all tests so no real sleeps occur."""
+    monkeypatch.setattr(config, "CAPTURE_INTERVAL_S", 0.0)
+
+
 @pytest.fixture()
 def fake_cam(monkeypatch: pytest.MonkeyPatch) -> FakeCam:
     """Inject a stub picamera2 module and return the FakeCam instance."""
@@ -156,6 +162,8 @@ class FakeUSBCap:
         self._opened = opened
         self._read_ok = read_ok
         self.released = False
+        self.grab_count: int = 0
+        self.set_calls: list[tuple[int, int]] = []
 
     def isOpened(self) -> bool:
         return self._opened
@@ -164,6 +172,14 @@ class FakeUSBCap:
         if self._read_ok:
             return True, self._frame.copy()
         return False, None
+
+    def grab(self) -> bool:
+        self.grab_count += 1
+        return True
+
+    def set(self, prop_id: int, value: int) -> bool:
+        self.set_calls.append((prop_id, value))
+        return True
 
     def release(self) -> None:
         self.released = True
@@ -239,3 +255,79 @@ def test_unknown_backend_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(config, "CAMERA_BACKEND", "bogus")
     with pytest.raises(ValueError, match="Unknown CAMERA_BACKEND"):
         camera.capture(n_frames=1)
+
+
+# Frame-spacing / drain tests
+
+
+def test_usb_capture_spaces_and_drains(monkeypatch: pytest.MonkeyPatch) -> None:
+    """n_frames=3, interval=0.01, drain=2 → sleep called 2×, grab called 4×."""
+    monkeypatch.setattr(config, "CAPTURE_INTERVAL_S", 0.01)
+    monkeypatch.setattr(config, "CAMERA_USB_DRAIN_FRAMES", 2)
+
+    frame = np.zeros((_H, _W, 3), dtype=np.uint8)
+    cap = FakeUSBCap(frame)
+    _inject_cv2_cap(monkeypatch, cap)
+
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(camera.time, "sleep", lambda s: sleep_calls.append(s))
+
+    frames = camera.capture(n_frames=3)
+
+    assert frames.shape == (3, _H, _W, 3)
+    assert len(sleep_calls) == 2  # n_frames - 1
+    assert all(s == pytest.approx(0.01) for s in sleep_calls)
+    assert cap.grab_count == 4  # drain × (n_frames - 1)
+
+
+def test_usb_no_sleep_when_interval_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    """CAPTURE_INTERVAL_S=0 → no sleep, no drain grabs."""
+    monkeypatch.setattr(config, "CAPTURE_INTERVAL_S", 0.0)
+    monkeypatch.setattr(config, "CAMERA_USB_DRAIN_FRAMES", 4)
+
+    frame = np.zeros((_H, _W, 3), dtype=np.uint8)
+    cap = FakeUSBCap(frame)
+    _inject_cv2_cap(monkeypatch, cap)
+
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(camera.time, "sleep", lambda s: sleep_calls.append(s))
+
+    frames = camera.capture(n_frames=3)
+
+    assert frames.shape == (3, _H, _W, 3)
+    assert len(sleep_calls) == 0
+    assert cap.grab_count == 0
+
+
+def test_usb_bgr_passthrough_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Spacing + drain does not alter the no-flip BGR passthrough."""
+    monkeypatch.setattr(config, "CAPTURE_INTERVAL_S", 0.01)
+    bgr = np.zeros((_H, _W, 3), dtype=np.uint8)
+    bgr[:, :, 0] = 30
+    bgr[:, :, 2] = 10
+
+    cap = FakeUSBCap(bgr)
+    _inject_cv2_cap(monkeypatch, cap)
+    monkeypatch.setattr(camera.time, "sleep", lambda s: None)
+
+    frames = camera.capture(n_frames=2)
+    assert int(frames[0, 0, 0, 0]) == 30
+    assert int(frames[0, 0, 0, 2]) == 10
+
+
+def test_csi_capture_spaces_frames(monkeypatch: pytest.MonkeyPatch) -> None:
+    """n_frames=3, interval=0.01 → sleep called 2×; frames shape correct, BGR."""
+    monkeypatch.setattr(config, "CAPTURE_INTERVAL_S", 0.01)
+    monkeypatch.setattr(config, "CAMERA_BACKEND", "csi")
+
+    cam = FakeCam()
+    _inject_picamera2(monkeypatch, cam)
+
+    sleep_calls: list[float] = []
+    monkeypatch.setattr(camera.time, "sleep", lambda s: sleep_calls.append(s))
+
+    frames = camera.capture(n_frames=3)
+
+    assert frames.shape == (3, _H, _W, 3)
+    assert len(sleep_calls) == 2
+    assert all(s == pytest.approx(0.01) for s in sleep_calls)

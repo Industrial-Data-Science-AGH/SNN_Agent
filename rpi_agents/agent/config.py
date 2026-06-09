@@ -26,8 +26,10 @@ Bring-up TBD."""
 PREFILTER_STATIC_FRAMES_N: int = 3
 """Number of consecutive static frames to confirm no motion."""
 
-PREFILTER_MOTION_THRESHOLD: float = 0.05
-"""Optical flow magnitude threshold [0.0, 1.0] to detect motion."""
+PREFILTER_MOTION_THRESHOLD: float = float(os.getenv("SNN_AGENT_MOTION_THRESHOLD", "0.08"))
+"""Optical flow magnitude threshold [0.0, 1.0] to detect motion.
+Default 0.08 sits above the measured RealSense static-noise floor (~0.045).
+Set via SNN_AGENT_MOTION_THRESHOLD env var."""
 
 
 VAR_DIR: Path = Path(os.getenv(
@@ -52,8 +54,11 @@ PERSON_MODEL_DIR: Path = Path(os.getenv("SNN_AGENT_MODEL_DIR", str(VAR_DIR / "mo
 """Directory containing MobileNetSSD_deploy.prototxt + .caffemodel (git-ignored)."""
 
 
-GEMINI_MODEL: str = "gemini-2.0-flash"
-"""Gemini model name for vision classification."""
+GEMINI_MODEL: str = os.getenv("SNN_AGENT_GEMINI_MODEL", "gemini-3.1-flash-lite")
+"""Gemini model name for vision classification.
+Default is gemini-3.1-flash-lite (GA, vision-capable, free-tier ~1000 RPD).
+gemini-2.0-flash free-tier quota is now 0 (deprecated).
+Set via SNN_AGENT_GEMINI_MODEL env var."""
 
 GEMINI_TIMEOUT_S: float = 10.0
 """Timeout for Gemini API calls (seconds). On timeout, default to ALARM."""
@@ -85,6 +90,16 @@ Set via SNN_AGENT_CAMERA_INDEX env var."""
 CAMERA_USB_WARMUP_FRAMES: int = int(os.getenv("SNN_AGENT_CAMERA_WARMUP", "5"))
 """Number of frames to discard on USB camera open (first frames are dark/garbage).
 Set via SNN_AGENT_CAMERA_WARMUP env var."""
+
+CAPTURE_INTERVAL_S: float = float(os.getenv("SNN_AGENT_CAPTURE_INTERVAL_S", "0.1"))
+"""Sleep (seconds) between consecutive captured frames in both backends.
+Ensures consecutive frames are temporally separated so inter-frame motion is detectable.
+Set via SNN_AGENT_CAPTURE_INTERVAL_S env var."""
+
+CAMERA_USB_DRAIN_FRAMES: int = int(os.getenv("SNN_AGENT_CAMERA_DRAIN", "4"))
+"""Number of stale V4L2-buffered frames to discard (via grab()) after each inter-frame sleep.
+Without this drain, read() returns a buffered frame from before the sleep.
+Set via SNN_AGENT_CAMERA_DRAIN env var."""
 
 COOLDOWN_S: float = 5.0
 """Seconds to wait before re-armed after wake (debounce SNN chatter)."""

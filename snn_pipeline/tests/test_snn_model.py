@@ -1,15 +1,13 @@
 import sys
-import types
 from pathlib import Path
 import torch
 import pytest
+from snn_pipeline.snn_model import GlassBreakSNN
+
 
 # Make repo root importable when running nested test files
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-
-
-from snn_pipeline.snn_model import GlassBreakSNN
 
 
 def test_forward_zero_input_produces_no_spikes():

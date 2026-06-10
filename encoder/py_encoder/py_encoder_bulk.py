@@ -17,10 +17,10 @@ ALPHA = 0.99  # Współczynnik odcięcia DC dla HPF (jeśli włączony)
 INPUT_DIR_POSITIVE = "positive"
 INPUT_DIR_NEGATIVE = "negative"
 OUTPUT_DIR = "encoder/output"
+
 # Wszystkie dane trafią do tego jednego pliku:
 POSITIVE_OUTPUT_CSV = os.path.join(OUTPUT_DIR, "positive.csv")
 NEGATIVE_OUTPUT_CSV = os.path.join(OUTPUT_DIR, "negative.csv")
-
 
 # Współczynnik wzmocnienia (Gain) - dopasuj, jeśli wartości są za niskie
 INPUT_GAIN = 1.0
@@ -56,7 +56,6 @@ def process_single_wav(file_path, csv_writer):
             data = data[::n_channels]
 
     file_name = os.path.basename(file_path)
-    # print(f"Przetwarzanie: {file_name} | Próbkowanie: {fs} Hz")
 
     # ---- INICJALIZACJA STANU GLOBALNEGO (Dokładnie jak w Arduino v2) ----
     hp_filtered = 0.0
@@ -70,7 +69,7 @@ def process_single_wav(file_path, csv_writer):
     wf_n = 0
     frame_max = 0.0
 
-    features_log = []  # Lista na zebrane statystyki (Peak, Mean, CV)
+    features_log = []  # Lista na zebrane statystyki
     dt_ms = 1000.0 / fs
 
     # ---- PĘTLA GŁÓWNA (Próbka po próbce) ----
@@ -101,7 +100,6 @@ def process_single_wav(file_path, csv_writer):
 
         # Czy upłynął czas ramki (np. 20ms)?
         if (curr_time_ms - frame_start_ms) >= FRAME_WINDOW_MS:
-            # Guard (zabezpieczenie przed dzieleniem przez zero/ujemną próbą)
             if wf_n < 2:
                 wf_n = 2
                 wf_M2 = 0.001
@@ -112,9 +110,10 @@ def process_single_wav(file_path, csv_writer):
             # Współczynnik zmienności (CV = std / mean)
             cv_val = (std_val / mean_val) if mean_val > 1.0 else 0.0
 
-            # Zapis do pamięci podręcznej
+            # Zapis do pamięci podręcznej — DODANO file_name jako pierwszą kolumnę
             features_log.append(
                 [
+                    file_name,
                     round(curr_time_ms, 2),
                     round(frame_max, 4),
                     round(mean_val, 4),
@@ -130,17 +129,8 @@ def process_single_wav(file_path, csv_writer):
             frame_start_ms = curr_time_ms
 
     # ---- ZAPIS DO WSPÓLNEGO PLIKU CSV ----
-    # Dodajemy nagłówek informujący o nazwie pliku
-    csv_writer.writerow([f"=== FILE: {file_name} ==="])
-    # Dodajemy standardowy nagłówek kolumn dla tego pliku
-    csv_writer.writerow(["Timestamp_ms", "Peak", "Mean", "CV"])
-    # Zapisujemy dane liczbowe
+    # Zapisujemy czyste dane liczbowe (każdy wiersz zawiera już nazwę pliku)
     csv_writer.writerows(features_log)
-
-    # Dodatkowa pusta linijka w CSV dla estetycznego oddzielenia plików (opcjonalnie)
-    csv_writer.writerow([])
-
-    # print(f" -> Dopisano punktów: {len(features_log)}")
 
 
 # ============================================================
@@ -154,20 +144,21 @@ def run_batch_audio_logger(INPUT_DIR, OUTPUT_FILE):
         print(f"[BŁĄD] Brak plików .wav w katalogu '{INPUT_DIR}'!")
         return
 
-    print("=== Audio Feature Batch Logger (Wersja v2 - Jeden Plik CSV) START ===")
+    print("=== Audio Feature Batch Logger (Wersja v2 - Poprawny format CSV) START ===")
     print(f"Znaleziono plików do przetworzenia: {len(wav_files)}")
     print("-" * 50)
 
-    # Tworzymy folder wyjściowy, jeśli nie istnieje
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # Otwieramy jeden zbiorczy plik w trybie zapisu ("w"), który nadpisze stary plik przy uruchomieniu
     with open(OUTPUT_FILE, mode="w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
 
+        # Zapisujemy nagłówek zbiorczy TYLKO RAZ na samym początku pliku
+        writer.writerow(["File_Name", "Timestamp_ms", "Peak", "Mean", "CV"])
+
         for i, wav_file in enumerate(sorted(wav_files)):
             process_single_wav(wav_file, writer)
-            if i % 100 == 0:
+            if i % 100 == 0 and i > 0:
                 print(f"przemieliłem {i} plików wav z datasetu {INPUT_DIR}")
 
     print("-" * 50)

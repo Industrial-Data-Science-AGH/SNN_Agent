@@ -1,8 +1,8 @@
 import sys
 from pathlib import Path
-import torch
 import pytest
-from snn_pipeline.snn_model import GlassBreakSNN
+import torch
+from experiments.train_snn_model import GlassBreakSNN
 
 
 # Make repo root importable when running nested test files
@@ -14,64 +14,62 @@ def test_forward_zero_input_produces_no_spikes():
     model = GlassBreakSNN()
     model.eval()
 
-    # batch=2, channels=1, timesteps=16
-    x = torch.zeros(2, 1, 16)
+    x = torch.zeros(2, 3, 16)
     trigger, spikes = model(x)
 
     assert trigger.shape == (2, 1)
-    # Expect no spikes for zero input
-    assert spikes["N1"].sum() == 0
-    assert spikes["N2"].sum() == 0
-    assert spikes["N3"].sum() == 0
-    assert spikes["N_inh"].sum() == 0
+    assert spikes["input"].shape == (2, 3, 16)
+    assert spikes["hidden"].shape == (2, 10, 16)
+    assert spikes["output"].shape == (2, 1, 16)
+    assert spikes["input"].sum() == 0
+    assert spikes["hidden"].sum() == 0
+    assert spikes["output"].sum() == 0
 
 
-def test_get_weights_and_thresholds_dict():
+def test_forward_accepts_2d_input_and_broadcasts_channels():
     model = GlassBreakSNN()
-    wdict = model.get_weights_dict()
-    tdict = model.get_thresholds_dict()
+    model.eval()
 
-    # keys present and values numeric
-    for k in ("w_n1", "w_n2", "w_n3_from_n1", "w_n3_from_n2", "w_inh", "w_inh_to_n3"):
-        assert k in wdict
-        assert isinstance(wdict[k], float)
+    x2d = torch.zeros(2, 16)
+    trigger_2d, spikes_2d = model(x2d)
 
-    for k in ("vth_n1", "vth_n2", "vth_n3", "vth_inh"):
-        assert k in tdict
-        assert isinstance(tdict[k], float)
+    x3d = x2d.unsqueeze(1).repeat(1, 3, 1)
+    trigger_3d, spikes_3d = model(x3d)
+
+    assert torch.equal(trigger_2d, trigger_3d)
+    assert torch.equal(spikes_2d["input"], spikes_3d["input"])
 
 
-def test_clamp_weights_enforces_bounds():
+def test_forward_output_shapes_are_correct():
+    model = GlassBreakSNN()
+    model.eval()
+
+    x = torch.rand(4, 3, 12)
+    trigger, spikes = model(x)
+
+    assert trigger.shape == (4, 1)
+    assert set(spikes.keys()) == {"input", "hidden", "output"}
+    assert spikes["input"].shape == (4, 3, 12)
+    assert spikes["hidden"].shape == (4, 10, 12)
+    assert spikes["output"].shape == (4, 1, 12)
+
+
+def test_parameter_shapes_match_architecture():
     model = GlassBreakSNN()
 
-    # set extreme values
-    model.w_n1.data.fill_(0.001)
-    model.w_inh.data.fill_(0.01)
-    model.w_inh_to_n3.data.fill_(-10.0)
-    model.vth_n1.data.fill_(0.0)
-
-    model.clamp_weights()
-
-    # After clamping, values should be within configured ranges
-    assert 0.05 <= model.w_n1.item() <= 0.95
-    assert 0.15 <= model.w_inh.item() <= 0.95
-    assert -0.95 <= model.w_inh_to_n3.item() <= -0.20
-    assert 0.1 <= model.vth_n1.item() <= 0.95
+    assert model.w_input_hidden.shape == (3, 10)
+    assert model.w_hidden_output.shape == (10, 1)
+    assert model.w_hidden_hidden.shape == (10, 10)
+    assert model.vth_input.shape == (3,)
+    assert model.vth_hidden.shape == (10,)
+    assert model.vth_output.shape == (1,)
 
 
-def test_set_quantize_mode_invalid_raises():
+def test_invalid_input_dimensions_raise_value_error():
     model = GlassBreakSNN()
-    with pytest.raises(AssertionError):
-        model.set_quantize_mode("no-such-mode")
+    model.eval()
 
-
-def test_quantize_modes_do_not_crash_on_forward():
-    model = GlassBreakSNN()
-    x = torch.rand(1, 1, 12)
-
-    for mode in ("none", "hat", "gumbel", "qat"):
-        model.set_quantize_mode(mode)
-        # run forward; ensure it executes and returns expected shapes
-        trigger, spikes = model(x)
-        assert trigger.shape == (1, 1)
-        assert all(k in spikes for k in ("N1", "N2", "N3", "N_inh"))
+    with pytest.raises(ValueError):
+        model(torch.rand(2, 3, 4, 5))
+    with pytest.raises(ValueError):
+        model(torch.rand(2,))

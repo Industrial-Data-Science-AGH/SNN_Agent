@@ -3,35 +3,200 @@ name: CI
 on:
   push:
     branches:
-    - dev
-    - "feat/**"
-    - "integration/**"
+      - dev
+      - "feat/**"
+      - "integration/**"
+
   pull_request:
     branches:
-    - dev
-    - main
+      - dev
+      - main
 
 jobs:
   lint:
     name: Lint and format check
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
-      - run: uv sync --group dev
-      - run: uv run ruff check .
-      - run: uv run ruff format --check .
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Ruff lint check
+        run: uv run ruff check .
+
+      - name: Ruff format check
+        run: uv run ruff format --check .
 
   test:
     name: Unit tests
     runs-on: ubuntu-latest
     needs: lint
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
-      - run: uv sync --group dev
-      - run: uv run pytest tests/ -v
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Run pytest
+        run: uv run pytest tests/ -v
+
+  collect-component-artifacts:
+    name: Collect component outputs
+    runs-on: ubuntu-latest
+    needs: test
+    if: ${{ always() }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare artifact directories
+        run: |
+          mkdir -p ci_artifacts/dataset
+          mkdir -p ci_artifacts/encoder
+          mkdir -p ci_artifacts/network
+          mkdir -p ci_artifacts/agents
+          mkdir -p ci_artifacts/logs
+          mkdir -p ci_artifacts/summary
+
+      - name: Collect dataset artifacts
+        run: |
+          if [ -d "data" ]; then
+            cp -r data/* ci_artifacts/dataset/ || true
+          else
+            echo "data/ directory not found" > ci_artifacts/dataset/README.txt
+          fi
+
+      - name: Collect encoder artifacts
+        run: |
+          if [ -d "encoder/encoder_output" ]; then
+            cp -r encoder/encoder_output/* ci_artifacts/encoder/ || true
+          else
+            echo "encoder/encoder_output directory not found" > ci_artifacts/encoder/README.txt
+          fi
+
+      - name: Collect network output artifacts
+        run: |
+          if [ -d "output" ]; then
+            cp -r output/* ci_artifacts/network/ || true
+          else
+            echo "output/ directory not found" > ci_artifacts/network/README.txt
+          fi
+
+      - name: Collect agent artifacts
+        run: |
+          if [ -d "software/agent_output" ]; then
+            cp -r software/agent_output/* ci_artifacts/agents/ || true
+          else
+            echo "software/agent_output directory not found" > ci_artifacts/agents/README.txt
+          fi
+
+      - name: Collect logs
+        run: |
+          if [ -d "logs" ]; then
+            cp -r logs/* ci_artifacts/logs/ || true
+          else
+            echo "logs/ directory not found" > ci_artifacts/logs/README.txt
+          fi
+
+      - name: Generate artifact manifest
+        run: |
+          {
+            echo "# Pipeline Artifact Summary"
+            echo ""
+            echo "Branch: $GITHUB_REF_NAME"
+            echo "Commit: $GITHUB_SHA"
+            echo "Run ID: $GITHUB_RUN_ID"
+            echo ""
+            echo "## Data flow"
+            echo ""
+            echo "dataset -> encoder -> SNN/network -> network output -> agents"
+            echo ""
+            echo "## Collected files"
+            echo ""
+            find ci_artifacts -type f | sort
+          } > ci_artifacts/summary/manifest.md
+
+      - name: Write GitHub step summary
+        run: |
+          cat ci_artifacts/summary/manifest.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload component artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: component-outputs-${{ github.run_number }}
+          path: ci_artifacts/
+          if-no-files-found: ignore
+
+  simulation:
+    name: SNN simulation pipeline
+    runs-on: ubuntu-latest
+    needs: test
+    if: ${{ startsWith(github.ref, 'refs/heads/integration/') || github.event_name == 'pull_request' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Install dependencies
+        run: uv sync --group dev
+
+      - name: Run SNN simulation if available
+        run: |
+          if [ -f "snn_pipeline/run_pipeline.py" ]; then
+            uv run python -m snn_pipeline.run_pipeline
+          else
+            echo "snn_pipeline/run_pipeline.py not found - skipping simulation"
+          fi
+
+      - name: Prepare simulation artifacts
+        run: |
+          mkdir -p ci_artifacts/simulation
+
+          cp benchmark_table.txt ci_artifacts/simulation/ 2>/dev/null || true
+          cp hat_learning_curves.png ci_artifacts/simulation/ 2>/dev/null || true
+          cp hat_weight_table.txt ci_artifacts/simulation/ 2>/dev/null || true
+          cp mcp4151_table.csv ci_artifacts/simulation/ 2>/dev/null || true
+          cp qat_learning_curves.png ci_artifacts/simulation/ 2>/dev/null || true
+          cp sensitivity_heatmap.png ci_artifacts/simulation/ 2>/dev/null || true
+          cp snn_config.h ci_artifacts/simulation/ 2>/dev/null || true
+          cp weight_error_histogram.png ci_artifacts/simulation/ 2>/dev/null || true
+          cp weights.csv ci_artifacts/simulation/ 2>/dev/null || true
+          cp weights.json ci_artifacts/simulation/ 2>/dev/null || true
+
+          if [ -d "output" ]; then
+            cp -r output ci_artifacts/simulation/output
+          fi
+
+          if [ -d "logs" ]; then
+            cp -r logs ci_artifacts/simulation/logs
+          fi
+
+          find ci_artifacts/simulation -type f | sort > ci_artifacts/simulation/simulation_manifest.txt
+
+      - name: Upload simulation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: snn-simulation-results-${{ github.run_number }}
+          path: ci_artifacts/simulation/
+          if-no-files-found: ignore

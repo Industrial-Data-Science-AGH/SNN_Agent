@@ -72,4 +72,8 @@ def test_invalid_input_dimensions_raise_value_error():
     with pytest.raises(ValueError):
         model(torch.rand(2, 3, 4, 5))
     with pytest.raises(ValueError):
-        model(torch.rand(2,))
+        model(
+            torch.rand(
+                2,
+            )
+        )

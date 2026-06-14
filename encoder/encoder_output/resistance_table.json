@@ -1,0 +1,398 @@
+{
+  "L1_3to4": [
+    {
+      "neuron": 0,
+      "weights_RV1_RV3": [
+        {
+          "input": 0,
+          "w_raw": -0.8925,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 1,
+          "w_raw": 0.8266,
+          "sign": "EXC",
+          "RV_ohm": 19862
+        },
+        {
+          "input": 2,
+          "w_raw": -0.6932,
+          "sign": "INH",
+          "RV_ohm": 22222
+        }
+      ],
+      "RV4_tau_syn_ohm": 10000,
+      "RV6_tau_mem_ohm": 95234,
+      "RV5_V_leak": "kalibracja manualna",
+      "beta": 0.9523
+    },
+    {
+      "neuron": 1,
+      "weights_RV1_RV3": [
+        {
+          "input": 0,
+          "w_raw": -0.5781,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 1,
+          "w_raw": 0.5919,
+          "sign": "EXC",
+          "RV_ohm": 17218
+        },
+        {
+          "input": 2,
+          "w_raw": -0.4965,
+          "sign": "INH",
+          "RV_ohm": 22222
+        }
+      ],
+      "RV4_tau_syn_ohm": 10000,
+      "RV6_tau_mem_ohm": 95234,
+      "RV5_V_leak": "kalibracja manualna",
+      "beta": 0.9523
+    },
+    {
+      "neuron": 2,
+      "weights_RV1_RV3": [
+        {
+          "input": 0,
+          "w_raw": 0.0961,
+          "sign": "EXC",
+          "RV_ohm": 11635
+        },
+        {
+          "input": 1,
+          "w_raw": -0.2345,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 2,
+          "w_raw": 1.0361,
+          "sign": "EXC",
+          "RV_ohm": 22222
+        }
+      ],
+      "RV4_tau_syn_ohm": 10000,
+      "RV6_tau_mem_ohm": 95234,
+      "RV5_V_leak": "kalibracja manualna",
+      "beta": 0.9523
+    },
+    {
+      "neuron": 3,
+      "weights_RV1_RV3": [
+        {
+          "input": 0,
+          "w_raw": 0.2041,
+          "sign": "EXC",
+          "RV_ohm": 12850
+        },
+        {
+          "input": 1,
+          "w_raw": 0.7226,
+          "sign": "EXC",
+          "RV_ohm": 18691
+        },
+        {
+          "input": 2,
+          "w_raw": 0.3054,
+          "sign": "EXC",
+          "RV_ohm": 13991
+        }
+      ],
+      "RV4_tau_syn_ohm": 10000,
+      "RV6_tau_mem_ohm": 95234,
+      "RV5_V_leak": "kalibracja manualna",
+      "beta": 0.9523
+    }
+  ],
+  "L2_4to7": [
+    {
+      "neuron": 0,
+      "weights_RV1_RV3": [
+        {
+          "input": 0,
+          "w_raw": 0.2246,
+          "sign": "EXC",
+          "RV_ohm": 15860
+        },
+        {
+          "input": 1,
+          "w_raw": 0.3313,
+          "sign": "EXC",
+          "RV_ohm": 17342
+        },
+        {
+          "input": 2,
+          "w_raw": 0.3965,
+          "sign": "EXC",
+          "RV_ohm": 18247
+        },
+        {
+          "input": 3,
+          "w_raw": 0.4622,
+          "sign": "EXC",
+          "RV_ohm": 19159
+        }
+      ],
+      "RV4_tau_syn_ohm": 10000,
+      "RV6_tau_mem_ohm": 83130,
+      "RV5_V_leak": "kalibracja manualna",
+      "beta": 0.8313
+    },
+    {
+      "neuron": 1,
+      "weights_RV1_RV3": [
+        {
+          "input": 0,
+          "w_raw": -0.358,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 1,
+          "w_raw": -0.1559,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 2,
+          "w_raw": -0.1292,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 3,
+          "w_raw": -0.4229,
+          "sign": "INH",
+          "RV_ohm": 22222
+        }
+      ],
+      "RV4_tau_syn_ohm": 10000,
+      "RV6_tau_mem_ohm": 83130,
+      "RV5_V_leak": "kalibracja manualna",
+      "beta": 0.8313
+    },
+    {
+      "neuron": 2,
+      "weights_RV1_RV3": [
+        {
+          "input": 0,
+          "w_raw": 0.279,
+          "sign": "EXC",
+          "RV_ohm": 16615
+        },
+        {
+          "input": 1,
+          "w_raw": -0.4858,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 2,
+          "w_raw": -0.3979,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 3,
+          "w_raw": 0.4838,
+          "sign": "EXC",
+          "RV_ohm": 19458
+        }
+      ],
+      "RV4_tau_syn_ohm": 10000,
+      "RV6_tau_mem_ohm": 83130,
+      "RV5_V_leak": "kalibracja manualna",
+      "beta": 0.8313
+    },
+    {
+      "neuron": 3,
+      "weights_RV1_RV3": [
+        {
+          "input": 0,
+          "w_raw": -0.5005,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 1,
+          "w_raw": 0.246,
+          "sign": "EXC",
+          "RV_ohm": 16158
+        },
+        {
+          "input": 2,
+          "w_raw": -0.6583,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 3,
+          "w_raw": 0.4316,
+          "sign": "EXC",
+          "RV_ohm": 18734
+        }
+      ],
+      "RV4_tau_syn_ohm": 10000,
+      "RV6_tau_mem_ohm": 83130,
+      "RV5_V_leak": "kalibracja manualna",
+      "beta": 0.8313
+    },
+    {
+      "neuron": 4,
+      "weights_RV1_RV3": [
+        {
+          "input": 0,
+          "w_raw": 0.4159,
+          "sign": "EXC",
+          "RV_ohm": 18516
+        },
+        {
+          "input": 1,
+          "w_raw": -0.8821,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 2,
+          "w_raw": -0.414,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 3,
+          "w_raw": 0.0857,
+          "sign": "EXC",
+          "RV_ohm": 13933
+        }
+      ],
+      "RV4_tau_syn_ohm": 10000,
+      "RV6_tau_mem_ohm": 83130,
+      "RV5_V_leak": "kalibracja manualna",
+      "beta": 0.8313
+    },
+    {
+      "neuron": 5,
+      "weights_RV1_RV3": [
+        {
+          "input": 0,
+          "w_raw": -0.2104,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 1,
+          "w_raw": 0.559,
+          "sign": "EXC",
+          "RV_ohm": 20503
+        },
+        {
+          "input": 2,
+          "w_raw": -0.2139,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 3,
+          "w_raw": 0.2152,
+          "sign": "EXC",
+          "RV_ohm": 15730
+        }
+      ],
+      "RV4_tau_syn_ohm": 10000,
+      "RV6_tau_mem_ohm": 83130,
+      "RV5_V_leak": "kalibracja manualna",
+      "beta": 0.8313
+    },
+    {
+      "neuron": 6,
+      "weights_RV1_RV3": [
+        {
+          "input": 0,
+          "w_raw": -0.0192,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 1,
+          "w_raw": -0.5914,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 2,
+          "w_raw": 0.1024,
+          "sign": "EXC",
+          "RV_ohm": 14164
+        },
+        {
+          "input": 3,
+          "w_raw": 0.6828,
+          "sign": "EXC",
+          "RV_ohm": 22222
+        }
+      ],
+      "RV4_tau_syn_ohm": 10000,
+      "RV6_tau_mem_ohm": 83130,
+      "RV5_V_leak": "kalibracja manualna",
+      "beta": 0.8313
+    }
+  ],
+  "Out_7to1": [
+    {
+      "neuron": 0,
+      "weights_RV1_RV3": [
+        {
+          "input": 0,
+          "w_raw": -0.4156,
+          "sign": "INH",
+          "RV_ohm": 22222
+        },
+        {
+          "input": 1,
+          "w_raw": 0.386,
+          "sign": "EXC",
+          "RV_ohm": 15895
+        },
+        {
+          "input": 2,
+          "w_raw": 0.0528,
+          "sign": "EXC",
+          "RV_ohm": 9495
+        },
+        {
+          "input": 3,
+          "w_raw": 0.2741,
+          "sign": "EXC",
+          "RV_ohm": 13745
+        },
+        {
+          "input": 4,
+          "w_raw": 0.586,
+          "sign": "EXC",
+          "RV_ohm": 19736
+        },
+        {
+          "input": 5,
+          "w_raw": 0.5066,
+          "sign": "EXC",
+          "RV_ohm": 18209
+        },
+        {
+          "input": 6,
+          "w_raw": 0.7155,
+          "sign": "EXC",
+          "RV_ohm": 22222
+        }
+      ],
+      "RV4_tau_syn_ohm": 10000,
+      "RV6_tau_mem_ohm": 88386,
+      "RV5_V_leak": "kalibracja manualna",
+      "beta": 0.8839
+    }
+  ]
+}

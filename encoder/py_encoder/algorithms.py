@@ -41,12 +41,14 @@ def calculate_features_welford_v2(
             std_val = math.sqrt(wf_M2 / (wf_n - 1))
             cv_val = (std_val / mean_val) if mean_val > 1.0 else 0.0
 
-            calculated_frames.append([
-                round(frame_start_ms, 2),
-                round(frame_max, 4),
-                round(mean_val, 4),
-                round(cv_val, 4),
-            ])
+            calculated_frames.append(
+                [
+                    round(frame_start_ms, 2),
+                    round(frame_max, 4),
+                    round(mean_val, 4),
+                    round(cv_val, 4),
+                ]
+            )
 
             wf_mean, wf_M2, wf_n, frame_max = 0.0, 0.0, 0, 0.0
             frame_start_ms = curr_time_ms
@@ -91,12 +93,14 @@ def calculate_features_zcr(
 
         if (curr_time_ms - frame_start_ms) >= frame_window_ms:
             # Zwracamy zliczoną liczbę przejść jako cechę dominującej częstotliwości
-            calculated_frames.append([
-                round(frame_start_ms, 2),
-                zcr_count,
-                0.0,  # Wypełniacze, aby struktura kolumn CSV się zgadzała
-                0.0,
-            ])
+            calculated_frames.append(
+                [
+                    round(frame_start_ms, 2),
+                    zcr_count,
+                    0.0,  # Wypełniacze, aby struktura kolumn CSV się zgadzała
+                    0.0,
+                ]
+            )
             zcr_count = 0
             frame_start_ms = curr_time_ms
 
@@ -137,12 +141,14 @@ def calculate_features_delta_energy(
             # Pochodna czasowa (Różnica)
             delta_mean = current_mean - prev_frame_mean
 
-            calculated_frames.append([
-                round(frame_start_ms, 2),
-                round(current_mean, 4),
-                round(delta_mean, 4),
-                0.0,
-            ])
+            calculated_frames.append(
+                [
+                    round(frame_start_ms, 2),
+                    round(current_mean, 4),
+                    round(delta_mean, 4),
+                    0.0,
+                ]
+            )
 
             prev_frame_mean = current_mean
             sum_val = 0.0
@@ -188,12 +194,14 @@ def calculate_features_crest_factor(
             # Crest Factor = Peak / Mean
             crest_factor = (frame_max / mean_val) if mean_val > 1.0 else 1.0
 
-            calculated_frames.append([
-                round(frame_start_ms, 2),
-                round(frame_max, 4),
-                round(mean_val, 4),
-                round(crest_factor, 4),
-            ])
+            calculated_frames.append(
+                [
+                    round(frame_start_ms, 2),
+                    round(frame_max, 4),
+                    round(mean_val, 4),
+                    round(crest_factor, 4),
+                ]
+            )
 
             sum_val = 0.0
             frame_max = 0.0
@@ -238,12 +246,14 @@ def calculate_features_peak_counting(
         p_val = val
 
         if (curr_time_ms - frame_start_ms) >= frame_window_ms:
-            calculated_frames.append([
-                round(frame_start_ms, 2),
-                local_peaks_count,
-                0.0,
-                0.0,
-            ])
+            calculated_frames.append(
+                [
+                    round(frame_start_ms, 2),
+                    local_peaks_count,
+                    0.0,
+                    0.0,
+                ]
+            )
             local_peaks_count = 0
             frame_start_ms = curr_time_ms
 

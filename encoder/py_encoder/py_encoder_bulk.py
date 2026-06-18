@@ -23,10 +23,7 @@ def process_single_wav(file_path, algorithm_func, csv_writer):
         raw_bytes = w.readframes(n_samples)
 
         if sampwidth == 2:
-            data = (
-                np.frombuffer(raw_bytes, dtype=np.int16).astype(np.float32)
-                / 32768.0
-            )
+            data = np.frombuffer(raw_bytes, dtype=np.int16).astype(np.float32) / 32768.0
         elif sampwidth == 4:
             data = (
                 np.frombuffer(raw_bytes, dtype=np.int32).astype(np.float32)
@@ -34,8 +31,7 @@ def process_single_wav(file_path, algorithm_func, csv_writer):
             )
         else:
             data = (
-                np.frombuffer(raw_bytes, dtype=np.uint8).astype(np.float32)
-                - 128.0
+                np.frombuffer(raw_bytes, dtype=np.uint8).astype(np.float32) - 128.0
             ) / 128.0
 
         if n_channels > 1:

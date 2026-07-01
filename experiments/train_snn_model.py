@@ -295,8 +295,6 @@ class GlassBreakSNN(nn.Module):
                 spk_hidden_rec[i].append(spk)
             spk_hidden = torch.stack(spk_hidden, dim=1)
 
-            _ = torch.matmul(spk_hidden, self.w_hidden_hidden)
-
             cur_output = torch.matmul(spk_hidden, self.w_hidden_output).squeeze(1)
             spk_output = []
             for i in range(self.n_output):

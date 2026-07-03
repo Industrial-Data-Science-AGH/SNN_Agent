@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import os
 import random
@@ -16,7 +17,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import snntorch as snn
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 
 # ------------------------------
@@ -90,6 +91,44 @@ def pick_segment(x: np.ndarray, sr: int, segment_sec: float, strategy: str) -> n
     return x[:seg_len]
 
 
+def compute_max_vals(pos_dir: str, neg_dir: str, sr: int, cfg: EncoderConfig, segment_sec: float, segment_strategy: str, max_files: int, seed: int) -> np.ndarray:
+    """Compute max values for normalization from actual training data."""
+    print("Computing max_vals from training data...")
+    max_peak = 0.0
+    max_mean = 0.0
+    max_std = 0.0
+    
+    pos_files = []
+    neg_files = []
+    for dirpath, _, filenames in os.walk(pos_dir):
+        for filename in filenames:
+            if filename.lower().endswith(".wav"):
+                pos_files.append(os.path.join(dirpath, filename))
+    for dirpath, _, filenames in os.walk(neg_dir):
+        for filename in filenames:
+            if filename.lower().endswith(".wav"):
+                neg_files.append(os.path.join(dirpath, filename))
+    
+    random.Random(seed).shuffle(pos_files)
+    random.Random(seed).shuffle(neg_files)
+    
+    if max_files > 0:
+        pos_files = pos_files[:max_files]
+        neg_files = neg_files[:max_files]
+    
+    all_files = pos_files + neg_files
+    for path in all_files:
+        x, _ = load_wav_mono(path, sr)
+        x = pick_segment(x, sr, segment_sec, segment_strategy)
+        feats = extract_hpf_features(x, sr, cfg)
+        max_peak = max(max_peak, float(feats[:, 0].max()))
+        max_mean = max(max_mean, float(feats[:, 1].max()))
+        max_std = max(max_std, float(feats[:, 2].max()))
+    
+    print(f"Computed max_vals: peak={max_peak:.2f}, mean={max_mean:.2f}, std={max_std:.2f}")
+    return np.array([max_peak, max_mean, max_std], dtype=np.float32)
+
+
 # ------------------------------
 # Spike encoder
 # ------------------------------
@@ -108,6 +147,30 @@ class EncoderConfig:
     smooth_alpha: float = 0.3
     encoder_mode: str = "rate"
     dt_ms: float = 1.0
+    
+    @classmethod
+    def from_json(cls, json_path: str) -> "EncoderConfig":
+        """Load config from JSON file, using defaults for missing keys."""
+        if os.path.exists(json_path):
+            with open(json_path, "r") as f:
+                data = json.load(f)
+            cfg = cls()
+            for key, value in data.items():
+                if hasattr(cfg, key):
+                    setattr(cfg, key, value)
+            return cfg
+        return cls()
+    
+    def to_json(self, json_path: str) -> None:
+        """Save config to JSON file."""
+        data = {
+            "max_peak_val": self.max_peak_val,
+            "max_mean_val": self.max_mean_val,
+            "max_std_val": self.max_std_val,
+        }
+        with open(json_path, "w") as f:
+            json.dump(data, f, indent=2)
+        print(f"Saved encoder max_vals to {json_path}")
 
 
 def extract_hpf_features(x: np.ndarray, sr: int, cfg: EncoderConfig) -> np.ndarray:
@@ -233,24 +296,11 @@ class GlassBreakSNN(nn.Module):
 
         self.w_input_hidden = nn.Parameter(torch.randn(self.n_input, self.n_hidden) * 0.1 + 0.5)
         self.w_hidden_output = nn.Parameter(torch.randn(self.n_hidden, self.n_output) * 0.1 + 0.5)
-        self.w_hidden_hidden = nn.Parameter(torch.randn(self.n_hidden, self.n_hidden) * 0.01)
 
-        self.vth_input = nn.Parameter(torch.ones(self.n_input) * 0.5)
-        self.vth_hidden = nn.Parameter(torch.ones(self.n_hidden) * 0.5)
-        self.vth_output = nn.Parameter(torch.ones(self.n_output) * 0.5)
-
-        self.lif_input = nn.ModuleList([
-            snn.Leaky(beta=beta, threshold=0.5, learn_beta=False, learn_threshold=True)
-            for _ in range(self.n_input)
-        ])
-        self.lif_hidden = nn.ModuleList([
-            snn.Leaky(beta=beta, threshold=0.5, learn_beta=False, learn_threshold=True)
-            for _ in range(self.n_hidden)
-        ])
-        self.lif_output = nn.ModuleList([
-            snn.Leaky(beta=beta, threshold=0.5, learn_beta=False, learn_threshold=True)
-            for _ in range(self.n_output)
-        ])
+        # Vectorized LIF neurons - one per layer, processes entire batch at once
+        self.lif_input = snn.Leaky(beta=beta, threshold=0.5, learn_beta=True, learn_threshold=True)
+        self.lif_hidden = snn.Leaky(beta=beta, threshold=0.5, learn_beta=True, learn_threshold=True)
+        self.lif_output = snn.Leaky(beta=beta, threshold=0.5, learn_beta=True, learn_threshold=True)
 
     def forward(self, spike_input: torch.Tensor) -> Tuple[torch.Tensor, dict]:
         if spike_input.dim() == 2:
@@ -268,47 +318,39 @@ class GlassBreakSNN(nn.Module):
         batch_size = x.shape[0]
         n_timesteps = x.shape[2]
 
-        mem_input = [neuron.init_leaky() for neuron in self.lif_input]
-        mem_hidden = [neuron.init_leaky() for neuron in self.lif_hidden]
-        mem_output = [neuron.init_leaky() for neuron in self.lif_output]
+        # Initialize memory states for vectorized neurons
+        mem_input = self.lif_input.init_leaky()
+        mem_hidden = self.lif_hidden.init_leaky()
+        mem_output = self.lif_output.init_leaky()
 
-        spk_input_rec = [[] for _ in range(self.n_input)]
-        spk_hidden_rec = [[] for _ in range(self.n_hidden)]
-        spk_output_rec = [[] for _ in range(self.n_output)]
+        # Record spikes over time for analysis
+        spk_input_rec = torch.zeros((n_timesteps, batch_size, self.n_input), device=x.device)
+        spk_hidden_rec = torch.zeros((n_timesteps, batch_size, self.n_hidden), device=x.device)
+        spk_output_rec = torch.zeros((n_timesteps, batch_size, self.n_output), device=x.device)
 
         for t in range(n_timesteps):
-            spk_input = []
-            for i in range(self.n_input):
-                cur = x[:, i, t]
-                spk, mem_input[i] = self.lif_input[i](cur, mem_input[i])
-                spk_input.append(spk)
-                spk_input_rec[i].append(spk)
+            # Input layer: [batch, n_input]
+            cur_input = x[:, :, t]
+            spk_input, mem_input = self.lif_input(cur_input, mem_input)
+            spk_input_rec[t] = spk_input
 
-            spk_input = torch.stack(spk_input, dim=1)
+            # Hidden layer: [batch, n_hidden]
+            cur_hidden = torch.matmul(spk_input, self.w_input_hidden)  # [batch, n_hidden]
+            spk_hidden, mem_hidden = self.lif_hidden(cur_hidden, mem_hidden)
+            spk_hidden_rec[t] = spk_hidden
 
-            cur_hidden = torch.matmul(spk_input, self.w_input_hidden)
-            spk_hidden = []
-            for i in range(self.n_hidden):
-                cur = cur_hidden[:, i]
-                spk, mem_hidden[i] = self.lif_hidden[i](cur, mem_hidden[i])
-                spk_hidden.append(spk)
-                spk_hidden_rec[i].append(spk)
-            spk_hidden = torch.stack(spk_hidden, dim=1)
+            # Output layer: [batch, n_output]
+            cur_output = torch.matmul(spk_hidden, self.w_hidden_output)  # [batch, n_output]
+            spk_output, mem_output = self.lif_output(cur_output, mem_output)
+            spk_output_rec[t] = spk_output
 
-            cur_output = torch.matmul(spk_hidden, self.w_hidden_output).squeeze(1)
-            spk_output = []
-            for i in range(self.n_output):
-                spk, mem_output[i] = self.lif_output[i](cur_output, mem_output[i])
-                spk_output.append(spk)
-                spk_output_rec[i].append(spk)
-
-        spk_output_all = torch.stack([torch.stack(rec) for rec in spk_output_rec], dim=0).permute(2, 0, 1)
-        trigger = spk_output_all.mean(dim=2)
+        # Compute trigger (mean spike rate over time)
+        trigger = spk_output_rec.mean(dim=0)  # [batch, n_output]
 
         out = {
-            "input": torch.stack([torch.stack(rec) for rec in spk_input_rec], dim=0).permute(2, 0, 1),
-            "hidden": torch.stack([torch.stack(rec) for rec in spk_hidden_rec], dim=0).permute(2, 0, 1),
-            "output": spk_output_all,
+            "input": spk_input_rec.permute(1, 2, 0),  # [batch, n_input, time]
+            "hidden": spk_hidden_rec.permute(1, 2, 0),  # [batch, n_hidden, time]
+            "output": spk_output_rec.permute(1, 2, 0),  # [batch, n_output, time]
         }
         return trigger, out
 
@@ -389,11 +431,12 @@ def collate_batch(batch: Sequence[Tuple[torch.Tensor, int]]) -> Tuple[torch.Tens
 # ------------------------------
 
 
-def evaluate(model: GlassBreakSNN, loader: DataLoader, device: torch.device) -> Tuple[float, float]:
+def evaluate(model: GlassBreakSNN, loader: DataLoader, device: torch.device) -> dict:
     model.eval()
     total = 0
     correct = 0
     loss_sum = 0.0
+    tp = fp = tn = fn = 0
     criterion = nn.BCELoss()
     with torch.no_grad():
         for x, y in loader:
@@ -404,7 +447,26 @@ def evaluate(model: GlassBreakSNN, loader: DataLoader, device: torch.device) -> 
             correct += (pred == y).sum().item()
             total += y.numel()
             loss_sum += criterion(trigger, y).item() * y.size(0)
-    return correct / max(1, total), loss_sum / max(1, total)
+            
+            # Calculate TP, TN, FP, FN for F1, precision, recall
+            tp += ((pred == 1) & (y == 1)).sum().item()
+            tn += ((pred == 0) & (y == 0)).sum().item()
+            fp += ((pred == 1) & (y == 0)).sum().item()
+            fn += ((pred == 0) & (y == 1)).sum().item()
+    
+    acc = correct / max(1, total)
+    loss = loss_sum / max(1, total)
+    precision = tp / max(1, tp + fp)
+    recall = tp / max(1, tp + fn)
+    f1 = 2 * precision * recall / max(1e-8, precision + recall)
+    
+    return {
+        'accuracy': acc,
+        'loss': loss,
+        'precision': precision,
+        'recall': recall,
+        'f1': f1
+    }
 
 
 def train(
@@ -432,11 +494,13 @@ def train(
             optimizer.step()
             epoch_loss += loss.item() * y.size(0)
 
-        train_acc, train_loss = evaluate(model, train_loader, device)
-        val_acc, val_loss = evaluate(model, val_loader, device)
+        train_metrics = evaluate(model, train_loader, device)
+        val_metrics = evaluate(model, val_loader, device)
         print(
-            f"Epoch {epoch:03d}: loss={train_loss:.4f}, acc={train_acc:.3f}, "
-            f"val_loss={val_loss:.4f}, val_acc={val_acc:.3f}"
+            f"Epoch {epoch:03d}: loss={train_metrics['loss']:.4f}, acc={train_metrics['accuracy']:.3f}, "
+            f"f1={train_metrics['f1']:.3f} | "
+            f"val_loss={val_metrics['loss']:.4f}, val_acc={val_metrics['accuracy']:.3f}, "
+            f"val_f1={val_metrics['f1']:.3f}"
         )
 
 
@@ -463,6 +527,18 @@ def main() -> None:
     device = torch.device(args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu")
     cfg = EncoderConfig(encoder_mode=args.encoder_mode)
 
+    # Compute max_vals from actual training data for normalization
+    max_vals_path = os.path.join("experiments", "max_vals.json")
+    max_vals = compute_max_vals(
+        args.positive_dir, args.negative_dir, args.sample_rate, cfg,
+        args.segment_sec, args.segment_strategy, args.max_files, args.seed
+    )
+    cfg.max_peak_val = float(max_vals[0])
+    cfg.max_mean_val = float(max_vals[1])
+    cfg.max_std_val = float(max_vals[2])
+    cfg.to_json(max_vals_path)
+    
+    # Recreate dataset with computed max_vals
     dataset = AudioSpikeDataset(
         pos_dir=args.positive_dir,
         neg_dir=args.negative_dir,
@@ -481,7 +557,16 @@ def main() -> None:
     n_train = len(dataset) - n_test
     train_set, test_set = torch.utils.data.random_split(dataset, [n_train, n_test], generator=torch.Generator().manual_seed(args.seed))
 
-    train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, collate_fn=collate_batch)
+    # Calculate class weights for imbalanced dataset
+    train_labels = [dataset.samples[idx][1] for idx in train_set.indices]
+    class_counts = np.bincount(train_labels)
+    class_weights = 1.0 / torch.from_numpy(np.sqrt(class_counts)).float()
+    sample_weights = torch.tensor([class_weights[label] for label in train_labels]).float()
+    sampler = WeightedRandomSampler(sample_weights, len(sample_weights), replacement=True)
+    
+    print(f"Dataset class distribution - Positive: {class_counts[1]}, Negative: {class_counts[0]}")
+
+    train_loader = DataLoader(train_set, batch_size=args.batch_size, sampler=sampler, collate_fn=collate_batch)
     test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, collate_fn=collate_batch)
 
     model = GlassBreakSNN()
@@ -490,6 +575,17 @@ def main() -> None:
     save_path = os.path.join("experiments", "glassbreak_snn_model.pt")
     torch.save(model.state_dict(), save_path)
     print(f"Saved model state dict to {save_path}")
+    
+    # Print learned parameters for hardware mapping
+    print("\n=== Hardware Parameter Mapping ===")
+    beta_val = model.lif_hidden.beta.item()
+    threshold_val = model.lif_hidden.threshold.item()
+    tau_mem = 1.0 / (1.0 - beta_val) if beta_val < 1.0 else float('inf')
+    # Map tau_mem to potentiometer range (0-255 typical for 8-bit potentiometer)
+    # Assuming potentiometer range corresponds to tau_mem from ~1 to ~10
+    pot_value = max(0, min(255, int(round((tau_mem - 1.0) / 10.0 * 255))))
+    print(f"Hidden layer: beta={beta_val:.4f}, tau_mem={tau_mem:.4f}, pot_value={pot_value} (threshold={threshold_val:.4f})")
+    print(f"Normalization params (for Arduino): MAX_PEAK={cfg.max_peak_val:.2f}, MAX_MEAN={cfg.max_mean_val:.2f}, MAX_STD={cfg.max_std_val:.2f}")
 
 
 if __name__ == "__main__":

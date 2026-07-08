@@ -472,7 +472,7 @@ def evaluate(model: GlassBreakSNN, loader: DataLoader, device: torch.device) -> 
 def train(
     model: GlassBreakSNN,
     train_loader: DataLoader,
-    val_loader: DataLoader,
+    val_loader: Optional[DataLoader],
     device: torch.device,
     epochs: int,
     lr: float,
@@ -495,13 +495,19 @@ def train(
             epoch_loss += loss.item() * y.size(0)
 
         train_metrics = evaluate(model, train_loader, device)
-        val_metrics = evaluate(model, val_loader, device)
-        print(
-            f"Epoch {epoch:03d}: loss={train_metrics['loss']:.4f}, acc={train_metrics['accuracy']:.3f}, "
-            f"f1={train_metrics['f1']:.3f} | "
-            f"val_loss={val_metrics['loss']:.4f}, val_acc={val_metrics['accuracy']:.3f}, "
-            f"val_f1={val_metrics['f1']:.3f}"
-        )
+        if val_loader is not None:
+            val_metrics = evaluate(model, val_loader, device)
+            print(
+                f"Epoch {epoch:03d}: loss={train_metrics['loss']:.4f}, acc={train_metrics['accuracy']:.3f}, "
+                f"f1={train_metrics['f1']:.3f} | "
+                f"val_loss={val_metrics['loss']:.4f}, val_acc={val_metrics['accuracy']:.3f}, "
+                f"val_f1={val_metrics['f1']:.3f}"
+            )
+        else:
+            print(
+                f"Epoch {epoch:03d}: loss={train_metrics['loss']:.4f}, acc={train_metrics['accuracy']:.3f}, "
+                f"f1={train_metrics['f1']:.3f} | no validation split"
+            )
 
 
 def parse_args() -> argparse.Namespace:
@@ -515,8 +521,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--test-ratio", type=float, default=0.2)
-    parser.add_argument("--max-files", type=int, default=120)
+    parser.add_argument("--test-ratio", type=float, default=0.2,
+                        help="Fraction of dataset held out for test; 0 means train on full dataset")
+    parser.add_argument("--max-files", type=int, default=-1, help="Max number of files to load from each directory; -1 means no limit")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", default="cpu")
     return parser.parse_args()
@@ -553,21 +560,34 @@ def main() -> None:
     if len(dataset) == 0:
         raise SystemExit("No WAV files found in positive or negative directories")
 
-    n_test = int(len(dataset) * args.test_ratio)
-    n_train = len(dataset) - n_test
-    train_set, test_set = torch.utils.data.random_split(dataset, [n_train, n_test], generator=torch.Generator().manual_seed(args.seed))
+    if args.test_ratio > 0.0:
+        n_test = int(len(dataset) * args.test_ratio)
+        n_train = len(dataset) - n_test
+        train_set, test_set = torch.utils.data.random_split(
+            dataset,
+            [n_train, n_test],
+            generator=torch.Generator().manual_seed(args.seed),
+        )
+        print(f"Using test split: {n_test} samples")
+    else:
+        train_set = dataset
+        test_set = None
+        print("Using full dataset for training (no test split)")
 
     # Calculate class weights for imbalanced dataset
-    train_labels = [dataset.samples[idx][1] for idx in train_set.indices]
+    if test_set is None:
+        train_labels = [label for _, label in dataset.samples]
+    else:
+        train_labels = [dataset.samples[idx][1] for idx in train_set.indices]
     class_counts = np.bincount(train_labels)
     class_weights = 1.0 / torch.from_numpy(np.sqrt(class_counts)).float()
     sample_weights = torch.tensor([class_weights[label] for label in train_labels]).float()
     sampler = WeightedRandomSampler(sample_weights, len(sample_weights), replacement=True)
-    
+
     print(f"Dataset class distribution - Positive: {class_counts[1]}, Negative: {class_counts[0]}")
 
     train_loader = DataLoader(train_set, batch_size=args.batch_size, sampler=sampler, collate_fn=collate_batch)
-    test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False, collate_fn=collate_batch)
+    test_loader = None if test_set is None else DataLoader(test_set, batch_size=args.batch_size, shuffle=False, collate_fn=collate_batch)
 
     model = GlassBreakSNN()
     train(model, train_loader, test_loader, device, epochs=args.epochs, lr=args.lr)

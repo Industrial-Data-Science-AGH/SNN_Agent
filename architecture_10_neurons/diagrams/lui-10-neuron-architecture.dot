@@ -1,0 +1,64 @@
+digraph lui_10_neuron_architecture {
+  rankdir=TB;
+  size="6.5,9!";
+  ratio=compress;
+  bgcolor="transparent";
+  splines=polyline;
+  nodesep=0.35;
+  ranksep=0.55;
+
+  node [shape=box, style="rounded,filled", fillcolor="#F4F6F8",
+        color="#3A4756", fontname="Helvetica", fontsize=11, penwidth=1.2];
+  edge [color="#5B6B7B", fontname="Helvetica", fontsize=9, penwidth=1.1,
+        arrowsize=0.8];
+
+  arduino [label="Arduino encoder\n7 TTL channels\n15 ms pulses", fillcolor="#FDF1D6"];
+
+  subgraph cluster_l0 {
+    label="L0 feature neurons";
+    color="#8AA1B4";
+    style="rounded,dashed";
+    peak_fast [label="1 Peak_fast"];
+    peak_strict [label="2 Peak_strict"];
+    crest [label="3 crest_factor"];
+    peak_count [label="4 peak_counting"];
+    cv [label="5 CV"];
+    zcr [label="6 ZCR/HF proxy"];
+    continuity [label="7 Continuity", fillcolor="#F7E7DD"];
+  }
+
+  subgraph cluster_l1 {
+    label="L1 combiners";
+    color="#8AA1B4";
+    style="rounded,dashed";
+    impact [label="8 Impact\nJ1/J2/J3 all +", fillcolor="#E7F0F7"];
+    fragmentation [label="9 Fragmentation\nJ1/J2/J3 all +", fillcolor="#E7F0F7"];
+  }
+
+  decision [label="10 Decision\nJ1 Impact +\nJ2 Fragmentation +\nJ3 Continuity -",
+            fillcolor="#EAE7F7"];
+  output [label="Arduino/RPi input\nfinal J4 spike", shape=ellipse, style="dashed"];
+
+  arduino -> peak_fast;
+  arduino -> peak_strict;
+  arduino -> crest;
+  arduino -> peak_count;
+  arduino -> cv;
+  arduino -> zcr;
+  arduino -> continuity;
+
+  peak_fast -> impact [label="J4 -> J1 +"];
+  peak_strict -> impact [label="J4 -> J2 +"];
+  crest -> impact [label="J4 -> J3 +"];
+
+  peak_count -> fragmentation [label="J4 -> J1 +"];
+  cv -> fragmentation [label="J4 -> J2 +"];
+  zcr -> fragmentation [label="J4 -> J3 +"];
+
+  impact -> decision [label="J4 -> J1 +"];
+  fragmentation -> decision [label="J4 -> J2 +"];
+  continuity -> decision [label="J4 -> J3 -", color="#B65B3A"];
+
+  decision -> output [label="J4"];
+}
+

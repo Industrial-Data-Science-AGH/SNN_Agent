@@ -11,7 +11,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-
 LED_PIN: int = 17
 """GPIO pin for red LED (active high). Bring-up TBD."""
 
@@ -36,10 +35,9 @@ Default 0.08 sits above the measured RealSense static-noise floor (~0.045).
 Set via SNN_AGENT_MOTION_THRESHOLD env var."""
 
 
-VAR_DIR: Path = Path(os.getenv(
-    "SNN_AGENT_VAR_DIR",
-    str(Path.home() / ".local" / "var" / "snn-agent")
-))
+VAR_DIR: Path = Path(
+    os.getenv("SNN_AGENT_VAR_DIR", str(Path.home() / ".local" / "var" / "snn-agent"))
+)
 """Directory for logs, clips, event records."""
 
 CLIPS_DIR: Path = VAR_DIR / "clips"
@@ -123,6 +121,54 @@ POWER_MODE: str = os.getenv("SNN_AGENT_POWER_MODE", "warm")
 Set via SNN_AGENT_POWER_MODE env var."""
 
 
+# CLOUD SYNC (F03, ADR-0014, ADR-0015)
+
+CLOUD_SYNC_ENABLED: bool = (
+    os.getenv("SNN_AGENT_CLOUD_SYNC_ENABLED", "true").strip().lower() != "false"
+)
+"""If False, the Pi never attempts to push events to the cloud dashboard
+(local event.log logging is unaffected either way). Set
+SNN_AGENT_CLOUD_SYNC_ENABLED=false to disable entirely."""
+
+CLOUD_SYNC_URL: str = os.getenv("SNN_AGENT_CLOUD_SYNC_URL", "").strip()
+"""Azure ingest endpoint, e.g. https://<app>.<region>.azurecontainerapps.io/api/events.
+Empty disables cloud sync regardless of CLOUD_SYNC_ENABLED (nothing to push
+to) -- expected to be empty until T01's Terraform apply produces a real
+FQDN. Must be https:// if set; plaintext HTTP is rejected below at import
+time (F03 design, Security)."""
+
+if CLOUD_SYNC_URL and not CLOUD_SYNC_URL.startswith("https://"):
+    raise ValueError(f"SNN_AGENT_CLOUD_SYNC_URL must start with https://, got: {CLOUD_SYNC_URL!r}")
+
+CLOUD_SYNC_TIMEOUT_S: tuple[float, float] = (
+    float(os.getenv("SNN_AGENT_CLOUD_SYNC_CONNECT_TIMEOUT_S", "3")),
+    float(os.getenv("SNN_AGENT_CLOUD_SYNC_READ_TIMEOUT_S", "5")),
+)
+"""(connect, read) timeout tuple for the cloud push, seconds. Never rely on
+requests' default (wait forever) -- bounds one push attempt's worst case at
+~8s (F03 design, Risks)."""
+
+SYNC_QUEUE_PATH: Path = VAR_DIR / "sync_queue.jsonl"
+"""Bounded local backlog of events that failed to push, retried on later
+wake cycles (ADR-0015). Sibling to EVENT_LOG; this is a cloud-delivery
+worklist only -- EVENT_LOG remains the complete, uncapped local record
+regardless of what this queue drops."""
+
+SYNC_QUEUE_MAX_SIZE: int = int(os.getenv("SNN_AGENT_SYNC_QUEUE_MAX_SIZE", "20"))
+"""Max pending entries in SYNC_QUEUE_PATH; oldest dropped first once full."""
+
+SYNC_QUEUE_MAX_FLUSH_PER_CYCLE: int = int(
+    os.getenv("SNN_AGENT_SYNC_QUEUE_MAX_FLUSH_PER_CYCLE", "5")
+)
+"""Max queued entries flushed per wake cycle; a flush stops at the first
+failure (a dead network fails every later attempt identically)."""
+
+SYNC_QUEUE_MAX_ATTEMPTS: int = int(os.getenv("SNN_AGENT_SYNC_QUEUE_MAX_ATTEMPTS", "5"))
+"""Failed-push attempts before a queued entry is dropped (logged) rather
+than retried forever -- prevents one permanently-broken entry from blocking
+every entry behind it (the queue is always processed oldest-first)."""
+
+
 RECALL_MIN: float = 0.98
 """Minimum recall (TP / (TP+FN)) on eval set."""
 
@@ -135,16 +181,25 @@ VISION_CALLS_MAX_PER_NONINTRUSION: float = 0.30
 
 # SECRETS LOADER (lazy, no module-level import of python-dotenv)
 
+
 @dataclass(frozen=True)
 class Settings:
     """Runtime settings loaded from environment or .env file.
 
     Never log or print these values; they contain API keys and credentials.
     """
+
     gemini_api_key: str
     gmail_user: str
     gmail_app_password: str
     alert_to: str
+    cloud_sync_user: str | None = None
+    """Shared Basic Auth username for the cloud dashboard (ADR-0009). Unlike
+    the four fields above, this is optional: a missing credential disables
+    the cloud push (cloud_sync.push() logs once and skips) rather than
+    crashing the wake cycle -- see load_settings()."""
+    cloud_sync_password: str | None = None
+    """Shared Basic Auth password, same credential as cloud_sync_user."""
 
 
 def load_settings() -> Settings:
@@ -166,6 +221,7 @@ def load_settings() -> Settings:
     if env_file.exists():
         try:
             from dotenv import load_dotenv  # type: ignore[import-untyped]
+
             load_dotenv(env_file)
         except ImportError:
             # python-dotenv not installed; continue with os.environ.
@@ -184,9 +240,16 @@ def load_settings() -> Settings:
             "Set them in ~/.config/snn-agent/.env or as environment variables."
         )
 
+    # Optional: a missing cloud_sync credential disables the cloud push
+    # (F03 design) rather than raising here like the four fields above.
+    cloud_sync_user = os.getenv("CLOUD_SYNC_USER", "").strip() or None
+    cloud_sync_password = os.getenv("CLOUD_SYNC_PASSWORD", "").strip() or None
+
     return Settings(
         gemini_api_key=api_key,
         gmail_user=gmail_user,
         gmail_app_password=gmail_pw,
         alert_to=alert_to,
+        cloud_sync_user=cloud_sync_user,
+        cloud_sync_password=cloud_sync_password,
     )

@@ -1,12 +1,14 @@
 """Tests for cloud/app/schemas.py validation and the POST /api/events route
 (T02 plan, Step 1 + acceptance gate: "payload validation... 202 +
-event_id"). Route-level tests monkeypatch storage.* so no real Storage
-account is needed to run them.
+event_id"; T04 plan, Step 4: client-supplied event_id + upsert idempotency).
+Route-level tests monkeypatch storage.* so no real Storage account is
+needed to run them.
 """
 
 import base64
 
 import pytest
+from azure.data.tables import UpdateMode
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
@@ -16,6 +18,7 @@ from cloud.app.main import app
 client = TestClient(app)
 
 _VALID_PAYLOAD = {
+    "event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "ts_wall": 1784048796.83,
     "woken_by_trigger": False,
     "escalate": True,
@@ -79,11 +82,28 @@ def test_event_in_rejects_non_base64_image():
         schemas.EventIn(**_VALID_PAYLOAD, image_jpeg_b64="not-base64-!!!")
 
 
+@pytest.mark.parametrize(
+    "bad_event_id",
+    [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA",  # 25 chars -- too short
+        "01ARZ3NDEKTSV4RRFFQ69G5FAVX",  # 27 chars -- too long
+        "01arz3ndektsv4rrffq69g5fav",  # lowercase -- rejected (server never emits this case)
+        "01ARZ3NDEKTSV4RRFFQ69G5FAI",  # 'I' is not in the Crockford base32 alphabet
+    ],
+)
+def test_event_in_rejects_malformed_event_id(bad_event_id):
+    """ADR-0014: a malformed event_id must never reach Table Storage as a
+    RowKey.
+    """
+    payload = dict(_VALID_PAYLOAD, event_id=bad_event_id)
+    with pytest.raises(ValidationError):
+        schemas.EventIn(**payload)
+
+
 # --- route-level: POST /api/events ---
 
 
 def test_ingest_returns_202_and_event_id(monkeypatch):
-    monkeypatch.setattr(storage, "generate_ulid", lambda: "01ARZ3NDEKTSV4RRFFQ69G5FAV")
     monkeypatch.setattr(
         storage,
         "write_event",
@@ -93,12 +113,11 @@ def test_ingest_returns_202_and_event_id(monkeypatch):
     response = client.post("/api/events", json=_VALID_PAYLOAD, auth=_auth())
 
     assert response.status_code == 202
-    assert response.json() == {"event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"}
+    assert response.json() == {"event_id": _VALID_PAYLOAD["event_id"]}
 
 
 def test_ingest_writes_blob_when_image_present(monkeypatch):
     calls = {}
-    monkeypatch.setattr(storage, "generate_ulid", lambda: "01ARZ3NDEKTSV4RRFFQ69G5FAV")
     monkeypatch.setattr(
         storage,
         "write_event",
@@ -133,7 +152,6 @@ def test_ingest_does_not_set_blob_name_when_blob_write_fails(monkeypatch):
     rather than failing the whole request.
     """
     calls = {}
-    monkeypatch.setattr(storage, "generate_ulid", lambda: "01ARZ3NDEKTSV4RRFFQ69G5FAV")
     monkeypatch.setattr(
         storage,
         "write_event",
@@ -164,3 +182,60 @@ def test_ingest_rejects_oversized_image_with_422():
         "/api/events", json=dict(_VALID_PAYLOAD, image_jpeg_b64=too_big), auth=_auth()
     )
     assert response.status_code == 422
+
+
+def test_ingest_rejects_malformed_event_id_with_422():
+    payload = dict(_VALID_PAYLOAD, event_id="not-a-valid-ulid-at-all!!")
+    response = client.post("/api/events", json=payload, auth=_auth())
+    assert response.status_code == 422
+
+
+# --- upsert idempotency (ADR-0014, T04 plan Step 4) ---
+
+
+def test_ingest_upsert_is_idempotent_across_duplicate_event_id(monkeypatch):
+    """Posting the same event_id twice (a queued retry, ADR-0015) must be a
+    no-op the second time from the dashboard's point of view: one row,
+    not two, and no error either time. Fakes storage.write_event() with a
+    real in-memory dict so the "overwrite, don't duplicate" behavior is
+    actually exercised, not just assumed.
+    """
+    written: dict[str, dict] = {}
+
+    def _fake_write_event(fields: dict, event_id: str, received_at: float) -> dict:
+        entity = {"PartitionKey": "2026-07-14", "RowKey": event_id, **fields}
+        written[event_id] = entity  # overwrite semantics, mirrors upsert_entity()
+        return entity
+
+    monkeypatch.setattr(storage, "write_event", _fake_write_event)
+
+    first = client.post("/api/events", json=_VALID_PAYLOAD, auth=_auth())
+    second = client.post("/api/events", json=_VALID_PAYLOAD, auth=_auth())
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert first.json() == second.json() == {"event_id": _VALID_PAYLOAD["event_id"]}
+    assert len(written) == 1
+
+
+def test_write_event_calls_upsert_entity_not_create_entity(monkeypatch):
+    """storage.write_event() itself (ADR-0014): the Table client call must
+    be upsert_entity(mode=REPLACE), never create_entity() — the latter
+    raises ResourceExistsError on a retried event_id.
+    """
+    calls = {}
+
+    class _FakeTableClient:
+        def upsert_entity(self, entity: dict, mode: UpdateMode) -> None:
+            calls["upsert"] = (entity["RowKey"], mode)
+
+        def create_entity(self, entity: dict) -> None:
+            calls["create"] = entity["RowKey"]
+
+    monkeypatch.setattr(storage, "get_table_client", lambda: _FakeTableClient())
+
+    fields = {k: v for k, v in _VALID_PAYLOAD.items() if k not in ("event_id", "image_jpeg_b64")}
+    storage.write_event(fields, "01ARZ3NDEKTSV4RRFFQ69G5FAV", 1784048800.0)
+
+    assert calls == {"upsert": ("01ARZ3NDEKTSV4RRFFQ69G5FAV", UpdateMode.REPLACE)}
+    assert "create" not in calls

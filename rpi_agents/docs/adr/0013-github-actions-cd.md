@@ -16,17 +16,24 @@ from an already-tight scope.
 
 ## Decision
 
-A single GitHub Actions workflow (`.github/workflows/deploy.yml`), defined
-on `feat/azure-cd` and triggered on **pull request events (opened/
-synchronize) targeting `feat/azure-cd`** — concretely, the PR from
-`feat/dashboard` into `feat/azure-cd` — does: (1) build the FastAPI app's
+A single GitHub Actions workflow (`.github/workflows/deploy.yml`), written
+on `feat/dashboard` and triggered on **pull request events (opened/
+synchronize) targeting `feat/azure-cd`** — concretely, a PR into
+`feat/azure-cd` — does: (1) build the FastAPI app's
 Docker image, (2) push it to `ghcr.io` (ADR-0012), (3) run `terraform apply`
 (ADR-0011) with the new image tag and the secrets from ADR-0010 as
 variables. One job, run with a concurrency group of 1 so overlapping PR
 updates queue rather than race (ADR-0011, Risks). This means the Container
-App is already running `feat/dashboard`'s code before that PR is even
+App is already running the PR's code before that PR is even
 merged — merging is a bookkeeping step, not the deploy trigger, which suits
 a single-owner, single-PR, one-day build.
+
+*(Revised 2026-07-14, same day: `feat/azure-cd` is not created until
+`feat/dashboard`'s development is finished — see `02-delivery.md`, "Branch &
+Commit Strategy." The trigger config above is unchanged; only when
+`feat/azure-cd` comes into existence, and where the workflow file is
+authored, moved from "day one, in parallel" to "written on `feat/dashboard`,
+branch created at the end.")*
 
 ## Alternatives Considered
 

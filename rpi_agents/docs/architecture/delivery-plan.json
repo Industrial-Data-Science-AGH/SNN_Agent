@@ -12,7 +12,7 @@
           "id": "T01",
           "slug": "azure-infra-and-cd-pipeline",
           "feature_id": "F06_deployment_pipeline",
-          "summary": "Branch feat/azure-cd. Terraform (cloud/infra/): Storage Account (Blob 'snapshots' + Table 'events', F02), Container App Environment + Container App (scale-to-zero, F01/F04/F05 runtime), ghcr.io pull credential, secret/env blocks for DASHBOARD_PASSWORD + Storage connection string. GitHub Actions workflow (.github/workflows/deploy.yml) triggered on PR (opened/synchronize) into feat/azure-cd: build cloud/app/Dockerfile, push to ghcr.io, terraform apply. Prove the pipeline once against a placeholder image before feat/dashboard exists.",
+          "summary": "Branch feat/dashboard (developed and validated locally; feat/azure-cd is created later from the finished feat/dashboard -- see 02-delivery.md 'Branch & Commit Strategy', revised 2026-07-14). Terraform (cloud/infra/): Storage Account (Blob 'snapshots' + Table 'events', F02), Container App Environment + Container App (scale-to-zero, F01/F04/F05 runtime), ghcr.io pull credential, secret/env blocks for DASHBOARD_PASSWORD + Storage connection string. GitHub Actions workflow (.github/workflows/deploy.yml) pre-written to trigger on PR (opened/synchronize) into feat/azure-cd. terraform validate/plan and workflow YAML lint are the local gate; the pipeline is actually proven end-to-end once feat/azure-cd exists (after all four tasks are done) and a PR is opened against it.",
           "security": ["api-endpoint-security", "authn-authz-secrets", "supply-chain-security"]
         },
         {

@@ -1,9 +1,16 @@
 # T01 — Azure infra + CD pipeline
 
-- **Branch:** `feat/azure-cd` (off `feat/rpi`)
+- **Branch:** `feat/dashboard` (off `feat/rpi`, before any of this
+  feature's commits) — *(revised 2026-07-14: originally planned as its own
+  `feat/azure-cd` branch; actual execution builds everything, T01 included,
+  on `feat/dashboard`. `feat/azure-cd` is created later, from the finished
+  `feat/dashboard`, purely because `.github/workflows/deploy.yml`'s trigger
+  is hardcoded to a PR targeting a branch with that name — ADR-0013. See
+  `02-delivery.md`, "Branch & Commit Strategy.")*
 - **Feature IDs:** F06 (deployment_pipeline), F02 (storage_infra)
 - **Depends on:** nothing (first task; everything else deploys against this)
-- **Blocks:** T02, T03 (their PR into this branch is what triggers a real deploy)
+- **Blocks:** T02, T03 (validated locally against this task's Terraform
+  until `feat/azure-cd` exists and a real deploy can happen)
 - **Source:** `docs/architecture/delivery-plan.json` (T01), `docs/architecture/02-delivery.md`, `docs/architecture/features/F02-storage-infra/design.md`, `docs/architecture/features/F06-deployment-pipeline/design.md`, ADR-0007, ADR-0010, ADR-0011, ADR-0012, ADR-0013
 
 ## Goal
@@ -93,10 +100,15 @@ cloud/app/
    `/healthz` app) — just enough to prove build → push → deploy works.
    T02 will replace the app code inside this same Dockerfile shape.
 4. Write `.github/workflows/deploy.yml`.
-5. Open a throwaway PR into `feat/azure-cd` (e.g. from a scratch branch
-   with only the placeholder Dockerfile) to prove the pipeline once,
-   end-to-end, before `feat/dashboard` exists — this is the explicit
-   point of T01's gate.
+5. *(Revised 2026-07-14 — see "Branch" above)* Proving the pipeline
+   end-to-end no longer happens mid-build against a standalone
+   `feat/azure-cd`: it happens once T01-T04 are all done on
+   `feat/dashboard`, at which point `feat/azure-cd` is created from that
+   finished branch and a PR is opened against it — that PR is what
+   actually exercises this step's original intent (build → push →
+   `terraform apply` succeeding once, end-to-end). Until then, steps 2-4
+   above are validated locally (`terraform validate`/`plan`, workflow YAML
+   lint) rather than via a live PR.
 6. Confirm the Container App is reachable and returns something (even a
    401, once F05's auth exists, or a 200 on `/healthz` for the
    placeholder) at its FQDN.

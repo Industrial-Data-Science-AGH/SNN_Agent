@@ -83,9 +83,15 @@ def _partition_key(ts_wall: float) -> str:
 def write_event(fields: dict, event_id: str, received_at: float) -> dict:
     """Write the Table entity for one ingested event; returns the full entity.
 
-    `fields` is `EventIn.model_dump(exclude={"image_jpeg_b64"})` — called
-    before `write_blob` (F01 design, Behavior): a metadata-only event is
-    still useful even if the image write below fails.
+    `fields` is `EventIn.model_dump(exclude={"image_jpeg_b64", "event_id"})`
+    — called before `write_blob` (F01 design, Behavior): a metadata-only
+    event is still useful even if the image write below fails.
+
+    Upserts (`UpdateMode.REPLACE`) rather than strictly creating (ADR-0014):
+    `event_id` is now client-supplied, so a queued retry of an event the
+    server already committed must overwrite with identical data instead of
+    raising `ResourceExistsError` — that's what makes T03's local sync queue
+    safe to retry.
     """
     entity = {
         "PartitionKey": _partition_key(fields["ts_wall"]),
@@ -94,7 +100,7 @@ def write_event(fields: dict, event_id: str, received_at: float) -> dict:
         "blob_name": "",
         **{k: v for k, v in fields.items() if v is not None},
     }
-    get_table_client().create_entity(entity=entity)
+    get_table_client().upsert_entity(entity=entity, mode=UpdateMode.REPLACE)
     return entity
 
 

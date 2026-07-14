@@ -15,15 +15,21 @@ is a queryable, always-available copy for the owner.
 "why": cheapest possible, container-based, fixed-credential auth,
 Terraform + GitHub Actions CD, all at the owner's explicit request.)*
 
-- **Repo / branches:** `Industrial-Data-Science-AGH/SNN_Agent`, two branches
-  off `feat/rpi`: **`feat/azure-cd`** (Terraform infra + the GitHub Actions
-  CD workflow — built first, becomes the integration target) and
-  **`feat/dashboard`** (the FastAPI app: API, dashboard UI, Basic Auth, Pi
-  push client). A PR from `feat/dashboard` into `feat/azure-cd` is what
-  triggers the infra build + deploy (ADR-0013). New code lives under
-  `rpi_agents/agent/cloud_sync.py` (Pi side, on `feat/dashboard`) and a new
-  `rpi_agents/cloud/` folder (`cloud/app/` — the FastAPI container, on
-  `feat/dashboard`; `cloud/infra/` — Terraform, on `feat/azure-cd`).
+- **Repo / branches:** `Industrial-Data-Science-AGH/SNN_Agent`. All of T01
+  through T04 (Terraform infra, the GitHub Actions CD workflow, the FastAPI
+  app, the Pi push client) are developed and tested locally on a single
+  branch, **`feat/dashboard`** (branched off `feat/rpi` before any of this
+  work started — see `02-delivery.md`, "Branch & Commit Strategy," revised
+  2026-07-14 to match how the owner is actually executing this build).
+  **`feat/azure-cd`** is created later, once development is complete,
+  branched off the finished `feat/dashboard` — it becomes the deploy-target
+  branch the GitHub Actions workflow (`.github/workflows/deploy.yml`)
+  reacts to (its trigger condition, `pull_request` into `feat/azure-cd`,
+  ADR-0013, doesn't care when that branch was created, only that it exists
+  by the time a PR targets it). New code lives under
+  `rpi_agents/agent/cloud_sync.py` (Pi side) and a new `rpi_agents/cloud/`
+  folder (`cloud/app/` — the FastAPI container; `cloud/infra/` —
+  Terraform) — all committed to `feat/dashboard` as it's built.
 - **Cloud target:** Microsoft Azure, subscription funded by Azure for
   Students credit. Every service defaults to the tier that is effectively
   $0/month once the credit is exhausted — no fixed-cost resource (no VM, no

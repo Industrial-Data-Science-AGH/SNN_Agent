@@ -127,11 +127,15 @@ is free (ADR-0012) — no fixed-cost resource (no VM, no ACR) is in the design.
 - Assume "the user" (dashboard viewer) is a single person (Wiktor) who will
   be given the fixed credential directly — no identity provider involved
   (ADR-0009).
-- Assume the whole build fits one day, three implementation tasks, across
-  two branches: `feat/azure-cd` (Terraform infra + the GitHub Actions CD
-  workflow) and `feat/dashboard` (the FastAPI app — API, dashboard UI, Pi
-  push client). A PR from `feat/dashboard` into `feat/azure-cd` is what
-  triggers the infra build + deploy. See `02-delivery.md` and
+- Assume the whole build fits one day, four implementation tasks (T01-T04;
+  a fourth was added the same day, see ADR-0014/0015), developed and
+  unit-tested locally on a single working branch, `feat/dashboard`
+  (branched off `feat/rpi` before any of this work started) — not two
+  branches built up in parallel as originally planned. `feat/azure-cd` is
+  created later, once `feat/dashboard` is done, specifically because
+  `.github/workflows/deploy.yml` only triggers on a PR targeting a branch
+  named `feat/azure-cd` (ADR-0013) — revised 2026-07-14 to match actual
+  execution. See `02-delivery.md`'s "Branch & Commit Strategy" and
   `delivery-plan.json`.
 
 ## Assumptions to confirm

@@ -4,9 +4,14 @@
 
 New feature (not in the original design) — the Terraform module and GitHub
 Actions workflow that make "deployed very easily via Terraform and GitHub
-CD" true. Lives entirely on `feat/azure-cd`; this is task T01, and it must
-exist and work (even against a placeholder image) before `feat/dashboard`'s
-PR has anything to deploy to.
+CD" true. This is task T01. *(Revised 2026-07-14: written and locally
+validated on `feat/dashboard`, not on a standalone `feat/azure-cd` built up
+in parallel — see `02-delivery.md`, "Branch & Commit Strategy.")* The
+workflow is pre-written to trigger on a PR into `feat/azure-cd`, but that
+branch doesn't exist until `feat/dashboard`'s development (T01-T04) is
+finished; the actual end-to-end proof of the pipeline (build → push →
+`terraform apply` succeeding once) happens once `feat/azure-cd` is created
+from the finished `feat/dashboard` and a PR is opened against it.
 
 Reuses the overview diagram in `01-system-overview.md` (nodes `gha`, `pr`,
 `dashboard_branch`) for the high-level shape — no separate flow diagram
@@ -77,7 +82,10 @@ application data.
 
 ## Branch
 
-`feat/azure-cd` (task T01)
+`feat/dashboard` (task T01) — *(revised 2026-07-14: `feat/azure-cd` is
+created later, from the finished `feat/dashboard`, purely because the
+workflow's trigger below is hardcoded to that branch name. See "Context"
+above and `02-delivery.md`.)*
 
 ## Runbook (one-time manual bootstrap, before the first CD run)
 

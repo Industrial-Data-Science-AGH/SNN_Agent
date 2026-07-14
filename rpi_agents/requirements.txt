@@ -11,7 +11,7 @@
 #   pip install -r requirements.txt
 #
 # Install on Mac (unit tests + eval harness):
-#   pip install gpiozero pytest numpy python-dotenv opencv-python-headless google-genai
+#   pip install gpiozero pytest numpy python-dotenv opencv-python-headless google-genai requests
 
 # --- Pi-only (apt-managed; listed for documentation) ---
 # picamera2          # CSI camera capture (apt: python3-picamera2)
@@ -24,3 +24,4 @@ google-genai>=0.8
 python-dotenv>=1.0
 numpy>=1.26
 pytest>=8.0
+requests>=2.31  # agent/cloud_sync.py -- F03, ADR-0014/0015

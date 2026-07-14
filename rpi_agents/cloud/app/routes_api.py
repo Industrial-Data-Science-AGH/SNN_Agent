@@ -21,14 +21,17 @@ _ISO_DATE_PATTERN = r"^\d{4}-\d{2}-\d{2}$"
 def ingest_event(payload: schemas.EventIn) -> schemas.EventIngestResponse:
     """Ingest one wake-cycle event from the Pi (F01 design, "POST /api/events").
 
-    `event_id`/`received_at` are generated here, never trusted from the
-    request. Writes the Table entity first, then the blob (if an image was
-    sent) — a blob-write failure leaves `blob_name` empty rather than
-    failing the whole request (F01 design, Behavior).
+    `event_id` is client-supplied and upserted on (ADR-0014) — a retried
+    push of an event the server already committed overwrites in place
+    instead of duplicating or erroring. `received_at` is still generated
+    here, never trusted from the request. Writes the Table entity first,
+    then the blob (if an image was sent) — a blob-write failure leaves
+    `blob_name` empty rather than failing the whole request (F01 design,
+    Behavior).
     """
-    event_id = storage.generate_ulid()
+    event_id = payload.event_id
     received_at = time.time()
-    fields = payload.model_dump(exclude={"image_jpeg_b64"})
+    fields = payload.model_dump(exclude={"image_jpeg_b64", "event_id"})
     entity = storage.write_event(fields, event_id, received_at)
 
     if payload.image_jpeg_b64 is not None:

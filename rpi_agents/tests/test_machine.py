@@ -179,3 +179,135 @@ def test_event_log_written(monkeypatch, tmp_path):
     assert len(lines) >= 1
     record = json.loads(lines[-1])
     assert record["alarm"] is True
+
+
+# ── F03: event_id / email_sent (ADR-0014) ──────────────────────────────────
+
+
+def test_event_log_includes_event_id(monkeypatch, tmp_path):
+    log_path = tmp_path / "event.log"
+    monkeypatch.setattr(config, "EVENT_LOG", log_path)
+    _patch_leaves(monkeypatch, pf=_pf_static())
+
+    machine.run_cycle(_wake())
+
+    record = json.loads(log_path.read_text().splitlines()[-1])
+    assert isinstance(record["event_id"], str)
+    assert len(record["event_id"]) == 26
+
+
+def test_email_sent_false_for_non_alarm(monkeypatch, tmp_path):
+    log_path = tmp_path / "event.log"
+    monkeypatch.setattr(config, "EVENT_LOG", log_path)
+    _patch_leaves(monkeypatch, pf=_pf_static())
+
+    machine.run_cycle(_wake())
+
+    record = json.loads(log_path.read_text().splitlines()[-1])
+    assert record["email_sent"] is False
+
+
+def test_email_sent_true_after_successful_notify(monkeypatch, tmp_path):
+    log_path = tmp_path / "event.log"
+    monkeypatch.setattr(config, "EVENT_LOG", log_path)
+    v = VisionVerdict(is_intrusion=True, confidence=0.95, reason="intruder", source="gemini")
+    _patch_leaves(monkeypatch, pf=_pf_escalate(), verdict=v)
+
+    machine.run_cycle(_wake())
+
+    record = json.loads(log_path.read_text().splitlines()[-1])
+    assert record["email_sent"] is True
+
+
+def test_email_sent_false_when_notify_raises(monkeypatch, tmp_path):
+    log_path = tmp_path / "event.log"
+    monkeypatch.setattr(config, "EVENT_LOG", log_path)
+    v = VisionVerdict(is_intrusion=True, confidence=0.95, reason="intruder", source="gemini")
+    _patch_leaves(
+        monkeypatch,
+        pf=_pf_escalate(),
+        verdict=v,
+        notify_raises=smtplib.SMTPException("down"),
+    )
+
+    machine.run_cycle(_wake())
+
+    record = json.loads(log_path.read_text().splitlines()[-1])
+    assert record["email_sent"] is False
+
+
+# ── F03: cloud sync wiring (ADR-0014, ADR-0015) ─────────────────────────────
+
+
+def test_cloud_sync_skipped_when_not_configured(monkeypatch, tmp_path):
+    """Default test environment has no CLOUD_SYNC_URL -- push/flush/enqueue
+    must never even be attempted (also guards against touching a real
+    sync_queue.jsonl on the machine running the tests)."""
+    monkeypatch.setattr(config, "EVENT_LOG", tmp_path / "event.log")
+    _patch_leaves(monkeypatch, pf=_pf_static())
+
+    push_spy = MagicMock()
+    enqueue_spy = MagicMock()
+    flush_spy = MagicMock()
+    monkeypatch.setattr("agent.cloud_sync.push", push_spy)
+    monkeypatch.setattr("agent.sync_queue.enqueue", enqueue_spy)
+    monkeypatch.setattr("agent.cloud_sync.flush_queue", flush_spy)
+
+    machine.run_cycle(_wake())
+
+    push_spy.assert_not_called()
+    enqueue_spy.assert_not_called()
+    flush_spy.assert_not_called()
+
+
+def test_cloud_sync_pushes_and_flushes_when_configured(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "EVENT_LOG", tmp_path / "event.log")
+    monkeypatch.setattr("agent.cloud_sync.is_configured", lambda: True)
+    _patch_leaves(monkeypatch, pf=_pf_static())
+
+    push_spy = MagicMock(return_value=True)
+    enqueue_spy = MagicMock()
+    flush_spy = MagicMock()
+    monkeypatch.setattr("agent.cloud_sync.push", push_spy)
+    monkeypatch.setattr("agent.sync_queue.enqueue", enqueue_spy)
+    monkeypatch.setattr("agent.cloud_sync.flush_queue", flush_spy)
+
+    machine.run_cycle(_wake())
+
+    push_spy.assert_called_once()
+    enqueue_spy.assert_not_called()  # push succeeded -> nothing to queue
+    flush_spy.assert_called_once()
+
+
+def test_cloud_sync_enqueues_on_push_failure(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "EVENT_LOG", tmp_path / "event.log")
+    monkeypatch.setattr("agent.cloud_sync.is_configured", lambda: True)
+    _patch_leaves(monkeypatch, pf=_pf_static())
+
+    monkeypatch.setattr("agent.cloud_sync.push", MagicMock(return_value=False))
+    enqueue_spy = MagicMock()
+    monkeypatch.setattr("agent.sync_queue.enqueue", enqueue_spy)
+    monkeypatch.setattr("agent.cloud_sync.flush_queue", MagicMock())
+
+    machine.run_cycle(_wake())
+
+    enqueue_spy.assert_called_once()
+    event_id_arg = enqueue_spy.call_args[0][0]
+    assert isinstance(event_id_arg, str)
+    assert len(event_id_arg) == 26
+
+
+def test_cloud_sync_failure_does_not_propagate(monkeypatch, tmp_path):
+    """A raising build_payload() (or any cloud_sync step) must not break
+    the wake cycle (Tenet 1) -- run_cycle() must still return normally."""
+    monkeypatch.setattr(config, "EVENT_LOG", tmp_path / "event.log")
+    monkeypatch.setattr("agent.cloud_sync.is_configured", lambda: True)
+    _patch_leaves(monkeypatch, pf=_pf_static())
+
+    monkeypatch.setattr(
+        "agent.cloud_sync.build_payload", MagicMock(side_effect=RuntimeError("boom"))
+    )
+
+    decision = machine.run_cycle(_wake())  # must not raise
+
+    assert decision.alarm is False

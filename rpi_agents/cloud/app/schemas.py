@@ -19,6 +19,10 @@ _MAX_IMAGE_BYTES = 2 * 1024 * 1024
 
 _MSG_IMAGE_TOO_LARGE = "image_jpeg_b64 exceeds the 2 MB decoded size cap"
 _MSG_IMAGE_NOT_BASE64 = "image_jpeg_b64 is not valid base64"
+_MSG_EVENT_ID_INVALID = "event_id must be a 26-character Crockford-base32 ULID (uppercase)"
+
+_ULID_LENGTH = 26
+_CROCKFORD_ALPHABET = frozenset("0123456789ABCDEFGHJKMNPQRSTVWXYZ")
 
 VisionSource = Literal["gemini", "failsafe"]
 
@@ -26,13 +30,17 @@ VisionSource = Literal["gemini", "failsafe"]
 class EventIn(BaseModel):
     """`POST /api/events` request body (F01 design, "POST /api/events").
 
-    `event_id` and `received_at` are deliberately absent — both are
-    generated server-side (`storage.generate_ulid()`, `utc epoch at ingest`),
-    never trusted from the Pi's request.
+    `event_id` is client-supplied (ADR-0014): the Pi generates it
+    (`agent/cloud_sync.py::generate_event_id()`) so a queued retry can be
+    posted twice without creating a duplicate row — the server upserts on
+    it instead of minting its own (`storage.write_event()`). `received_at`
+    remains server-generated (`utc epoch at ingest`), never trusted from the
+    request.
     """
 
     model_config = ConfigDict(extra="forbid")
 
+    event_id: str
     ts_wall: float
     woken_by_trigger: bool
     escalate: bool
@@ -46,6 +54,13 @@ class EventIn(BaseModel):
     email_sent: bool
     latency_s: float
     image_jpeg_b64: str | None = None
+
+    @field_validator("event_id")
+    @classmethod
+    def _check_event_id(cls, value: str) -> str:
+        if len(value) != _ULID_LENGTH or not set(value) <= _CROCKFORD_ALPHABET:
+            raise ValueError(_MSG_EVENT_ID_INVALID)
+        return value
 
     @field_validator("image_jpeg_b64")
     @classmethod

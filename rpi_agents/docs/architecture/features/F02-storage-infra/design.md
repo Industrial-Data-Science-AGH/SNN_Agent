@@ -21,9 +21,10 @@ cylinders (`Blob Storage`, `Table Storage`) it writes to, provisioned here.
   RowKey: `{event_id}` (a ULID generated at push time — sortable, unique,
   avoids clock-skew collisions between Pi and Azure clocks).
 - Provisioned via **Terraform** (`cloud/infra/*.tf`, `azurerm` provider,
-  ADR-0011), on the `feat/azure-cd` branch (task T01), parameterized by
-  environment (`dev`/`prod`) so a throwaway dev storage account can exist
-  alongside the real one without duplicating modules.
+  ADR-0011), written on the `feat/dashboard` branch (task T01) — see Branch
+  below — parameterized by environment (`dev`/`prod`) so a throwaway dev
+  storage account can exist alongside the real one without duplicating
+  modules.
 
 ## Data model
 
@@ -86,4 +87,6 @@ the two cloud-only fields):
 
 ## Branch
 
-`feat/azure-cd` (task T01)
+`feat/dashboard` (task T01) — *(revised 2026-07-14: `feat/azure-cd` is
+created later, from the finished `feat/dashboard`, not developed in
+parallel. See `02-delivery.md`, "Branch & Commit Strategy.")*

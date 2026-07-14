@@ -65,6 +65,34 @@ def alarm_off() -> None:
         buzzer.off()
 
 
+def blink(duration_s: float, interval_s: float = 0.5) -> None:
+    """Blink LED on/off for duration_s (buzzer blinks in sync, if wired/enabled).
+
+    Used for the extended alarm-hold phase (e.g. 1 minute) instead of a
+    silent sleep, so there's a visible signal for the whole hold period.
+    LED (and buzzer) are guaranteed OFF when this returns.
+    """
+    import time
+    led, buzzer = _devices()
+    elapsed = 0.0
+    on = False
+    while elapsed < duration_s:
+        on = not on
+        if on:
+            led.on()
+            if buzzer is not None:
+                buzzer.on()
+        else:
+            led.off()
+            if buzzer is not None:
+                buzzer.off()
+        time.sleep(interval_s)
+        elapsed += interval_s
+    led.off()
+    if buzzer is not None:
+        buzzer.off()
+
+
 def close() -> None:
     """Release GPIO devices and reset singletons (for tests and shutdown)."""
     global _led, _buzzer

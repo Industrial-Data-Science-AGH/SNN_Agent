@@ -62,7 +62,7 @@ def _run_production() -> None:
         decision = machine.run_cycle(wake)
     finally:
         if decision is not None and decision.alarm:
-            power.cooldown(config.ALARM_HOLD_S)
+            actuators.blink(config.ALARM_HOLD_S, config.ALARM_BLINK_INTERVAL_S)
         actuators.close()
         power.cooldown(config.COOLDOWN_S)
         power.resleep()

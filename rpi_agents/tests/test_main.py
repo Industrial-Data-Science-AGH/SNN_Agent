@@ -40,12 +40,15 @@ def _patch_production(monkeypatch, *, run_cycle_result=None, run_cycle_raises=No
     close_spy = MagicMock()
     monkeypatch.setattr("agent.actuators.close", close_spy)
 
-    return resleep_spy, cooldown_spy, close_spy
+    blink_spy = MagicMock()
+    monkeypatch.setattr("agent.actuators.blink", blink_spy)
+
+    return resleep_spy, cooldown_spy, close_spy, blink_spy
 
 
 def test_e2e_alarm_path(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["main"])
-    resleep_spy, cooldown_spy, close_spy = _patch_production(
+    resleep_spy, cooldown_spy, close_spy, blink_spy = _patch_production(
         monkeypatch, run_cycle_result=Decision(alarm=True, reason="person at window")
     )
 
@@ -55,14 +58,15 @@ def test_e2e_alarm_path(monkeypatch):
     assert exc.value.code == 0
     resleep_spy.assert_called_once()
     close_spy.assert_called_once()
-    # cooldown called with ALARM_HOLD_S AND COOLDOWN_S
-    assert call(config.ALARM_HOLD_S) in cooldown_spy.call_args_list
+    # alarm hold is now a blink, not a silent cooldown sleep
+    blink_spy.assert_called_once_with(config.ALARM_HOLD_S, config.ALARM_BLINK_INTERVAL_S)
+    assert call(config.ALARM_HOLD_S) not in cooldown_spy.call_args_list
     assert call(config.COOLDOWN_S) in cooldown_spy.call_args_list
 
 
 def test_e2e_false_path(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["main"])
-    resleep_spy, cooldown_spy, close_spy = _patch_production(
+    resleep_spy, cooldown_spy, close_spy, blink_spy = _patch_production(
         monkeypatch, run_cycle_result=Decision(alarm=False, reason="static")
     )
 
@@ -72,14 +76,14 @@ def test_e2e_false_path(monkeypatch):
     assert exc.value.code == 0
     resleep_spy.assert_called_once()
     close_spy.assert_called_once()
-    # ALARM_HOLD_S must NOT appear; COOLDOWN_S must appear
-    assert call(config.ALARM_HOLD_S) not in cooldown_spy.call_args_list
+    # no alarm → no blink; COOLDOWN_S must still appear
+    blink_spy.assert_not_called()
     assert call(config.COOLDOWN_S) in cooldown_spy.call_args_list
 
 
 def test_always_resleeps_on_cycle_error(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["main"])
-    resleep_spy, cooldown_spy, close_spy = _patch_production(
+    resleep_spy, cooldown_spy, close_spy, _blink_spy = _patch_production(
         monkeypatch, run_cycle_raises=RuntimeError("camera failed")
     )
 

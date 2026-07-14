@@ -108,8 +108,11 @@ Set via SNN_AGENT_CAMERA_DRAIN env var."""
 COOLDOWN_S: float = 5.0
 """Seconds to wait before re-armed after wake (debounce SNN chatter)."""
 
-ALARM_HOLD_S: float = 10.0
-"""Seconds to sound the local LED+buzzer siren before actuators.close() and re-halt."""
+ALARM_HOLD_S: float = 60.0
+"""Seconds to blink the local LED (+buzzer, if enabled) before actuators.close() and re-halt."""
+
+ALARM_BLINK_INTERVAL_S: float = 0.5
+"""Half-period (seconds) for the alarm LED/buzzer blink during ALARM_HOLD_S."""
 
 LOG_LEVEL: str = os.getenv("SNN_AGENT_LOG_LEVEL", "INFO")
 """Root log level for main (env-overridable). Set via SNN_AGENT_LOG_LEVEL env var."""

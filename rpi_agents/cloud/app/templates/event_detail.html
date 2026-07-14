@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/">&larr; back to list</a></p>
+<h1>Event {{ event.event_id }}</h1>
+<p>
+  {{ event.ts_wall_iso }}
+  &middot; <span class="badge {{ 'alarm' if event.alarm else 'ok' }}">{{ 'ALARM' if event.alarm else 'clear' }}</span>
+  &middot; <span class="badge source-{{ event.vision_source or 'none' }}">{{ event.vision_source or 'n/a' }}</span>
+</p>
+
+{% if event.image_url %}
+<img src="{{ event.image_url }}" alt="snapshot" style="max-width: 100%; border-radius: 8px;">
+{% else %}
+<p><em>No snapshot was pushed for this event.</em></p>
+{% endif %}
+
+<h2>Reason</h2>
+<p>{{ event.reason }}</p>
+
+<h2>Details</h2>
+<table>
+  <tr><th>Email sent</th><td>{{ 'yes' if event.email_sent else 'no' }}</td></tr>
+  <tr><th>Score</th><td>{{ "%.4f"|format(event.score) }}</td></tr>
+  <tr><th>Motion</th><td>{{ event.motion }}</td></tr>
+  <tr><th>Person</th><td>{{ event.person }}</td></tr>
+  <tr><th>Escalate</th><td>{{ event.escalate }}</td></tr>
+  <tr><th>Woken by trigger</th><td>{{ event.woken_by_trigger }}</td></tr>
+  <tr><th>Latency (s)</th><td>{{ "%.2f"|format(event.latency_s) }}</td></tr>
+</table>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="metrics">
+  <div class="metric">
+    <div class="value">{{ metrics.real_wakes }}</div>
+    <div class="label">Real wakes</div>
+  </div>
+  <div class="metric">
+    <div class="value">{{ metrics.false_wakes }}</div>
+    <div class="label">False wakes</div>
+  </div>
+  <div class="metric">
+    <div class="value">{{ metrics.non_escalating_wakes }}</div>
+    <div class="label">Non-escalating</div>
+  </div>
+  <div class="metric">
+    <div class="value">{{ "%.0f"|format(metrics.email_delivery_rate * 100) }}%</div>
+    <div class="label">Email delivery rate</div>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr><th></th><th>Time (UTC)</th><th>Status</th><th>Reason</th></tr>
+  </thead>
+  <tbody>
+    {% for event in events %}
+    <tr data-href="/events/{{ event.event_id }}">
+      <td>
+        {% if event.image_url %}<img class="thumb" src="{{ event.image_url }}" alt="">{% endif %}
+      </td>
+      <td>{{ event.ts_wall_iso }}</td>
+      <td><span class="badge {{ 'alarm' if event.alarm else 'ok' }}">{{ 'ALARM' if event.alarm else 'clear' }}</span></td>
+      <td>{{ event.reason }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4">No events in this window.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+  document.querySelectorAll("tr[data-href]").forEach(function (row) {
+    row.addEventListener("click", function () {
+      window.location = row.getAttribute("data-href");
+    });
+  });
+</script>
+{% endblock %}

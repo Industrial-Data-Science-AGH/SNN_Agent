@@ -153,10 +153,11 @@ def list_events(since: str | None = None, limit: int = _DEFAULT_LIMIT) -> list[d
     is fine at this project's hobby-scale volume.
     """
     limit = min(max(limit, 1), _MAX_LIMIT)
-    since_date = since or (
-        datetime.now(UTC) - timedelta(days=_DEFAULT_SINCE_DAYS)
-    ).strftime("%Y-%m-%d")
-    entities = get_table_client().query_entities(query_filter=f"PartitionKey ge '{since_date}'")
+    since_date = since or (datetime.now(UTC) - timedelta(days=_DEFAULT_SINCE_DAYS)).strftime(
+        "%Y-%m-%d"
+    )
+    query_filter = f"PartitionKey ge '{_escape_odata_literal(since_date)}'"
+    entities = get_table_client().query_entities(query_filter=query_filter)
     events = sorted(entities, key=lambda e: e["ts_wall"], reverse=True)
     return [_to_summary_dict(e) for e in events[:limit]]
 
@@ -168,10 +169,20 @@ def get_event(event_id: str) -> dict | None:
     RowKey (a filtered scan, not a point-read) — acceptable at this
     project's volume; revisit if the table ever grows past hobby scale.
     """
-    matches = list(get_table_client().query_entities(query_filter=f"RowKey eq '{event_id}'"))
+    query_filter = f"RowKey eq '{_escape_odata_literal(event_id)}'"
+    matches = list(get_table_client().query_entities(query_filter=query_filter))
     if not matches:
         return None
     return _to_summary_dict(matches[0])
+
+
+def _escape_odata_literal(value: str) -> str:
+    """Escape a string for safe interpolation into an OData `query_filter`
+    (single quotes double, the OData string-literal escape convention) —
+    defense-in-depth against filter injection via `since`/`event_id`, both
+    of which reach here as caller-controlled strings.
+    """
+    return value.replace("'", "''")
 
 
 def _to_summary_dict(entity: dict) -> dict:

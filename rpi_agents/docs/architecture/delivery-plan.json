@@ -35,6 +35,13 @@
           "feature_id": "F01_ingest_api",
           "summary": "On feat/dashboard, retrofitting T02's already-shipped cloud/app/ (ADR-0014, driven by T03's new local retry queue). schemas.py: EventIn gains a required event_id field, validated as a well-formed ULID (26-char Crockford base32), 422 on anything else. routes_api.py: ingest_event() no longer calls storage.generate_ulid() -- uses payload.event_id instead. storage.py: write_event() becomes an upsert (create_or_replace) keyed on the client-supplied event_id instead of a strict create, so a retried event_id overwrites identical data rather than erroring/duplicating; write_blob() is already overwrite=True and needs no change. Unit tests: upsert idempotency (same event_id posted twice yields one row, second response still 202 with the same event_id), malformed event_id rejected with 422. Must merge/deploy before T03's Pi-side retries have anything correct to push against.",
           "security": ["api-endpoint-security", "authn-authz-secrets"]
+        },
+        {
+          "id": "T05",
+          "slug": "dashboard-analytics-api",
+          "feature_id": "F01_ingest_api",
+          "summary": "On feat/dashboard (ADR-0016), backend half of a premium chart-driven dashboard UI refresh (frontend built separately, see docs/handoff/dashboard-ui-premium-refresh.md). cloud/app/metrics.py (new): summary_metrics() (moved from routes_dashboard.py, same real/false/non-escalating/email-rate logic), daily_rollup() (per-UTC-date counts, oldest first), vision_source_breakdown() (outcome x vision_source cross-tab -- an operational/model-agreement breakdown, explicitly NOT a ground-truth confusion matrix), latency_stats() (avg/p50/p95/max over latency_s). storage.py: list_events_for_metrics(since) -- same partition-key-range query as list_events() but uncapped (aggregation must cover the whole window, not the 500-row display cap). routes_api.py: new GET /api/metrics?since= route (same Basic Auth, same app). routes_dashboard.py: compute_metrics() now delegates to metrics.summary_metrics() (one implementation, not two). Unit tests for every metrics.py function plus the route (auth-gated, correct JSON shape, daily rollup ordering, empty-window edge case).",
+          "security": ["api-endpoint-security", "authn-authz-secrets"]
         }
       ]
     }

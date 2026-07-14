@@ -6,7 +6,10 @@ system overview, feature designs, ADRs, `delivery-plan.json`,
 (`docs/architecture/02-delivery.md`: "one day, one working branch, four
 tasks" — T04 added 2026-07-14, ADR-0014/ADR-0015, alongside T03's queue
 design; branch strategy revised the same day to match actual execution —
-see `02-delivery.md`, "Branch & Commit Strategy").
+see `02-delivery.md`, "Branch & Commit Strategy"). T05 added later the same
+day (ADR-0016) — the backend half of a premium, chart-driven dashboard UI
+refresh; see `T05-dashboard-analytics-api.md` and
+`docs/handoff/dashboard-ui-premium-refresh.md`.
 
 All four tasks are developed, committed, and unit-tested locally on
 **`feat/dashboard`** (branched off `feat/rpi` before any of this work
@@ -21,6 +24,7 @@ targeting a branch named `feat/azure-cd` (ADR-0013).
 | T02 | [T02-fastapi-dashboard-app.md](T02-fastapi-dashboard-app.md) | `feat/dashboard` | F01, F05, F04 | T01 (code lives on the same branch; local Terraform validate/plan stands in for "live" until deploy time) |
 | T04 | [T04-idempotent-ingest-retrofit.md](T04-idempotent-ingest-retrofit.md) | `feat/dashboard` | F01 | T02 (retrofits its shipped ingest route) |
 | T03 | [T03-pi-push-client.md](T03-pi-push-client.md) | `feat/dashboard` | F03 | T01, T04 (server must accept client `event_id` before retries can succeed) |
+| T05 | [T05-dashboard-analytics-api.md](T05-dashboard-analytics-api.md) | `feat/dashboard` | F01, F04 | T02, T04 (reads the same event schema/storage layer) |
 
 T02 and T04 touch the same files (`cloud/app/schemas.py`/`routes_api.py`/
 `storage.py`) so are naturally sequential. T03's code can be written and

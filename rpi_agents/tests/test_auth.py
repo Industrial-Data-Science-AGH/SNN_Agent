@@ -55,11 +55,14 @@ def test_require_basic_auth_rejects_wrong_username():
         ("GET", "/api/events"),
         ("POST", "/api/events"),
         ("GET", "/api/events/some-id"),
+        ("GET", "/api/metrics"),
     ],
 )
 def test_every_route_class_rejects_missing_auth(method, path):
     """T02 plan, acceptance gate: unauthenticated dashboard, read, and
-    ingest requests all return 401.
+    ingest requests all return 401. T05 (ADR-0016) adds /api/metrics to
+    this enumeration — it sits behind the same global dependency as every
+    other route, no per-route auth logic to forget.
     """
     response = client.request(method, path)
     assert response.status_code == 401
@@ -68,7 +71,7 @@ def test_every_route_class_rejects_missing_auth(method, path):
 
 @pytest.mark.parametrize(
     ("method", "path"),
-    [("GET", "/"), ("GET", "/api/events"), ("POST", "/api/events")],
+    [("GET", "/"), ("GET", "/api/events"), ("POST", "/api/events"), ("GET", "/api/metrics")],
 )
 def test_every_route_class_rejects_bad_auth(method, path):
     response = client.request(method, path, auth=("wrong", "wrong"))

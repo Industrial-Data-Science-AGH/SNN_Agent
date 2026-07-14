@@ -89,6 +89,45 @@ is **unchanged**.
   15-minute SAS `image_url` (not the same URL as any previous request — SAS
   tokens are minted per-call, never cached/persisted).
 
+### `GET /api/metrics?since=` (dashboard analytics — F04, ADR-0016, new)
+
+- **Auth:** same Basic Auth middleware as every other route.
+- **Query params:** `since` (ISO date, optional, defaults to last 30 days —
+  same default as `GET /api/events`). No `limit`: aggregation always covers
+  the full matching window (`storage.list_events_for_metrics()`, uncapped,
+  unlike the 500-row display cap on `GET /api/events`).
+- **Response `200`:**
+  ```json
+  {
+    "since": "2026-06-14",
+    "until": "2026-07-14",
+    "summary": {
+      "real_wakes": 12,
+      "false_wakes": 34,
+      "non_escalating_wakes": 210,
+      "email_delivery_rate": 0.92
+    },
+    "daily": [
+      {"date": "2026-07-01", "real_wakes": 1, "false_wakes": 3, "non_escalating_wakes": 20, "total": 24}
+    ],
+    "vision_source_breakdown": {
+      "real_wakes": {"gemini": 10, "failsafe": 2, "none": 0},
+      "false_wakes": {"gemini": 30, "failsafe": 0, "none": 4},
+      "non_escalating_wakes": {"gemini": 0, "failsafe": 0, "none": 210}
+    },
+    "latency_s": {"avg": 8.2, "p50": 7.9, "p95": 14.1, "max": 22.0}
+  }
+  ```
+- **Behavior:** pure aggregation over `cloud/app/metrics.py`'s functions,
+  fed by one uncapped Table query. `daily` is sorted oldest-first (trend
+  charts read left-to-right chronologically; `GET /api/events` stays
+  newest-first, a deliberate difference — that route is a list to scan, this
+  one is a series to plot). `vision_source_breakdown` is **not** a
+  ground-truth confusion matrix — see F04 design's Risks and ADR-0016; it
+  cross-tabulates decision outcome against which vision path produced it
+  (`gemini`, `failsafe`, or `none` for non-escalating events that never
+  called vision).
+
 ### `GET /` and dashboard pages (F04)
 
 - Same Basic Auth middleware, applied globally to the whole app (not just
@@ -143,6 +182,7 @@ writer and the only reader.
 - ADR-0009 (shared fixed Basic Auth credential for every route).
 - ADR-0006 (single combined JSON+base64 POST vs. two-step SAS upload).
 - ADR-0014 (client-generated `event_id`, idempotent upsert ingest).
+- ADR-0016 (`GET /api/metrics` server-side analytics endpoint).
 
 ## Branch
 

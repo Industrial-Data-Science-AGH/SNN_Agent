@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from . import metrics as metrics_module
 from . import storage
 
 router = APIRouter(tags=["dashboard"])
@@ -26,21 +27,15 @@ _MSG_EVENT_NOT_FOUND = "event not found"
 def compute_metrics(events: list[dict]) -> dict:
     """Summary metrics band (F04 design, "Summary metrics band").
 
-    Pure function over an already-fetched event list — computed in the same
-    request that renders the list, no separate aggregation endpoint or
-    client-side JS (F04 design, Context).
+    *(ADR-0016)* Delegates to `cloud/app/metrics.py::summary_metrics()` —
+    the same computation `GET /api/metrics` now also exposes as JSON, so
+    there is one implementation, not two. Kept as a thin wrapper here
+    (rather than inlining `metrics_module.summary_metrics` at call sites)
+    so `tests/test_dashboard.py`'s existing `from
+    cloud.app.routes_dashboard import compute_metrics` import keeps working
+    unchanged.
     """
-    real_wakes = sum(1 for event in events if event["alarm"])
-    false_wakes = sum(1 for event in events if event["escalate"] and not event["alarm"])
-    non_escalating = sum(1 for event in events if not event["escalate"])
-    email_sent_count = sum(1 for event in events if event["email_sent"])
-    email_delivery_rate = email_sent_count / real_wakes if real_wakes else 0.0
-    return {
-        "real_wakes": real_wakes,
-        "false_wakes": false_wakes,
-        "non_escalating_wakes": non_escalating,
-        "email_delivery_rate": email_delivery_rate,
-    }
+    return metrics_module.summary_metrics(events)
 
 
 def _with_iso_timestamp(event: dict) -> dict:

@@ -119,3 +119,78 @@ class EventDetail(EventSummary):
     expected to be the place debug-only fields land later, and call sites
     should say which contract they mean.
     """
+
+
+class SummaryMetrics(BaseModel):
+    """`summary` block of `GET /api/metrics` — unchanged from the original
+    HTML-only metrics band (F04 design)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    real_wakes: int
+    false_wakes: int
+    non_escalating_wakes: int
+    email_delivery_rate: float
+
+
+class DailyMetrics(BaseModel):
+    """One entry of `GET /api/metrics`'s `daily` list — per-UTC-date
+    counts, oldest first (F01 design, "GET /api/metrics")."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    date: str
+    real_wakes: int
+    false_wakes: int
+    non_escalating_wakes: int
+    total: int
+
+
+class VisionSourceCounts(BaseModel):
+    """One row of `vision_source_breakdown` — counts for one outcome
+    bucket, by which vision path (if any) produced it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    gemini: int
+    failsafe: int
+    none: int
+
+
+class VisionSourceBreakdown(BaseModel):
+    """Outcome x `vision_source` cross-tab (ADR-0016) — an operational/
+    model-agreement breakdown, **not** a ground-truth confusion matrix (see
+    F04 design, Risks: this system never captures whether an event was
+    actually an intrusion, only what the pipeline itself decided).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    real_wakes: VisionSourceCounts
+    false_wakes: VisionSourceCounts
+    non_escalating_wakes: VisionSourceCounts
+
+
+class LatencyStats(BaseModel):
+    """avg/p50/p95/max of `latency_s` across the `GET /api/metrics` window."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    avg: float
+    p50: float
+    p95: float
+    max: float
+
+
+class MetricsResponse(BaseModel):
+    """`GET /api/metrics` response (F01 design, "GET /api/metrics";
+    ADR-0016)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    since: str
+    until: str
+    summary: SummaryMetrics
+    daily: list[DailyMetrics]
+    vision_source_breakdown: VisionSourceBreakdown
+    latency_s: LatencyStats

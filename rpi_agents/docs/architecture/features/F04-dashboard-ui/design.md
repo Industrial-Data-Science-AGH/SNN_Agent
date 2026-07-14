@@ -18,7 +18,13 @@ straightforward fetch-and-render composition, not a multi-actor sequence.
 - Also exposes the same data as JSON via F01's `GET /api/events*` routes,
   for anyone who wants to script against it later — the HTML views and the
   JSON API share one implementation, not two.
-- No contracts of its own exposed to other features.
+- *(ADR-0016, revised 2026-07-14)* The summary/aggregate metrics are now
+  also exposed as JSON via `GET /api/metrics` (F01 design) — a premium,
+  chart-driven UI needs structured aggregate data, not just the rendered
+  HTML band. `cloud/app/metrics.py` is the one aggregation implementation
+  both the HTML band and the JSON route call — see "no separate aggregation
+  endpoint... needed" below, which this supersedes.
+- No other contracts of its own exposed to other features.
 
 ## Data model
 
@@ -31,9 +37,11 @@ reason to cache home-security data in the browser anyway).
 1. **Event list** — most recent first, default last 30 days (matches F01's
    `since` default). Each row: timestamp, thumbnail (from the SAS
    `image_url`), `alarm` badge (red/green), one-line `reason`.
-2. **Summary metrics band** above the list, computed server-side (in the
-   same request that renders the list — no separate aggregation endpoint or
-   client-side JS needed, since it's already rendering HTML):
+2. **Summary metrics band** above the list, computed server-side. *(Revised
+   2026-07-14, ADR-0016: originally "no separate aggregation endpoint or
+   client-side JS needed, since it's already rendering HTML" — a premium
+   chart-driven UI changed that; the same computation is now also reachable
+   as JSON via `GET /api/metrics`, consumed by client-side charting.)*
    - **Real wakes**: count where `alarm == true`.
    - **False wakes**: count where `escalate == true and alarm == false`
      (prefilter or Gemini correctly suppressed a false trigger).
@@ -56,11 +64,17 @@ reason to cache home-security data in the browser anyway).
   defect to fix here; noted so the metrics aren't over-trusted as an
   external validation of Gemini's accuracy (that's what
   `tests/test_vision_eval.py` / `tests/eval_harness.py` are for, and they're
-  out of scope for this feature).
+  out of scope for this feature). *(ADR-0016, 2026-07-14: this is also why
+  the new `vision_source_breakdown` chart in `GET /api/metrics` is
+  documented as a model-agreement/operational breakdown, not a confusion
+  matrix — a real confusion matrix needs a ground-truth label this system
+  doesn't capture, and adding one was explicitly deferred by the owner.)*
 - **Server-side aggregation cost grows with `since` window** — acceptable at
   hobby-project volume (hundreds to low thousands of events); if this ever
   needs a full-year view over tens of thousands of events, that's the signal
   to add caching or a precomputed aggregate (not built preemptively).
+  *(ADR-0016: this now applies specifically to `GET /api/metrics`, which is
+  intentionally uncapped unlike the 500-row `GET /api/events` list.)*
 
 ## Security
 
@@ -76,6 +90,8 @@ reason to cache home-security data in the browser anyway).
 
 - ADR-0008 (one app serves API + dashboard UI, no separate frontend host).
 - ADR-0009 (shared Basic Auth protects these pages too).
+- ADR-0016 (`GET /api/metrics` server-side analytics endpoint for the
+  premium chart-driven UI refresh).
 
 ## Branch
 

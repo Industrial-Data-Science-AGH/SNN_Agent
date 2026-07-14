@@ -40,7 +40,23 @@ a mock. Needs Docker.
 
 ```bash
 docker run -d --name azurite -p 10000:10000 -p 10002:10002 \
-  mcr.microsoft.com/azure-storage/azurite
+  mcr.microsoft.com/azure-storage/azurite \
+  azurite --blobHost 0.0.0.0 --tableHost 0.0.0.0 --skipApiVersionCheck
+```
+
+`--skipApiVersionCheck` is required: the `azure-data-tables`/`azure-storage-blob`
+SDK versions pinned in `cloud/app/requirements.txt` send a newer Storage API
+version than the `latest` Azurite image currently understands, and Azurite
+rejects the request outright without this flag (`HttpResponseError: The API
+version ... is not supported by Azurite`).
+
+If you already started Azurite without the flag, recreate it:
+
+```bash
+docker stop azurite && docker rm azurite
+docker run -d --name azurite -p 10000:10000 -p 10002:10002 \
+  mcr.microsoft.com/azure-storage/azurite \
+  azurite --blobHost 0.0.0.0 --tableHost 0.0.0.0 --skipApiVersionCheck
 ```
 
 ### 2.2 Create the table + container Terraform would normally provision

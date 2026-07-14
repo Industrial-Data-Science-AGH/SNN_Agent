@@ -168,6 +168,24 @@ def list_events(since: str | None = None, limit: int = _DEFAULT_LIMIT) -> list[d
     return [_to_summary_dict(e) for e in events[:limit]]
 
 
+def list_events_for_metrics(since: str | None = None) -> list[dict]:
+    """List every event since a given UTC date (inclusive), uncapped —
+    backs `GET /api/metrics` (ADR-0016).
+
+    Same partition-key-range query as `list_events()`, deliberately without
+    its `limit`/`_MAX_LIMIT` display cap: an aggregate must reflect the
+    whole selected window, not one page of it. Accepted scaling risk at
+    today's volume — see ADR-0016, Risks.
+    """
+    since_date = since or (datetime.now(UTC) - timedelta(days=_DEFAULT_SINCE_DAYS)).strftime(
+        "%Y-%m-%d"
+    )
+    query_filter = f"PartitionKey ge '{_escape_odata_literal(since_date)}'"
+    entities = get_table_client().query_entities(query_filter=query_filter)
+    events = sorted(entities, key=lambda e: e["ts_wall"])
+    return [_to_summary_dict(e) for e in events]
+
+
 def get_event(event_id: str) -> dict | None:
     """Fetch one event by its `event_id` (Table RowKey).
 

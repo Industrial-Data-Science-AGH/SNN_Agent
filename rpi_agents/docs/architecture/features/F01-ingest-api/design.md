@@ -12,6 +12,15 @@ Auth check (F05, ADR-0009).
 
 *Source: `docs/diagrams/F01-ingest-flow.dot` — edit and re-run `render_diagrams.sh`.*
 
+## Current state *(brownfield — what this touches)*
+
+T02 shipped this feature with server-generated `event_id`. **Change**
+(ADR-0014, driven by F03's new local retry queue, ADR-0015): `event_id`
+becomes a required, client-supplied field, and the ingest write becomes an
+idempotent upsert instead of a strict create. Everything else in this
+design — auth, the read routes, the Blob/Table split, the 2 MB image cap —
+is **unchanged**.
+
 ## Contracts
 
 ### `POST /api/events` (ingest — called by the Pi, F03)
@@ -21,6 +30,7 @@ Auth check (F05, ADR-0009).
 - **Body (JSON):**
   ```json
   {
+    "event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
     "ts_wall": 1784048796.83,
     "woken_by_trigger": false,
     "escalate": true,
@@ -36,20 +46,31 @@ Auth check (F05, ADR-0009).
     "image_jpeg_b64": "<base64, optional>"
   }
   ```
+  `event_id` (ADR-0014, **new**, required) — a ULID the Pi generates once,
+  at decision time, and reuses on every retry of this same event (immediate
+  retry or a later retry from `sync_queue.jsonl`). Every other field is
+  unchanged from T02.
 - **Validation:** required fields present and correctly typed (a Pydantic
-  model, matching FastAPI's native validation); `image_jpeg_b64` optional
+  model, matching FastAPI's native validation); `event_id` must be a
+  well-formed ULID (26-char Crockford base32) — reject anything else with
+  `422` before it can become a Table `RowKey`; `image_jpeg_b64` optional
   but if present, decoded size capped (reject > 2 MB — a 10-frame 320x180
   JPEG snapshot is a few hundred KB at most, 2 MB gives headroom without
   allowing abuse); reject unknown extra fields (schema is closed, Pydantic
   `model_config = {"extra": "forbid"}`).
-- **Response:** `202 Accepted`, `{"event_id": "<ulid>"}` on success;
-  `422` on validation failure (FastAPI/Pydantic default); `401` on
-  missing/bad Basic Auth credential.
-- **Behavior:** generates the `event_id` (ULID) and `received_at` server-side,
-  writes the Table entity and (if present) the blob, in that order — if the
+- **Response:** `202 Accepted`, `{"event_id": "<ulid>"}` (echoes the
+  request's `event_id`) on success; `422` on validation failure
+  (FastAPI/Pydantic default); `401` on missing/bad Basic Auth credential.
+- **Behavior:** `received_at` is still assigned server-side (ADR-0001,
+  Risks: ordering tie-breaker). Writes the Table entity as an **upsert**
+  keyed on the client-supplied `event_id` (ADR-0014) — a retry of the same
+  `event_id` overwrites with identical data rather than erroring or
+  duplicating — then writes the blob (if present), in that order; if the
   blob write fails after the table write succeeds, the entity's `blob_name`
-  is left empty rather than the whole request failing (a metadata-only event
-  is still useful; a fully-failed ingest is not).
+  is left empty rather than the whole request failing (a metadata-only
+  event is still useful; a fully-failed ingest is not). A blob write is
+  itself idempotent for the same `event_id` (same blob name, overwrite),
+  so a retried event with an image is also safe to re-send in full.
 
 ### `GET /api/events?since=&limit=` (dashboard list — F04)
 
@@ -106,6 +127,14 @@ writer and the only reader.
   exposed to a second consumer (e.g. a future mobile app) that shouldn't
   share the dashboard's exact credential, that's the trigger to add a
   second auth mechanism — not needed today.
+- **(ADR-0014, new)** Ingest now trusts a client-supplied `event_id` as an
+  upsert key. This is not a new privilege beyond what the shared credential
+  already grants — an authenticated caller already has full read/write
+  access to the whole event history (ADR-0009); the credential, not
+  per-event authorization, is this system's real trust boundary. The ULID
+  format check rejects malformed values, not a malicious-but-well-formed
+  one — accepted, consistent with the rest of this system's single-shared-
+  credential trust model.
 
 ## Decisions
 
@@ -113,6 +142,7 @@ writer and the only reader.
 - ADR-0008 (one app serves API + dashboard UI).
 - ADR-0009 (shared fixed Basic Auth credential for every route).
 - ADR-0006 (single combined JSON+base64 POST vs. two-step SAS upload).
+- ADR-0014 (client-generated `event_id`, idempotent upsert ingest).
 
 ## Branch
 

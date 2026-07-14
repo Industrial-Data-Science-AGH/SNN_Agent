@@ -6,7 +6,7 @@
     {
       "id": "phase-0-one-day-build",
       "name": "One-day build: infra branch + dashboard branch, one PR",
-      "gate": "terraform validate clean; PR from feat/dashboard into feat/azure-cd deploys successfully; unauthenticated dashboard/ingest access rejected; a real Pi wake cycle produces a visible dashboard row within 30s; ruff+mypy clean across cloud/ and agent/",
+      "gate": "terraform validate clean; PR from feat/dashboard into feat/azure-cd deploys successfully; unauthenticated dashboard/ingest access rejected; a real Pi wake cycle produces a visible dashboard row within 30s; a retried event_id upserts instead of duplicating (ADR-0014); events pushed while offline appear once connectivity returns, via sync_queue.jsonl (ADR-0015); ruff+mypy clean across cloud/ and agent/",
       "tasks": [
         {
           "id": "T01",
@@ -26,8 +26,15 @@
           "id": "T03",
           "slug": "pi-push-client",
           "feature_id": "F03_pi_push_client",
-          "summary": "On feat/dashboard. agent/machine.py: capture email_sent from notifier.notify() outcome, add to _log_event()'s local record. agent/cloud_sync.py: build_payload()/push() with (3,5)s bounded timeout, shared Basic Auth credential from config.Settings, never raises. config.py: CLOUD_SYNC_* constants + Settings.cloud_sync_user/cloud_sync_password (optional, not required). Unit tests (mocked HTTP, mirrors tests/test_notifier.py). Open the feat/dashboard -> feat/azure-cd PR (triggers T01's pipeline); once deployed, manually trigger a real wake cycle on the Pi and confirm the event appears in the dashboard within 30s.",
+          "summary": "On feat/dashboard. agent/machine.py: generate event_id (ULID) at decision time, capture email_sent from notifier.notify() outcome, add both to _log_event()'s local record. agent/cloud_sync.py: build_payload()/push()/flush_queue() with (3,5)s bounded timeout, shared Basic Auth credential from config.Settings, never raises. agent/sync_queue.py (ADR-0015): bounded local JSONL queue (sync_queue.jsonl, cap 20 events, 5 flushed/cycle, 5 attempts/event before drop) -- enqueue on push failure, flush_queue() retries oldest-first after every cycle's own push, stopping at first failure. config.py: CLOUD_SYNC_*/SYNC_QUEUE_* constants + Settings.cloud_sync_user/cloud_sync_password (optional, not required). Unit tests for cloud_sync.py (mocked HTTP, mirrors tests/test_notifier.py) and sync_queue.py (cap eviction, attempts tracking, corrupted-line tolerance). Depends on T04 being deployed first (server must accept client-supplied event_id before this can push successfully). Open the feat/dashboard -> feat/azure-cd PR (triggers T01's pipeline); once deployed, manually trigger a real wake cycle and confirm the event appears within 30s, then run the offline-then-reconnect check (01-system-overview.md Evaluation Framework).",
           "security": ["authn-authz-secrets", "data-protection-and-crypto"]
+        },
+        {
+          "id": "T04",
+          "slug": "idempotent-ingest-retrofit",
+          "feature_id": "F01_ingest_api",
+          "summary": "On feat/dashboard, retrofitting T02's already-shipped cloud/app/ (ADR-0014, driven by T03's new local retry queue). schemas.py: EventIn gains a required event_id field, validated as a well-formed ULID (26-char Crockford base32), 422 on anything else. routes_api.py: ingest_event() no longer calls storage.generate_ulid() -- uses payload.event_id instead. storage.py: write_event() becomes an upsert (create_or_replace) keyed on the client-supplied event_id instead of a strict create, so a retried event_id overwrites identical data rather than erroring/duplicating; write_blob() is already overwrite=True and needs no change. Unit tests: upsert idempotency (same event_id posted twice yields one row, second response still 202 with the same event_id), malformed event_id rejected with 422. Must merge/deploy before T03's Pi-side retries have anything correct to push against.",
+          "security": ["api-endpoint-security", "authn-authz-secrets"]
         }
       ]
     }

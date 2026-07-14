@@ -9,11 +9,11 @@ digraph f01_flow {
   edge [color="#5B6B7B", fontname="Helvetica", fontsize=9, penwidth=1.1,
         arrowsize=0.8];
 
-  req    [label="POST /api/events\n(Basic Auth + JSON + base64 image)", shape=ellipse, style=dashed];
+  req    [label="POST /api/events\n(Basic Auth + JSON + base64 image + event_id)", shape=ellipse, style=dashed];
   authck [label="require_basic_auth()"];
-  schema [label="Validate Pydantic schema\n+ max image size", fillcolor="#FDF1D6"];
-  writet [label="Write metadata row\n(Table Storage)"];
-  writeb [label="Write image blob\n(Blob Storage)"];
+  schema [label="Validate Pydantic schema\n+ max image size + ULID event_id", fillcolor="#FDF1D6"];
+  writet [label="Upsert metadata row\n(Table Storage, keyed on event_id)"];
+  writeb [label="Write image blob\n(Blob Storage, overwrite)"];
   resp   [label="202 Accepted\n{event_id}", shape=ellipse, style=dashed];
   reject [label="401 / 422 rejected", shape=ellipse, style=dashed];
 

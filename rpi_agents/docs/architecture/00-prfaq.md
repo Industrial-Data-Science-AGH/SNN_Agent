@@ -1,16 +1,27 @@
 # PR/FAQ: Wake-Up AI Cloud Dashboard
 
+*(Tenet 2 revised 2026-07-14 — the Pi now retains events it couldn't push
+and retries them on later wake cycles, instead of dropping them
+permanently. See ADR-0014, ADR-0015.)*
+
 ## Tenets
 
 1. **The Pi's own contract comes first.** Nothing added by this feature may
    delay or block `agent/power.py`'s wake → decide → re-halt cycle beyond a
    short bounded timeout. This is an ultra-low-power device; the cloud push is
    an observer, never a dependency of the safety/alarm logic.
-2. **Best-effort telemetry, not guaranteed delivery.** The Pi has intermittent
-   connectivity (hotspot today, home Wi-Fi later). A missed push is logged
-   locally and forgotten — no retry queue, no store-and-forward, no delivery
-   guarantees. `event.log` on the Pi remains the system of record for what
-   actually happened; the cloud copy is a convenience view.
+2. **Best-effort telemetry, with bounded local durability — still not a
+   delivery guarantee.** The Pi has intermittent connectivity (hotspot
+   today, home Wi-Fi later). A missed push is queued locally (capped at 20
+   pending events) and retried on subsequent wake cycles — every wake is
+   already a fresh boot on this hardware, so "retry on powerup" and "retry
+   every cycle" are the same thing (ADR-0015). This is *bounded*
+   eventually-consistent delivery, not a guarantee: a long enough offline
+   stretch still drops the oldest queued events once the cap is reached,
+   and there is no unbounded store-and-forward. `event.log` on the Pi
+   remains the complete, uncapped system of record for what actually
+   happened; the cloud copy is a convenience view that now catches up
+   automatically instead of just going stale.
 3. **Lowest sustainable cost, not lowest today-only cost.** Every service
    choice defaults to a tier that is still ~$0/month after the student credit
    grant expires (Azure Container Apps Consumption free monthly grant,
@@ -65,10 +76,15 @@ A: Yes — that's the whole point. The dashboard reads from the cloud store, not
 the Pi, so it's available whenever the Pi is halted (which is nearly always).
 
 **Q: What if the Pi's network is down when it wakes?**
-A: The event stays in the local `event.log` as it does today; the cloud push
-is attempted with a short timeout, fails silently, and the wake cycle
-continues to re-halt on schedule. That event simply won't appear in the
-dashboard. This is accepted (see Tenet 2), not treated as an incident.
+A: The event stays in the local `event.log` as it does today, and is also
+queued locally (`sync_queue.jsonl`, capped at 20 pending events); the cloud
+push is attempted with a short timeout, fails silently, and the wake cycle
+continues to re-halt on schedule. That event won't appear in the dashboard
+*yet* — the next wake cycle (and every one after, up to 5 queued events per
+cycle) retries it until it succeeds, gets dropped after 5 failed attempts,
+or the queue cap evicts it to make room for newer events. This is a bounded
+catch-up, not a guarantee (see Tenet 2, ADR-0015) — not treated as an
+incident either way.
 
 **Q: Who can see the dashboard?**
 A: Anyone with the fixed credential (default `ids`/`ids`, changeable via an
@@ -140,7 +156,9 @@ is free (ADR-0012) — no fixed-cost resource (no VM, no ACR) is in the design.
 - Video clip upload (image only).
 - Multi-user accounts, federated identity, or sharing the dashboard with
   anyone but the holder of the one fixed credential (ADR-0009).
-- Retry/outbox queue for failed pushes (Tenet 2).
+- **Unbounded** retry/store-and-forward for failed pushes — a *bounded*
+  local sync queue (20 events, 5 retries/attempts each) is now in scope
+  (ADR-0015, revised Tenet 2); indefinite retention until delivery is not.
 - Push notifications to a phone (email already covers real-time alerting).
 - Credential rotation automation, staging environment, or deploy approval
   gates (ADR-0013) — accepted trade-offs for a single-owner hobby project

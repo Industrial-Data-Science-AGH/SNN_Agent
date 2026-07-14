@@ -19,3 +19,5 @@ inline in the ADRs below, mainly ADR-0007.
 | [0011](0011-terraform-not-bicep.md) | Terraform (azurerm provider) instead of Bicep | accepted | 2026-07-14 | F02_storage_infra, F01_ingest_api, F06_deployment_pipeline |
 | [0012](0012-ghcr-not-acr.md) | GitHub Container Registry (ghcr.io) instead of Azure Container Registry | accepted | 2026-07-14 | F06_deployment_pipeline |
 | [0013](0013-github-actions-cd.md) | GitHub Actions CD: PR from `feat/dashboard` into `feat/azure-cd` builds + deploys the Azure infra | accepted | 2026-07-14 | F06_deployment_pipeline |
+| [0014](0014-client-generated-event-id.md) | Pi generates `event_id` (ULID); ingest is an idempotent upsert | accepted | 2026-07-14 | F01_ingest_api, F03_pi_push_client |
+| [0015](0015-bounded-local-sync-queue.md) | Bounded local sync queue, flushed on every wake cycle (supersedes Tenet 2's original no-retry stance) | accepted | 2026-07-14 | F03_pi_push_client, F01_ingest_api |

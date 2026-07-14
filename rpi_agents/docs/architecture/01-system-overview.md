@@ -61,11 +61,15 @@ Terraform + GitHub Actions CD, all at the owner's explicit request.)*
   instead of only to `_log_event()`. `agent/machine.py::_log_event()` gains
   the `email_sent` field in its local JSON record too, so the local log and
   the cloud copy share one schema (see F03 design, Data model).
-- **New:** `agent/cloud_sync.py` (Pi push client, F03), `cloud/app/` (one
-  FastAPI container serving both the ingest/read API — F01 — and the
+- **New:** `agent/cloud_sync.py` (Pi push client, F03) and its local
+  `sync_queue.jsonl` backlog (bounded, 20 events — ADR-0015), `cloud/app/`
+  (one FastAPI container serving both the ingest/read API — F01 — and the
   dashboard UI — F04), `cloud/infra/` (Terraform for Storage + Container
   App, F02), Basic Auth middleware shared by F01/F04 (F05), and
   `.github/workflows/deploy.yml` (F06, new — build/push/apply pipeline).
+  `event_id` is generated on the Pi (ULID) and sent in the ingest payload;
+  `POST /api/events` upserts on it instead of generating its own, so a
+  queued retry is always safe (ADR-0014).
 - **Superseded, not reused:** the previous `dashboard/` package
   (`app.py`, `store.py`, `metrics.py`, `render.py`, `design.py` — source
   deleted, only stale `__pycache__` remains). It was architected as a
@@ -113,7 +117,11 @@ here means reliability against explicit SLOs, not accuracy.
 - **Online check:** manual E2E runbook step — trigger a real wake with
   network available, confirm the event, image, and reasoning appear in the
   dashboard, and that the `email_sent` flag matches what actually happened
-  (test both a successful send and a forced SMTP failure).
+  (test both a successful send and a forced SMTP failure). Additionally
+  (ADR-0015): trigger 2-3 wakes with network disabled, confirm they land in
+  `sync_queue.jsonl` and not the dashboard, then re-enable network and
+  confirm the next wake cycle flushes the backlog and all queued events
+  appear.
 - **De-risking spike:** none required. The one plausible unknown — Azure
   Functions Consumption cold-start latency — doesn't threaten the design
   because the push is fire-and-forget from the Pi's perspective (bounded
@@ -184,4 +192,4 @@ pass — flagged as a residual risk below):
 | No approval gate / automated security scanning on the CD pipeline | Vulnerable dependency or misconfig could ship straight to the live Container App | Accepted at single-owner hobby scale (ADR-0013); revisit if this ever gets a second user or higher-value data |
 | Event/image volume grows unbounded over time | Storage cost creep, slower client-side aggregation | Deferred retention-policy ADR once real volume is observed (see PR/FAQ Open questions) |
 | The one Basic Auth credential leaks or is left at the `ids`/`ids` default | Attacker can read all history/images and write fake events | HTTPS-only transport, credential is env-injected (not hardcoded), rotatable via a GitHub secret update with no code change; owner explicitly encouraged to change the default before exposing the app publicly (ADR-0009) |
-| Pi's Wi-Fi genuinely down at every wake for a stretch | Dashboard silently goes stale | Accepted per Tenet 2 — `event.log` on the Pi remains authoritative; no alerting on "missing pushes" in this phase |
+| Pi's Wi-Fi genuinely down at every wake for a stretch | Dashboard goes stale until reconnect, then catches up | Bounded local queue (20 events, ADR-0015) retries on every subsequent wake cycle once connectivity returns; beyond the cap the oldest queued events are still dropped, and `event.log` on the Pi remains the complete authoritative record regardless — no alerting on dropped/pending pushes in this phase |

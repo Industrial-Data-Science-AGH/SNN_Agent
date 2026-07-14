@@ -2,7 +2,7 @@
 .DS_Store
 .vscode/
 .idea/
-
+CLAUDE.md
 # Python
 **/__pycache__/
 **/*.py[cod]
@@ -26,3 +26,7 @@
 **/*.bin
 **/*.pt
 **/*.safetensors
+
+dataset/
+notebooks/
+architecture_14_neurons_patryk_09_07/spikes_csv

@@ -28,17 +28,29 @@
 #define FS_HZ        19231UL   // realna fs przy prescalerze 32
 #define HOP_SAMPLES  192       // 192 / 19231 Hz ~= 10.0 ms  <-- to jest dt sieci
 #define PULSE_MS     6         // < HOP_MS, inaczej impulsy się skleją
-#define N_CH         6
+#define N_CH         7
 
-#define PIN_BASE     2         // D2..D7
-#define PIN_MASK     0b11111100
+// Piny wyjściowe: kanały 0..5 -> PORTD bity 2..7 (D2..D7), kanał 6 -> PORTB bit 0 (D8).
+// Dwie instrukcje wystawienia (PORTD, PORTB) dają ~62 ns skewu — pomijalny vs impuls 6 ms.
+#define PIND_BASE    2         // kanały 0..5 na D2..D7
+#define PIND_MASK    0b11111100
+#define PINB_MASK    0b00000001 // kanał 6 na D8 (PORTB bit 0)
 
-// kolejność kanałów == kolejność kolumn s0..s5 w CSV i w pipeline
-enum Ch { CH_PEAK = 0, CH_PEAKCNT, CH_CREST, CH_CV, CH_ZCR, CH_FLUX };
+// v3: kolejność kanałów == kolumny s0..s6. `crest` (martwa) zastąpiona hf_lo/hf_hi.
+enum Ch { CH_PEAK = 0, CH_PEAKCNT, CH_CV, CH_ZCR, CH_FLUX, CH_HFLO, CH_HFHI };
 
-// progi w jednostkach z = (feature - floor) / (MAD + eps)
-// dostrój na swoim zbiorze: podnieś, jeśli tło strzela; obniż, jeśli szkło ucieka
-static float THR_Z[N_CH] = { 4.0, 3.5, 3.0, 3.0, 2.5, 3.5 };
+// progi z-score = (feature - floor) / (MAD + eps) — TYLKO kanały czasowe 0..4.
+// hf_lo/hf_hi (5,6) NIE używają z-score (patrz niżej), ich pola tu są nieużywane.
+static float THR_Z[N_CH] = { 4.0, 3.5, 3.0, 2.5, 3.5, 0.0, 0.0 };
+
+// --- cechy widmowe: hf_ratio = energia pasma górnego / energia ramki ---
+// hf_ratio to POZIOM (kształt widma), nie transient, więc NIE adaptujemy floora —
+// próg bezwzględny. Adaptacyjny floor odjąłby trwale wysokie HF szkła (zmierzone
+// w symulacji: z-score odwracał sygnał). hf_hi jest mocnym dowodem na szkło.
+#define HF_HP_SHIFT  1         // lp += (x-lp)>>1 => cutoff ~2.2 kHz; hf = x - lp
+#define HF_LO_THR    0.28f     // czuły: szkło ~58% ramek, negatywy ~2-4%
+#define HF_HI_THR    0.35f     // specyficzny: szkło ~41%, esc50/cisza/voice ~0-7%
+#define HF_GATE_MULT 1.5f      // hf strzela tylko gdy peak > 1.5*floor (nie na ciszy)
 
 // asymetryczna adaptacja floora: rośnie wolno, spada szybko -> śledzi poziom ciszy
 #define A_UP    0.0015f
@@ -53,6 +65,7 @@ static float THR_Z[N_CH] = { 4.0, 3.5, 3.0, 3.0, 2.5, 3.5 };
 
 volatile int32_t  acc_abs;      // suma |x|
 volatile uint64_t acc_sq;       // suma x^2
+volatile uint64_t acc_hf_sq;    // suma hf^2 (energia pasma górnego)
 volatile int16_t  acc_max;      // max |x|
 volatile uint16_t acc_zc;       // przejścia przez zero
 volatile uint16_t acc_pk;       // próbki powyżej progu mikro-szpilki
@@ -60,6 +73,7 @@ volatile uint16_t n_samp;
 volatile bool     frame_ready;
 
 volatile int16_t  dc_est   = 512 << 4;  // Q4, średnia bieżąca ADC
+volatile int16_t  hf_lp    = 0;         // 1-pole lowpass pasma górnego
 volatile int16_t  spike_thr = 40;       // próg mikro-szpilki, aktualizowany co ramkę
 static   int16_t  prev_sign = 0;
 
@@ -102,6 +116,11 @@ ISR(ADC_vect) {
   if (ax > acc_max) acc_max = ax;
   if (ax > spike_thr) acc_pk++;
 
+  // pasmo górne: 1-pole lowpass i odjęcie (hf = x - lp). Cutoff ~2.2 kHz.
+  hf_lp += (int16_t)((x - hf_lp) >> HF_HP_SHIFT);
+  int16_t hf = x - hf_lp;
+  acc_hf_sq += (uint32_t)((int32_t)hf * hf);
+
   int16_t s = (x >= 0) ? 1 : -1;
   if (s != prev_sign) { acc_zc++; prev_sign = s; }
 
@@ -127,7 +146,7 @@ static inline float updateFloor(uint8_t c, float v, bool freeze) {
  *  Używane w Fazie A/C kalibracji: szukasz najmniejszego n, przy którym płytka odpala.
  */
 void runCalibPulses(uint8_t pin, uint16_t n, uint16_t rate_hz) {
-  if (pin < PIN_BASE || pin > PIN_BASE + N_CH - 1) return;
+  if (pin < 2 || pin > 8) return;   // D2..D8 = 7 kanałów
   uint32_t period_us = 1000000UL / (rate_hz ? rate_hz : 100);
   if (period_us < (uint32_t)PULSE_MS * 1000UL + 500UL) period_us = (uint32_t)PULSE_MS * 1000UL + 500UL;
 
@@ -167,12 +186,13 @@ void handleSerial() {
 
 void setup() {
   Serial.begin(115200);
-  for (uint8_t p = PIN_BASE; p < PIN_BASE + N_CH; p++) pinMode(p, OUTPUT);
-  PORTD &= ~PIN_MASK;
+  for (uint8_t p = 2; p <= 8; p++) pinMode(p, OUTPUT);   // D2..D8 = 7 kanałów
+  PORTD &= ~PIND_MASK;
+  PORTB &= ~PINB_MASK;
   setupADC();
   sei();
-  Serial.println(F("# encoder_v2 dt=10ms pulse=6ms ch=peak,peak_cnt,crest,cv,zcr,flux"));
-  Serial.println(F("frame,s0,s1,s2,s3,s4,s5"));
+  Serial.println(F("# encoder_v2 dt=10ms pulse=6ms ch=peak,peak_cnt,cv,zcr,flux,hf_lo,hf_hi"));
+  Serial.println(F("frame,s0,s1,s2,s3,s4,s5,s6"));
 }
 
 void loop() {
@@ -180,17 +200,18 @@ void loop() {
 
   // wyłączenie impulsu — nieblokująco, wszystkie kanały razem
   if (pulse_active && (int32_t)(micros() - pulse_off_us) >= 0) {
-    PORTD &= ~PIN_MASK;
+    PORTD &= ~PIND_MASK;
+    PORTB &= ~PINB_MASK;
     pulse_active = false;
   }
 
   if (!frame_ready || calib_mode) return;
 
-  int32_t  s_abs; uint64_t s_sq; int16_t s_max; uint16_t s_zc, s_pk, s_n;
+  int32_t  s_abs; uint64_t s_sq, s_hf_sq; int16_t s_max; uint16_t s_zc, s_pk, s_n;
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-    s_abs = acc_abs; s_sq = acc_sq; s_max = acc_max;
+    s_abs = acc_abs; s_sq = acc_sq; s_hf_sq = acc_hf_sq; s_max = acc_max;
     s_zc = acc_zc;  s_pk = acc_pk;  s_n = n_samp;
-    acc_abs = 0; acc_sq = 0; acc_max = 0; acc_zc = 0; acc_pk = 0; n_samp = 0;
+    acc_abs = 0; acc_sq = 0; acc_hf_sq = 0; acc_max = 0; acc_zc = 0; acc_pk = 0; n_samp = 0;
     frame_ready = false;
   }
 
@@ -205,9 +226,11 @@ void loop() {
   float var_abs  = fmaxf(0.0f, (float)s_sq * inv_n - mean_abs * mean_abs);
   float cv       = sqrtf(var_abs) / (mean_abs + EPS);
 
-  float crest    = peak / (rms + EPS);
   float zcr      = (float)s_zc * inv_n;
   float peak_cnt = (float)s_pk;
+
+  // hf_ratio = udział energii pasma górnego w energii ramki (cecha widmowa)
+  float hf_ratio = (float)s_hf_sq / ((float)s_sq + EPS);
 
   // flux = tylko dodatni przyrost log-RMS (detektor ataku, nie wygaszania)
   float lr   = logf(rms + 1.0f);
@@ -218,7 +241,8 @@ void loop() {
   // próg mikro-szpilki na następną ramkę: 3x poziom tła obwiedni
   spike_thr = (int16_t)fminf(1023.0f, fmaxf(8.0f, 3.0f * (floor_v[CH_PEAK] + EPS)));
 
-  float feat[N_CH] = { peak, peak_cnt, crest, cv, zcr, flux };
+  // hf_lo/hf_hi dostają tę samą wartość hf_ratio (różni je próg bezwzględny niżej)
+  float feat[N_CH] = { peak, peak_cnt, cv, zcr, flux, hf_ratio, hf_ratio };
 
   // pierwsze ~0.5 s tylko primuje floory, nie strzela
   if (!floors_primed) {
@@ -228,25 +252,39 @@ void loop() {
     return;
   }
 
-  // --- progowanie + refrakcja ---------------------------------------------
-  uint8_t bits = 0;
-  for (uint8_t c = 0; c < N_CH; c++) {
-    bool above = (updateFloor(c, feat[c], /*freeze=*/false) > THR_Z[c]);
+  // bramka zdarzenia dla kanałów widmowych: hf_ratio na ciszy to szum z dzielenia,
+  // więc hf_lo/hf_hi strzelają tylko gdy ramka ma transient (peak nad floorem)
+  bool hf_gated = peak > HF_GATE_MULT * (floor_v[CH_PEAK] + EPS);
 
-    // zamrożenie adaptacji, gdy kanał jest w zdarzeniu: floor nie ma się uczyć szkła
-    if (above) { floor_v[c] -= A_UP * (feat[c] - floor_v[c]); }
+  // --- progowanie + refrakcja ---------------------------------------------
+  // fired: bitmapa logiczna (bit c = kanał c strzelił), niezależna od mapowania pinów
+  uint8_t fired = 0;
+  for (uint8_t c = 0; c < N_CH; c++) {
+    bool above;
+    if (c == CH_HFLO) {
+      above = hf_gated && (hf_ratio > HF_LO_THR);    // próg bezwzględny, bez floora
+    } else if (c == CH_HFHI) {
+      above = hf_gated && (hf_ratio > HF_HI_THR);
+    } else {
+      above = (updateFloor(c, feat[c], /*freeze=*/false) > THR_Z[c]);
+      // zamrożenie adaptacji, gdy kanał jest w zdarzeniu: floor nie ma się uczyć szkła
+      if (above) { floor_v[c] -= A_UP * (feat[c] - floor_v[c]); }
+    }
 
     if (above && refrac[c] == 0) {
-      bits |= (1 << (PIN_BASE + c));
+      fired |= (1 << c);
       refrac[c] = REFRAC_FRAMES;
     } else if (refrac[c]) {
       refrac[c]--;
     }
   }
 
-  // --- wystawienie impulsów: wszystkie kanały w tej samej mikrosekundzie ---
-  if (bits) {
-    PORTD |= bits;
+  // --- wystawienie impulsów: kanały 0..5 na PORTD, kanał 6 na PORTB ---
+  if (fired) {
+    uint8_t bitsD = (fired & 0x3F) << PIND_BASE;    // kanały 0..5 -> bity 2..7
+    uint8_t bitsB = (fired >> 6) & PINB_MASK;        // kanał 6     -> PORTB bit 0
+    PORTD |= bitsD;
+    PORTB |= bitsB;
     pulse_off_us = micros() + (uint32_t)PULSE_MS * 1000UL;
     pulse_active = true;
   }
@@ -255,7 +293,7 @@ void loop() {
     Serial.print(frame_idx);
     for (uint8_t c = 0; c < N_CH; c++) {
       Serial.print(',');
-      Serial.print((bits >> (PIN_BASE + c)) & 1);
+      Serial.print((fired >> c) & 1);
     }
     Serial.println();
   }

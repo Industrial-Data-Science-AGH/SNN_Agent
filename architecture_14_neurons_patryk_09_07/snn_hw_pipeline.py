@@ -14,19 +14,30 @@ Model neuronu odwzorowuje Lu.i, a nie snn.Leaky:
 Próg V_th = VDD/2 jest sprzętowo nieruchomy, więc jedyne, co możemy przesuwać,
 to wagi i V_leak. Warunek odpalenia: sum(w * PSP) >= V_th - V_leak.
 
+Harmonogram treningu (parametry idą 1:1 na PCB, stąd dwie fazy):
+    faza HAT  (epoki 0..hat)   — pełna precyzja wag + wstrzykiwany szum sprzętowy
+                                 (rozrzut trymera, tolerancja τ, rozdzielczość paska
+                                 V_leak), żeby rozwiązanie było odporne na ręczną
+                                 kalibrację, a nie tylko na idealne liczby.
+    faza QAT  (epoki hat..end) — kwantyzacja STE do W_LEVELS działek trymera
+                                 + martwa strefa; `best` resetowany, bo tylko
+                                 skwantyzowany checkpoint da się wykręcić na płytce.
+Znaki wag (przełączniki +/- na płytce) zamrażane pod koniec treningu.
+
 Użycie:
     python snn_hw_pipeline.py train   --data ./spikes_csv --out hw_config.json
     python snn_hw_pipeline.py train   --data ./spikes_csv --hw-params hw_params.json --out hw_config.json
+    python snn_hw_pipeline.py train   --data ./spikes_csv --limit 200 --epochs 8   # szybki smoke test
     python snn_hw_pipeline.py compare --sim sim.npz --hw hw_spikes.csv --layer H
 """
 from __future__ import annotations
 
-import argparse, glob, json, math, os, sys
+import argparse, glob, json, math, os, sys, time
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
+from torch.utils.data import Dataset, DataLoader, Subset, WeightedRandomSampler
 
 # ============================================================ stałe sprzętowe
 
@@ -39,10 +50,24 @@ W_MAX = 1.60                    # waga przy potencjometrze na pełnej skali
 W_DEADZONE = 0.05               # poniżej tego nie da się ustawić trymerem
 W_LEVELS = 20                   # realna rozdzielczość ręki na trymerze (~5% skali)
 
-CHANNELS = ["peak", "peak_cnt", "crest", "cv", "zcr", "flux"]
+# rozrzut sprzętowy wstrzykiwany w treningu (i w teście odporności):
+SIGMA_W_HW = 0.5 * W_MAX / W_LEVELS   # ręka ustawia trymer z dokładnością ~pół działki
+SIGMA_TAU_HW = 0.10                   # tolerancja RC / odczyt τ z Fazy A (mnożnikowo)
+SIGMA_VLEAK_HW = 0.02 * V_TH          # pasek LED ma skończoną rozdzielczość
 
-# maski łączności: [dla każdego neuronu post] lista indeksów pre, max 3
-MASK_H = [[0, 1, 2], [3, 4, 5], [0, 3, 5], [1, 2, 4]]   # 6 -> 4
+# v3: 7 kanałów (crest wymieniona na hf_lo + hf_hi — patrz encoder_twin.py)
+CHANNELS = ["peak", "peak_cnt", "cv", "zcr", "flux", "hf_lo", "hf_hi"]
+CH_IN = len(CHANNELS)
+
+# maski łączności: [dla każdego neuronu post] lista indeksów pre, max 3 (fan-in płytki).
+# Indeksy: 0 peak, 1 peak_cnt, 2 cv, 3 zcr, 4 flux, 5 hf_lo, 6 hf_hi (kod termometrowy
+# udziału energii HF). Każdy kanał trafia do >=1 płytki H; kanały widmowe (5,6)
+# rozłożone tak, że każda płytka H dostaje jeden z nich zmieszany z cechami czasowymi —
+# sieć od pierwszej epoki może uczyć się koniunkcji "głośne ORAZ wysokoczęstotliwościowe".
+MASK_H = [[0, 1, 5],    # H0: peak + peak_cnt + hf_lo (amplituda transientu + treść HF)
+          [2, 3, 6],    # H1: cv + zcr + hf_hi        (charakter widma + mocny HF)
+          [0, 4, 5],    # H2: peak + flux + hf_lo     (atak + treść HF)
+          [1, 4, 6]]    # H3: peak_cnt + flux + hf_hi (mikro-szpilki + mocny HF)
 MASK_G = [[0, 1, 2], [1, 2, 3], [2, 3, 0]]              # 4 -> 3
 MASK_O = [[0, 1, 2]]                                    # 3 -> 1  (dokładnie 3 wejścia)
 
@@ -104,10 +129,11 @@ def _inv_map(v, lo, hi):
 class LuiLayer(nn.Module):
     """Warstwa płytek Lu.i. tau/V_leak per neuron, wagi maskowane i kwantyzowane."""
 
-    def __init__(self, n_pre, n_post, mask, names, hw=None, quantize=True):
+    def __init__(self, n_pre, n_post, mask, names, hw=None, quantize=False):
         super().__init__()
         self.n_pre, self.n_post, self.names = n_pre, n_post, names
-        self.quantize = quantize
+        self.quantize = quantize          # włączane dopiero w fazie QAT
+        self.mismatch_active = False      # szum sprzętowy (HAT / test odporności)
         self.register_buffer("mask", dense_mask(mask, n_pre, n_post))
 
         w = torch.randn(n_post, n_pre) * 0.5
@@ -157,16 +183,27 @@ class LuiLayer(nn.Module):
     def forward(self, s_in):
         """s_in: [B, T, n_pre] -> (spikes [B,T,n_post], V [B,T,n_post])"""
         B, T, _ = s_in.shape
-        a = torch.exp(torch.tensor(-DT) / self.tau_syn())
-        b = torch.exp(torch.tensor(-DT) / self.tau_mem())
-        vl, W = self.v_leak(), self.weights()
+        ts, tm, vl, W = self.tau_syn(), self.tau_mem(), self.v_leak(), self.weights()
+
+        if self.mismatch_active:
+            # szum tylko na istniejących synapsach — losowy trymer na W=0 tworzyłby
+            # połączenie, którego na płytce fizycznie nie ma
+            W = W + (W.detach() != 0).float() * torch.randn_like(W) * SIGMA_W_HW
+            ts = (ts * torch.exp(torch.randn_like(ts) * SIGMA_TAU_HW)).clamp(*TAU_SYN_RANGE)
+            tm = (tm * torch.exp(torch.randn_like(tm) * SIGMA_TAU_HW)).clamp(*TAU_MEM_RANGE)
+            vl = (vl + torch.randn_like(vl) * SIGMA_VLEAK_HW).clamp(0.0, V_LEAK_MAX)
+
+        a = torch.exp(-DT / ts)
+        b = torch.exp(-DT / tm)
+        # jedno GEMM na całą sekwencję zamiast T małych wewnątrz pętli
+        inj = F.linear(s_in, W)            # [B, T, n_post]
 
         I = torch.zeros(B, self.n_post, device=s_in.device)
         V = vl.expand(B, -1).clone()
         out_s, out_v = [], []
 
         for t in range(T):
-            I = a * I + F.linear(s_in[:, t], W)
+            I = a * I + inj[:, t]
             V = b * V + (1.0 - b) * vl + I
             out_v.append(V)            # zapis PRZED resetem — stąd płynie gradient straty
             s = spike_fn(V - V_TH)
@@ -176,9 +213,9 @@ class LuiLayer(nn.Module):
 
 
 class LuiNet(nn.Module):
-    def __init__(self, hw=None, quantize=True):
+    def __init__(self, hw=None, quantize=False):
         super().__init__()
-        self.H = LuiLayer(6, 4, MASK_H, NAMES_H, hw, quantize)
+        self.H = LuiLayer(CH_IN, 4, MASK_H, NAMES_H, hw, quantize)
         self.G = LuiLayer(4, 3, MASK_G, NAMES_G, hw, quantize)
         self.O = LuiLayer(3, 1, MASK_O, NAMES_O, hw, quantize)
 
@@ -195,52 +232,124 @@ class LuiNet(nn.Module):
         for l in self.layers():
             l.freeze_signs()
 
+    def set_quantize(self, flag: bool):
+        for l in self.layers():
+            l.quantize = flag
+
+    def set_mismatch(self, flag: bool):
+        for l in self.layers():
+            l.mismatch_active = flag
+
 
 # ============================================================ dane
 
 class SpikeClips(Dataset):
     """Każdy CSV = jeden klip. Kolumny: frame,s0..s5 (+ opcjonalnie label).
-    Bez kolumny label: etykieta 1, jeśli w nazwie pliku jest 'glass'/'szklo'."""
+    Bez kolumny label: etykieta 1, jeśli w nazwie pliku jest 'glass'/'szklo'.
 
-    def __init__(self, root, T=200, stride=50):
-        self.win, self.lab = [], []
+    Okna trzymane jako uint8 (spiki są 0/1), cache w .npz obok danych —
+    parsowanie ~10k CSV trwa minuty, wczytanie cache sekundy. Każde okno
+    pamięta indeks pliku źródłowego, żeby split walidacyjny szedł po PLIKACH:
+    okna zachodzą na siebie (stride < T), więc split po oknach przecieka."""
+
+    def __init__(self, root, T=200, stride=50, limit=None):
         files = sorted(glob.glob(os.path.join(root, "**", "*.csv"), recursive=True))
         if not files:
             sys.exit(f"brak CSV w {root}")
-        for f in files:
-            arr = np.genfromtxt(f, delimiter=",", names=True)
-            s = np.stack([arr[f"s{i}"] for i in range(6)], -1).astype(np.float32)
-            if "label" in arr.dtype.names:
-                y = float(np.max(arr["label"]))
+        if limit:
+            pos = [f for f in files if self._name_label(f)][:limit]
+            neg = [f for f in files if not self._name_label(f)][:limit]
+            files = sorted(pos + neg)
+
+        cache = os.path.join(root, f"_cache_T{T}_s{stride}.npz")
+        sig = f"{len(files)}|{sum(os.path.getsize(f) for f in files)}|" \
+              f"{max(os.path.getmtime(f) for f in files):.0f}|{limit}"
+        if os.path.exists(cache):
+            try:
+                z = np.load(cache, allow_pickle=False)
+                ok = str(z["sig"]) == sig
+            except (EOFError, ValueError, OSError):
+                ok = False   # cache ucięty (np. równoległy zapis) — przebuduj
+            if ok:
+                self.win, self.lab, self.fidx = z["win"], z["lab"], z["fidx"]
+                self.file_lab = z["file_lab"]
+                print(f"[data] cache: {len(self.lab)} okien, pozytywnych "
+                      f"{int(self.lab.sum())} ({100*self.lab.mean():.1f}%)", flush=True)
+                return
+
+        wins, labs, fidxs, file_labs = [], [], [], []
+        t0 = time.time()
+        for fi, f in enumerate(files):
+            with open(f) as fh:
+                header = fh.readline().strip().split(",")
+                arr = np.loadtxt(fh, delimiter=",", ndmin=2, dtype=np.float32)
+            if arr.size == 0:
+                arr = np.zeros((0, len(header)), dtype=np.float32)
+            s = arr[:, 1:1 + CH_IN].astype(np.uint8)
+            if "label" in header:
+                y = float(arr[:, header.index("label")].max()) if len(arr) else 0.0
             else:
-                nm = os.path.basename(f).lower()
-                y = 1.0 if ("glass" in nm or "szklo" in nm) else 0.0
+                y = float(self._name_label(f))
+            file_labs.append(y)
             if len(s) < T:
                 s = np.pad(s, ((0, T - len(s)), (0, 0)))
             for i in range(0, len(s) - T + 1, stride):
-                self.win.append(s[i:i + T])
-                self.lab.append(y)
-        self.win = np.stack(self.win)
-        self.lab = np.array(self.lab, dtype=np.float32)
-        print(f"[data] {len(self.lab)} okien, pozytywnych {int(self.lab.sum())} "
-              f"({100*self.lab.mean():.1f}%)")
+                wins.append(s[i:i + T])
+                labs.append(y)
+                fidxs.append(fi)
+            if fi % 1000 == 999:
+                print(f"[data] {fi+1}/{len(files)} plików ({time.time()-t0:.0f}s)", flush=True)
+
+        self.win = np.stack(wins)
+        self.lab = np.array(labs, dtype=np.float32)
+        self.fidx = np.array(fidxs, dtype=np.int32)
+        self.file_lab = np.array(file_labs, dtype=np.float32)
+        # zapis atomowy: temp per-proces + rename, żeby równoległe treningi nigdy
+        # nie czytały pliku w połowie zapisu (wcześniej dawało EOFError)
+        tmp = f"{cache}.tmp{os.getpid()}"
+        np.savez_compressed(tmp, win=self.win, lab=self.lab, fidx=self.fidx,
+                            file_lab=self.file_lab, sig=sig)
+        os.replace(tmp + ".npz" if not tmp.endswith(".npz") else tmp, cache)
+        print(f"[data] {len(self.lab)} okien z {len(files)} plików, pozytywnych "
+              f"{int(self.lab.sum())} ({100*self.lab.mean():.1f}%), "
+              f"cache -> {cache}", flush=True)
+
+    @staticmethod
+    def _name_label(f):
+        nm = os.path.basename(f).lower()
+        return "glass" in nm or "szklo" in nm
 
     def __len__(self):
         return len(self.lab)
 
     def __getitem__(self, i):
-        return torch.from_numpy(self.win[i]), torch.tensor(self.lab[i])
+        return torch.from_numpy(self.win[i]).float(), torch.tensor(self.lab[i])
 
 
-def make_sampler(labels):
+def split_by_file(ds, val_frac=0.2, seed=0):
+    """Stratyfikowany podział po plikach źródłowych (nie po oknach)."""
+    rng = np.random.default_rng(seed)
+    va_files = []
+    for c in (0.0, 1.0):
+        fs = np.where(ds.file_lab == c)[0]
+        rng.shuffle(fs)
+        va_files.extend(fs[:max(1, int(val_frac * len(fs)))])
+    va_mask = np.isin(ds.fidx, va_files)
+    return np.where(~va_mask)[0], np.where(va_mask)[0]
+
+
+def make_sampler(labels, num_samples):
+    """Balans klas + stały budżet okien na epokę: 10x więcej danych ma dawać
+    więcej różnorodności między epokami, a nie 10x dłuższą epokę."""
     counts = np.bincount(labels.astype(int), minlength=2).astype(float)
     w = (1.0 / np.maximum(counts, 1))[labels.astype(int)]
-    return WeightedRandomSampler(torch.from_numpy(w).double(), len(w), replacement=True)
+    return WeightedRandomSampler(torch.from_numpy(w).double(),
+                                 min(num_samples, len(w)), replacement=True)
 
 
 # ============================================================ strata
 
-def loss_fn(out, y, pos_weight, rate_lo=0.02, rate_hi=0.30):
+def loss_fn(out, y, pos_weight, rate_lo=0.02, rate_hi=0.30, margin_w=0.5, spk_w=0.0):
     # logit = jak wysoko membrana wyjściowa doszła w całym oknie.
     # Dokładnie to widzisz na 7. diodzie: "czy kiedykolwiek przekroczyła próg".
     vmax = out["vo"].max(dim=1).values
@@ -258,7 +367,21 @@ def loss_fn(out, y, pos_weight, rate_lo=0.02, rate_hi=0.30):
         r = out[k].mean(dim=(0, 1))
         reg = reg + ((rate_lo - r).clamp(min=0) ** 2).sum() + ((r - rate_hi).clamp(min=0) ** 2).sum()
 
-    return bce + 0.5 * margin + 0.2 * reg, logit
+    total = bce + margin_w * margin + 0.2 * reg
+
+    # zliczanie spików D: reguła dekodera "k spików w oknie" jest dyskryminująca
+    # tylko wtedy, gdy szkło daje SERIĘ spików, a tło żadnego. Sam vmax-BCE tego
+    # nie wymusza — nagradza jedno przekroczenie progu i toleruje pojedyncze
+    # spiki na tle (stąd setki alarmów/h w symulacji strumieniowej).
+    if spk_w > 0:
+        nspk = out["so"].sum(dim=(1, 2)).clamp(max=5.0)
+        pos = (y > 0.5).float()
+        neg = 1.0 - pos
+        spk = ((2.0 - nspk).clamp(min=0) * pos).sum() / pos.sum().clamp(min=1) \
+            + (nspk * neg).sum() / neg.sum().clamp(min=1)
+        total = total + spk_w * spk
+
+    return total, logit
 
 
 @torch.no_grad()
@@ -276,6 +399,50 @@ def evaluate(model, loader, dev):
     pre = tp / max(tp + fp, 1)
     f1 = 2 * pre * rec / max(pre + rec, 1e-9)
     return {"recall": rec, "precision": pre, "f1": f1}
+
+
+@torch.no_grad()
+def evaluate_events(model, base, indices, dev, ks=(1, 2, 3), bs=256):
+    """Metryki na poziomie KLIPÓW — to, co widać na żywym demie: czy nagranie
+    szkła budzi system i ile klipów tła robi fałszywy alarm. Reguła decyzyjna:
+    klip alarmuje, gdy którekolwiek okno ma >= k spików neuronu D. k > 1 może
+    egzekwować dekoder (zliczanie impulsów z J4) bez zmian w analogu."""
+    model.eval()
+    indices = np.asarray(indices)
+    nspk = np.zeros(len(indices))
+    for lo in range(0, len(indices), bs):
+        chunk = indices[lo:lo + bs]
+        x = torch.from_numpy(base.win[chunk]).float().to(dev)
+        nspk[lo:lo + len(chunk)] = model(x)["so"].sum(dim=(1, 2)).cpu().numpy()
+
+    fidx, lab = base.fidx[indices], base.lab[indices]
+    files = np.unique(fidx)
+    f_lab = np.array([lab[fidx == f].max() for f in files])
+    f_spk = np.array([nspk[fidx == f].max() for f in files])
+
+    res = {}
+    n_pos, n_neg = int((f_lab == 1).sum()), int((f_lab == 0).sum())
+    for k in ks:
+        det = f_spk >= k
+        rec = float(det[f_lab == 1].mean()) if n_pos else 0.0
+        fa = float(det[f_lab == 0].mean()) if n_neg else 0.0
+        res[f"k{k}"] = {"clip_recall": round(rec, 4), "clip_fa_rate": round(fa, 4)}
+        print(f"[zdarzenia] k={k}: wykryte {100*rec:.1f}% klipów glass, "
+              f"fałszywy alarm w {100*fa:.1f}% klipów tła "
+              f"({n_pos} glass / {n_neg} tła)", flush=True)
+    return res
+
+
+@torch.no_grad()
+def robustness_check(model, loader, dev, n_passes=5):
+    """Monte Carlo pod ręczną kalibrację: F1 przy losowym rozrzucie trymerów,
+    τ i V_leak (te same sigmy co w treningu HAT). Szum losowany per batch,
+    więc jeden przebieg już uśrednia wiele realizacji płytek."""
+    model.set_mismatch(True)
+    f1s = [evaluate(model, loader, dev)["f1"] for _ in range(n_passes)]
+    model.set_mismatch(False)
+    return {"f1_mean": float(np.mean(f1s)), "f1_min": float(np.min(f1s)),
+            "f1_passes": [round(f, 4) for f in f1s]}
 
 
 # ============================================================ eksport pod trymery
@@ -297,8 +464,10 @@ def pulses_to_fire(w, tau_syn, tau_mem, v_leak, rate_hz=100.0, max_n=60):
     return None
 
 
-def export_config(model, path):
+def export_config(model, path, extra=None):
     cfg = {"dt_s": DT, "v_th": V_TH, "channels": CHANNELS, "boards": {}}
+    if extra:
+        cfg.update(extra)
     pre_names = [CHANNELS, NAMES_H, NAMES_G]
 
     for layer, pres in zip(model.layers(), pre_names):
@@ -353,7 +522,7 @@ def export_config(model, path):
     with open(path, "w") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
 
-    print(f"\n[export] {path}")
+    print(f"\n[export] {path}", flush=True)
     print(f"{'płytka':6} {'τ_syn':>8} {'τ_mem':>9} {'pasek LED':>10}  synapsy")
     for n, b in cfg["boards"].items():
         s = "  ".join(f"{x['port']}={x['from']}{x['sign']}{x['pot_pct']:.0f}%"
@@ -369,51 +538,149 @@ def train(args):
     if hw:
         print(f"[hw] zamrażam zmierzone τ dla {len(hw)} płytek — trenuję wagi i V_leak")
 
-    ds = SpikeClips(args.data, T=args.T, stride=args.stride)
-    n_val = max(1, int(0.2 * len(ds)))
-    tr, va = torch.utils.data.random_split(ds, [len(ds) - n_val, n_val],
-                                           generator=torch.Generator().manual_seed(0))
-    tr_lab = ds.lab[tr.indices]
-    dl_tr = DataLoader(tr, batch_size=args.bs, sampler=make_sampler(tr_lab))
-    dl_va = DataLoader(va, batch_size=args.bs)
+    if args.val_data:
+        # gotowy podział po plikach z manifestu (build-manifest w encoder_twin.py)
+        ds_tr = SpikeClips(args.data, T=args.T, stride=args.stride, limit=args.limit)
+        ds_va = SpikeClips(args.val_data, T=args.T, stride=args.stride)
+        tr_ds, tr_lab = ds_tr, ds_tr.lab
+        va_ds = ds_va
+        va_base, va_indices = ds_va, np.arange(len(ds_va))
+        print(f"[split] train {len(tr_lab)} okien / val {len(va_ds)} okien "
+              f"(katalogi manifestu, val pos {100*ds_va.lab.mean():.1f}%)", flush=True)
+    else:
+        ds = SpikeClips(args.data, T=args.T, stride=args.stride, limit=args.limit)
+        tr_idx, va_idx = split_by_file(ds, val_frac=0.2, seed=0)
+        tr_ds, tr_lab = Subset(ds, tr_idx), ds.lab[tr_idx]
+        va_ds = Subset(ds, va_idx)
+        va_base, va_indices = ds, va_idx
+        print(f"[split] train {len(tr_idx)} okien / val {len(va_idx)} okien "
+              f"(po plikach, val pos {100*ds.lab[va_idx].mean():.1f}%)", flush=True)
 
-    model = LuiNet(hw=hw, quantize=not args.no_quant).to(dev)
+    dl_tr = DataLoader(tr_ds, batch_size=args.bs,
+                       sampler=make_sampler(tr_lab, args.num_samples))
+    # per-epokowa walidacja na stałej próbce (pełna byłaby ~1/3 kosztu epoki);
+    # pełny zbiór walidacyjny idzie dopiero na koniec i do testu odporności
+    rng = np.random.default_rng(1)
+    if len(va_ds) > args.val_cap:
+        va_sub = rng.choice(len(va_ds), size=args.val_cap, replace=False)
+        dl_va = DataLoader(Subset(va_ds, va_sub), batch_size=256)
+    else:
+        dl_va = DataLoader(va_ds, batch_size=256)
+    dl_va_full = DataLoader(va_ds, batch_size=256)
+
+    model = LuiNet(hw=hw, quantize=False).to(dev)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, args.epochs)
 
-    best = -1.0
+    hat_epochs = 0 if args.no_quant else int(round(args.hat_frac * args.epochs))
+    freeze_ep = int(0.8 * args.epochs)
+    print(f"[plan] HAT (pełna precyzja + szum sprzętowy): epoki 0..{hat_epochs-1}, "
+          f"QAT (kwantyzacja {W_LEVELS} działek): {hat_epochs}..{args.epochs-1}, "
+          f"znaki zamrożone od {freeze_ep}, patience {args.patience}", flush=True)
+
+    log_f = open(args.log, "w", buffering=1)
+    log_f.write("epoch,phase,loss,recall,precision,f1,lr,sec\n")
+
+    best, since_best = -1.0, 0
     for ep in range(args.epochs):
-        # znaki wag = przełączniki +/- na płytce. Zamrażamy je pod koniec,
-        # żeby ostatnie epoki nie przerzucały polaryzacji synapsy w tę i z powrotem.
-        if ep == int(0.8 * args.epochs):
+        t0 = time.time()
+        phase = "HAT" if ep < hat_epochs else "QAT"
+
+        if ep == hat_epochs and not args.no_quant:
+            model.set_quantize(True)
+            # tylko skwantyzowany checkpoint da się przenieść na trymery —
+            # reset best, żeby QAT nie przegrywał z niekwantyzowanym HAT
+            best, since_best = -1.0, 0
+            print(f"[ep {ep}] start QAT: kwantyzacja włączona, reset best", flush=True)
+        if ep == freeze_ep:
             model.freeze_signs()
-            print(f"[ep {ep}] znaki wag zamrożone")
+            print(f"[ep {ep}] znaki wag zamrożone (przełączniki +/- ustalone)", flush=True)
 
         model.train()
+        model.set_mismatch(True)
+        loss_sum, n_b = 0.0, 0
         for x, y in dl_tr:
             x, y = x.to(dev), y.to(dev)
-            loss, _ = loss_fn(model(x), y, args.pos_weight)
+            if args.aug:
+                # augmentacja spike-trainów: gubienie pojedynczych spików (enkoder
+                # na sprzęcie też nie jest deterministyczny) + wspólne przesunięcie
+                # czasowe — zdarzenie nie zawsze zaczyna się w tej samej ramce okna
+                x = x * (torch.rand_like(x) > 0.05).float()
+                x = torch.roll(x, shifts=int(torch.randint(-3, 4, (1,))), dims=1)
+            loss, _ = loss_fn(model(x), y, args.pos_weight, margin_w=args.margin_w,
+                              spk_w=args.spk_w)
             opt.zero_grad(); loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
+            loss_sum += loss.item(); n_b += 1
+        model.set_mismatch(False)
         sched.step()
 
         m = evaluate(model, dl_va, dev)
-        # checkpoint po recallu: fałszywy alarm irytuje, przespane szkło kompromituje
-        score = m["recall"] + 0.3 * m["precision"]
-        if score > best:
-            best = score
-            torch.save(model.state_dict(), args.ckpt)
-            tag = " *"
+        # checkpoint po F1: recall+0.3*precision łapał się na zdegenerowanych
+        # wczesnych epokach ("zgłaszaj wszystko"). F1 karze to wprost.
+        if m["f1"] > best:
+            best, since_best, tag = m["f1"], 0, " *"
+            torch.save({"model": model.state_dict(), "epoch": ep, "phase": phase,
+                        "metrics": m}, args.ckpt)
         else:
+            since_best += 1
             tag = ""
-        if ep % 5 == 0 or tag:
-            print(f"ep {ep:3d} loss {loss.item():.4f}  rec {m['recall']:.3f} "
-                  f"prec {m['precision']:.3f} f1 {m['f1']:.3f}{tag}")
+        sec = time.time() - t0
+        lr_now = sched.get_last_lr()[0]
+        log_f.write(f"{ep},{phase},{loss_sum/max(n_b,1):.4f},{m['recall']:.4f},"
+                    f"{m['precision']:.4f},{m['f1']:.4f},{lr_now:.5f},{sec:.1f}\n")
+        print(f"ep {ep:3d} [{phase}] loss {loss_sum/max(n_b,1):.4f}  rec {m['recall']:.3f} "
+              f"prec {m['precision']:.3f} f1 {m['f1']:.3f}  {sec:.0f}s{tag}", flush=True)
 
-    model.load_state_dict(torch.load(args.ckpt))
-    print("\n[best]", evaluate(model, dl_va, dev))
-    export_config(model, args.out)
+        # early stopping liczony osobno w każdej fazie (reset przy starcie QAT);
+        # w HAT nie zatrzymuje treningu, tylko skraca fazę
+        if since_best >= args.patience:
+            if phase == "HAT":
+                print(f"[ep {ep}] HAT bez poprawy od {args.patience} epok — "
+                      f"przechodzę do QAT", flush=True)
+                hat_epochs = ep + 1
+            else:
+                print(f"[ep {ep}] QAT bez poprawy od {args.patience} epok — stop", flush=True)
+                break
+
+    log_f.close()
+    state = torch.load(args.ckpt)
+    sd = state["model"] if "model" in state else state   # kompatybilność ze starym best.pt
+    if not args.no_quant:
+        model.set_quantize(True)
+    model.load_state_dict(sd)
+
+    final = evaluate(model, dl_va_full, dev)
+    rob = robustness_check(model, dl_va_full, dev)
+    print(f"\n[best] epoka {state.get('epoch','?')} ({state.get('phase','?')}), "
+          f"pełna walidacja: rec {final['recall']:.3f} prec {final['precision']:.3f} "
+          f"f1 {final['f1']:.3f}")
+    print(f"[odporność] F1 pod rozrzutem sprzętowym (±½ działki trymera, ±10% τ, "
+          f"±2% V_leak): mean {rob['f1_mean']:.3f}, min {rob['f1_min']:.3f}", flush=True)
+    if final["f1"] - rob["f1_mean"] > 0.05:
+        print("[!] duży spadek F1 pod rozrzutem — kalibracja we wtorek musi być "
+              "dokładna; rozważ dłuższą fazę HAT (--hat-frac)")
+
+    print("[zdarzenia] walidacja (poziom klipów):")
+    ev_va = evaluate_events(model, va_base, va_indices, dev)
+    extra = {
+        "val_metrics": {k: round(v, 4) for k, v in final.items()},
+        "val_events": ev_va,
+        "robustness": rob,
+        "best_epoch": state.get("epoch"),
+    }
+    if args.test_data:
+        ds_te = SpikeClips(args.test_data, T=args.T, stride=args.stride)
+        te = evaluate(model, DataLoader(ds_te, batch_size=256), dev)
+        print(f"[test] rec {te['recall']:.3f} prec {te['precision']:.3f} "
+              f"f1 {te['f1']:.3f}", flush=True)
+        print("[zdarzenia] test (poziom klipów):")
+        ev_te = evaluate_events(model, ds_te, np.arange(len(ds_te)), dev)
+        extra["test_metrics"] = {k: round(v, 4) for k, v in te.items()}
+        extra["test_events"] = ev_te
+
+    export_config(model, args.out, extra=extra)
 
 
 # ============================================================ sim vs hw
@@ -448,15 +715,40 @@ def main():
 
     t = sub.add_parser("train")
     t.add_argument("--data", required=True)
+    t.add_argument("--val-data", default=None,
+                   help="osobny katalog walidacyjny (podział z manifestu); "
+                        "bez niego: losowy podział po plikach 80/20")
+    t.add_argument("--test-data", default=None,
+                   help="osobny katalog testowy — ewaluowany raz, na końcu")
     t.add_argument("--out", default="hw_config.json")
     t.add_argument("--ckpt", default="best.pt")
+    t.add_argument("--log", default="train_log.csv")
     t.add_argument("--hw-params", default=None, help="zmierzone τ per płytka (Faza A)")
     t.add_argument("--epochs", type=int, default=120)
-    t.add_argument("--bs", type=int, default=32)
+    t.add_argument("--bs", type=int, default=128)
     t.add_argument("--lr", type=float, default=3e-3)
     t.add_argument("--T", type=int, default=200, help="ramek na okno (200 = 2 s)")
     t.add_argument("--stride", type=int, default=50)
     t.add_argument("--pos-weight", type=float, default=3.0)
+    t.add_argument("--margin-w", type=float, default=0.5,
+                   help="waga marginesu na negatywach (tło ma nie podchodzić pod próg)")
+    t.add_argument("--spk-w", type=float, default=0.0,
+                   help="waga straty zliczania spików D: szkło >=2 spiki, tło 0 "
+                        "(potrzebna, żeby reguła dekodera 'k spików w oknie' działała)")
+    t.add_argument("--hat-frac", type=float, default=0.4,
+                   help="ułamek epok w fazie HAT (pełna precyzja + szum sprzętowy)")
+    t.add_argument("--patience", type=int, default=20,
+                   help="epoki bez poprawy F1: w HAT skraca fazę, w QAT kończy trening")
+    t.add_argument("--num-samples", type=int, default=12000,
+                   help="okien na epokę (stały budżet niezależny od rozmiaru zbioru)")
+    t.add_argument("--val-cap", type=int, default=4000,
+                   help="okien walidacyjnych per epokę (pełna walidacja na końcu)")
+    t.add_argument("--limit", type=int, default=None,
+                   help="max plików na klasę (smoke test)")
+    t.add_argument("--seed", type=int, default=0,
+                   help="seed inicjalizacji — mała sieć ma dużą wariancję od startu")
+    t.add_argument("--no-aug", dest="aug", action="store_false",
+                   help="wyłącz augmentację spike-trainów (dropout+jitter)")
     t.add_argument("--no-quant", action="store_true")
     t.set_defaults(func=train)
 
@@ -467,7 +759,8 @@ def main():
     c.set_defaults(func=compare)
 
     args = ap.parse_args()
-    torch.manual_seed(0); np.random.seed(0)
+    seed = getattr(args, "seed", 0)
+    torch.manual_seed(seed); np.random.seed(seed)
     args.func(args)
 
 

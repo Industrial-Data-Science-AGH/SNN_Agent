@@ -10,6 +10,8 @@ WorkingDirectory=__WORKDIR__
 Environment=SNN_AGENT_POWER_MODE=halt
 Environment=SNN_AGENT_LOG_LEVEL=INFO
 Environment=SNN_AGENT_VAR_DIR=__VAR_DIR__
+# Bring-up only: piezo buzzer not wired yet. Remove this line once it is.
+Environment=SNN_AGENT_BUZZER_ENABLED=false
 ExecStart=__VENV__/bin/python -m agent.main
 StandardOutput=journal
 StandardError=journal

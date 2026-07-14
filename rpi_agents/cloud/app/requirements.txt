@@ -1,0 +1,9 @@
+# cloud/app — the real ingest/dashboard app (T02, replaces T01's placeholder
+# dependency list). azure-data-tables/azure-storage-blob back storage.py, the
+# sole module that talks to Azure Storage (F02 design). jinja2 renders
+# routes_dashboard.py's server-rendered pages (F04 design, ADR-0008).
+fastapi>=0.111,<1.0
+uvicorn[standard]>=0.30,<1.0
+jinja2>=3.1,<4.0
+azure-data-tables>=12.5,<13.0
+azure-storage-blob>=12.20,<13.0

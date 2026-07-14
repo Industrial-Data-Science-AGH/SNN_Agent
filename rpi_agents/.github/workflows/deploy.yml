@@ -1,0 +1,116 @@
+# T01 — CD pipeline (docs/plans/T01-azure-infra-and-cd-pipeline.md,
+# docs/architecture/features/F06-deployment-pipeline/design.md, ADR-0013).
+#
+# Trigger: PRs opened/synchronized against feat/azure-cd specifically — a PR
+# against any other branch does nothing (F06 design, Security: limits blast
+# radius). Concretely, this is feat/dashboard -> feat/azure-cd.
+#
+# Repo secrets this workflow needs (Settings > Secrets and variables >
+# Actions). The first three are the ones named explicitly in the T01/F06
+# docs; the rest (Azure auth for `terraform apply`, and the two values
+# identifying the manually-bootstrapped remote-state backend) are not
+# spelled out in those docs and were added here to make the pipeline
+# actually runnable — flagged in this task's summary, confirm before first
+# run:
+#   GHCR_PULL_TOKEN            - GitHub PAT, read:packages only (ADR-0012)
+#   DASHBOARD_PASSWORD          - Basic Auth password (ADR-0009)
+#   STORAGE_CONNECTION_STRING   - set after T01's first apply creates the
+#                                  Storage Account (chicken-and-egg on the
+#                                  very first run; see plan Notes)
+#   ARM_CLIENT_ID, ARM_CLIENT_SECRET, ARM_TENANT_ID, ARM_SUBSCRIPTION_ID
+#                                - Service Principal so `terraform apply` can
+#                                  authenticate to Azure from CI
+#   TF_STATE_RESOURCE_GROUP, TF_STATE_STORAGE_ACCOUNT_NAME
+#                                - identify the manually-bootstrapped remote
+#                                  state backend (main.tf's partial
+#                                  `backend "azurerm"` block)
+
+name: Deploy
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches: [feat/azure-cd]
+
+# A single, fixed group (not per-PR) — the risk this guards against is two
+# concurrent applies racing on the *same* remote Terraform state, which is
+# shared regardless of which PR triggered the run (F06 design, Risks;
+# ADR-0011, Risks). Queue, never cancel a live apply mid-flight.
+concurrency:
+  group: terraform-apply
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}/dashboard
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push placeholder image
+        uses: docker/build-push-action@v6
+        with:
+          context: cloud/app
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        working-directory: cloud/infra
+        run: >
+          terraform init
+          -backend-config="resource_group_name=${{ secrets.TF_STATE_RESOURCE_GROUP }}"
+          -backend-config="storage_account_name=${{ secrets.TF_STATE_STORAGE_ACCOUNT_NAME }}"
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+      - name: Terraform plan
+        working-directory: cloud/infra
+        run: >
+          terraform plan -input=false -out=tfplan
+          -var "environment=dev"
+          -var "image_tag=${{ github.sha }}"
+          -var "github_repository=${{ github.repository }}"
+          -var "dashboard_password=${{ secrets.DASHBOARD_PASSWORD }}"
+          -var "storage_connection_string=${{ secrets.STORAGE_CONNECTION_STRING }}"
+          -var "ghcr_pull_token=${{ secrets.GHCR_PULL_TOKEN }}"
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+      # No manual approval gate exists (ADR-0013, accepted at single-owner
+      # hobby scale) — the plan output above, visible in the run log, is
+      # the owner's only chance to notice something unexpected before this
+      # step runs.
+      - name: Terraform apply
+        working-directory: cloud/infra
+        run: terraform apply -input=false -auto-approve tfplan
+        env:
+          ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}

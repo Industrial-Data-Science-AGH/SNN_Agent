@@ -45,3 +45,24 @@ def test_devices_partial_init_does_not_leak_led(monkeypatch):
     assert actuators._led is None
     assert actuators._buzzer is None
     assert Device.pin_factory.pin(config.LED_PIN).state == 0
+
+
+def test_buzzer_disabled_skips_buzzer_entirely(monkeypatch):
+    """With BUZZER_ENABLED=False, no Buzzer is constructed and alarm_on only drives the LED."""
+    monkeypatch.setattr(config, "BUZZER_ENABLED", False)
+    led, buzzer = actuators._devices()
+    assert buzzer is None
+
+    actuators.alarm_on()
+    assert Device.pin_factory.pin(config.LED_PIN).state == 1
+
+    actuators.alarm_off()
+    assert Device.pin_factory.pin(config.LED_PIN).state == 0
+
+
+def test_buzzer_disabled_self_test_skips_beep(monkeypatch):
+    """self_test() must not touch the buzzer when BUZZER_ENABLED=False."""
+    monkeypatch.setattr(config, "BUZZER_ENABLED", False)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    actuators.self_test()  # must not raise even with piezo unwired
+    assert actuators._buzzer is None

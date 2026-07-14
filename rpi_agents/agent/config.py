@@ -18,6 +18,10 @@ LED_PIN: int = 17
 BUZZER_PIN: int = 27
 """GPIO pin for piezo buzzer (active high). Bring-up TBD."""
 
+BUZZER_ENABLED: bool = os.getenv("SNN_AGENT_BUZZER_ENABLED", "true").strip().lower() != "false"
+"""If False, buzzer hardware is skipped entirely (LED-only bring-up).
+Set SNN_AGENT_BUZZER_ENABLED=false on the Pi while the piezo isn't wired yet."""
+
 WAKE_CONFIRM_PIN: int = 3
 """GPIO pin receiving SNN trigger (active low; must level-shift 5V→3.3V).
 Bring-up TBD."""

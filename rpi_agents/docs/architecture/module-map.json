@@ -1,0 +1,35 @@
+{
+  "project": "wakeup-ai-cloud-dashboard",
+  "modules": [
+    {
+      "feature_id": "F02_storage_infra",
+      "name": "Azure Storage (Blob + Table) infra, Terraform",
+      "depends_on": []
+    },
+    {
+      "feature_id": "F06_deployment_pipeline",
+      "name": "Terraform Container App + GitHub Actions CD (PR-triggered)",
+      "depends_on": ["F02_storage_infra"]
+    },
+    {
+      "feature_id": "F01_ingest_api",
+      "name": "FastAPI ingest + read routes (single Container App)",
+      "depends_on": ["F02_storage_infra", "F06_deployment_pipeline"]
+    },
+    {
+      "feature_id": "F03_pi_push_client",
+      "name": "Pi-side cloud push client",
+      "depends_on": ["F01_ingest_api"]
+    },
+    {
+      "feature_id": "F04_dashboard_ui",
+      "name": "Dashboard UI (server-rendered, same app as F01)",
+      "depends_on": ["F01_ingest_api"]
+    },
+    {
+      "feature_id": "F05_auth_and_secrets",
+      "name": "Shared fixed Basic Auth + secrets via Terraform/GitHub Actions",
+      "depends_on": ["F01_ingest_api", "F04_dashboard_ui"]
+    }
+  ]
+}

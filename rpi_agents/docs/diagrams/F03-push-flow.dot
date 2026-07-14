@@ -1,0 +1,25 @@
+digraph f03_flow {
+  rankdir=TB;
+  size="6.5,9!";
+  ratio=compress;
+  bgcolor="transparent";
+  splines=polyline;
+  node [shape=box, style="rounded,filled", fillcolor="#F4F6F8",
+        color="#3A4756", fontname="Helvetica", fontsize=11, penwidth=1.2];
+  edge [color="#5B6B7B", fontname="Helvetica", fontsize=9, penwidth=1.1,
+        arrowsize=0.8];
+
+  decide [label="machine.run_cycle()\ndecision + email_sent known", shape=ellipse, style=dashed];
+  build  [label="cloud_sync.build_payload()\n(record + jpeg snapshot)"];
+  post   [label="cloud_sync.push()\nPOST, timeout=(3,5)s", fillcolor="#FDF1D6"];
+  ok     [label="log success (debug)", shape=ellipse, style=dashed];
+  fail   [label="log warning, swallow\n(never raises)", shape=ellipse, style=dashed];
+  resleep[label="power.resleep()\n(unaffected either way)", shape=ellipse, style=dashed];
+
+  decide -> build  [label="1"];
+  build  -> post   [label="2"];
+  post   -> ok     [label="3a: 2xx within timeout"];
+  post   -> fail   [label="3b: timeout / error / non-2xx"];
+  ok     -> resleep [label="4"];
+  fail   -> resleep [label="4"];
+}

@@ -1,0 +1,28 @@
+digraph f01_flow {
+  rankdir=TB;
+  size="6.5,9!";
+  ratio=compress;
+  bgcolor="transparent";
+  splines=polyline;
+  node [shape=box, style="rounded,filled", fillcolor="#F4F6F8",
+        color="#3A4756", fontname="Helvetica", fontsize=11, penwidth=1.2];
+  edge [color="#5B6B7B", fontname="Helvetica", fontsize=9, penwidth=1.1,
+        arrowsize=0.8];
+
+  req    [label="POST /api/events\n(Basic Auth + JSON + base64 image)", shape=ellipse, style=dashed];
+  authck [label="require_basic_auth()"];
+  schema [label="Validate Pydantic schema\n+ max image size", fillcolor="#FDF1D6"];
+  writet [label="Write metadata row\n(Table Storage)"];
+  writeb [label="Write image blob\n(Blob Storage)"];
+  resp   [label="202 Accepted\n{event_id}", shape=ellipse, style=dashed];
+  reject [label="401 / 422 rejected", shape=ellipse, style=dashed];
+
+  req    -> authck [label="1"];
+  authck -> reject  [label="2a: bad credential"];
+  authck -> schema  [label="2b: ok"];
+  schema -> reject  [label="3a: invalid"];
+  schema -> writet  [label="3b: valid"];
+  schema -> writeb  [label="3b: valid"];
+  writet -> resp    [label="4"];
+  writeb -> resp    [label="4"];
+}

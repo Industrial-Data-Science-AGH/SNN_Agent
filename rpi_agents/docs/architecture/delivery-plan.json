@@ -1,0 +1,35 @@
+{
+  "project": "wakeup-ai-cloud-dashboard",
+  "toolchain": "python",
+  "package": "agent",
+  "phases": [
+    {
+      "id": "phase-0-one-day-build",
+      "name": "One-day build: infra branch + dashboard branch, one PR",
+      "gate": "terraform validate clean; PR from feat/dashboard into feat/azure-cd deploys successfully; unauthenticated dashboard/ingest access rejected; a real Pi wake cycle produces a visible dashboard row within 30s; ruff+mypy clean across cloud/ and agent/",
+      "tasks": [
+        {
+          "id": "T01",
+          "slug": "azure-infra-and-cd-pipeline",
+          "feature_id": "F06_deployment_pipeline",
+          "summary": "Branch feat/azure-cd. Terraform (cloud/infra/): Storage Account (Blob 'snapshots' + Table 'events', F02), Container App Environment + Container App (scale-to-zero, F01/F04/F05 runtime), ghcr.io pull credential, secret/env blocks for DASHBOARD_PASSWORD + Storage connection string. GitHub Actions workflow (.github/workflows/deploy.yml) triggered on PR (opened/synchronize) into feat/azure-cd: build cloud/app/Dockerfile, push to ghcr.io, terraform apply. Prove the pipeline once against a placeholder image before feat/dashboard exists.",
+          "security": ["api-endpoint-security", "authn-authz-secrets", "supply-chain-security"]
+        },
+        {
+          "id": "T02",
+          "slug": "fastapi-dashboard-app",
+          "feature_id": "F01_ingest_api",
+          "summary": "Branch feat/dashboard (off feat/rpi). cloud/app/: FastAPI app with POST/GET /api/events, GET /api/events/{id} (F01), require_basic_auth() dependency applied globally (F05, shared ids/ids-default credential), server-rendered dashboard pages -- event list, real/false/email-rate metrics band, per-event detail with image + Gemini reasoning + email status (F04). Pydantic schema validation + 2MB image cap on ingest. Unit tests for auth rejection and payload validation.",
+          "security": ["api-endpoint-security", "authn-authz-secrets", "data-protection-and-crypto"]
+        },
+        {
+          "id": "T03",
+          "slug": "pi-push-client",
+          "feature_id": "F03_pi_push_client",
+          "summary": "On feat/dashboard. agent/machine.py: capture email_sent from notifier.notify() outcome, add to _log_event()'s local record. agent/cloud_sync.py: build_payload()/push() with (3,5)s bounded timeout, shared Basic Auth credential from config.Settings, never raises. config.py: CLOUD_SYNC_* constants + Settings.cloud_sync_user/cloud_sync_password (optional, not required). Unit tests (mocked HTTP, mirrors tests/test_notifier.py). Open the feat/dashboard -> feat/azure-cd PR (triggers T01's pipeline); once deployed, manually trigger a real wake cycle on the Pi and confirm the event appears in the dashboard within 30s.",
+          "security": ["authn-authz-secrets", "data-protection-and-crypto"]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+digraph f05_flow {
+  rankdir=TB;
+  size="6.5,9!";
+  ratio=compress;
+  bgcolor="transparent";
+  splines=polyline;
+  node [shape=box, style="rounded,filled", fillcolor="#F4F6F8",
+        color="#3A4756", fontname="Helvetica", fontsize=11, penwidth=1.2];
+  edge [color="#5B6B7B", fontname="Helvetica", fontsize=9, penwidth=1.1,
+        arrowsize=0.8];
+
+  visit  [label="Owner opens dashboard URL", shape=ellipse, style=dashed];
+  prompt [label="Browser shows native\nBasic Auth prompt"];
+  send   [label="Authorization: Basic\n<user:pass base64>"];
+  check  [label="require_basic_auth()\nsecrets.compare_digest()", fillcolor="#FDF1D6"];
+  denied [label="401 + WWW-Authenticate\n(wrong/no credential)", shape=ellipse, style=dashed];
+  allowed[label="Request proceeds\nto the route handler"];
+  route  [label="Dashboard page or\nGET/POST /api/events"];
+
+  visit  -> prompt  [label="1: 401 on first hit"];
+  prompt -> send    [label="2: owner enters ids/pass"];
+  send   -> check   [label="3"];
+  check  -> denied  [label="4a: mismatch"];
+  check  -> allowed [label="4b: match"];
+  allowed -> route  [label="5"];
+}

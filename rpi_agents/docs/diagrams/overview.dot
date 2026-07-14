@@ -1,0 +1,56 @@
+digraph overview {
+  rankdir=TB;
+  size="6.5,9!";
+  ratio=compress;
+  bgcolor="transparent";
+  splines=polyline;
+  nodesep=0.35;
+  ranksep=0.55;
+
+  node [shape=box, style="rounded,filled", fillcolor="#F4F6F8",
+        color="#3A4756", fontname="Helvetica", fontsize=11, penwidth=1.2];
+  edge [color="#5B6B7B", fontname="Helvetica", fontsize=9, penwidth=1.1,
+        arrowsize=0.8];
+
+  subgraph cluster_pi {
+    label="Raspberry Pi 5 (halted most of the time)";
+    style=dashed; color="#8A97A5";
+    machine  [label="agent.machine\nrun_cycle()"];
+    notifier [label="agent.notifier\nemail alert"];
+    push     [label="agent.cloud_sync\n(F03) best-effort push", fillcolor="#E7F0F7"];
+    eventlog [label="event.log\n(local system of record)", shape=cylinder];
+  }
+
+  owner [label="Owner (browser,\nBasic Auth ids/ids)", shape=ellipse, style=dashed];
+
+  subgraph cluster_gh {
+    label="GitHub";
+    style=dashed; color="#8A97A5";
+    dashboard_branch [label="feat/dashboard\n(app code)", shape=ellipse, style=dashed];
+    pr [label="PR into feat/azure-cd", fillcolor="#FDF1D6"];
+    gha [label="GitHub Actions\nbuild -> ghcr.io -> terraform apply\n(F06)"];
+  }
+
+  subgraph cluster_azure {
+    label="Azure (lowest-cost tier)";
+    style=dashed; color="#8A97A5";
+    app   [label="Container App\n(FastAPI: API + dashboard UI)\nF01 + F04 + F05, Basic Auth", fillcolor="#FDF1D6"];
+    blob  [label="Blob Storage\n(snapshot images)\nF02", shape=cylinder];
+    table [label="Table Storage\n(event metadata)\nF02", shape=cylinder];
+  }
+
+  machine -> notifier [label="1: alarm"];
+  machine -> eventlog [label="2: append record"];
+  machine -> push [label="3: decision + image"];
+  push -> app [label="4: POST /api/events\n(Basic Auth, bounded timeout)"];
+  app -> blob [label="5: store snapshot"];
+  app -> table [label="5: store metadata"];
+
+  dashboard_branch -> pr [label="6"];
+  pr -> gha [label="7: triggers"];
+  gha -> app [label="8: deploy new image"];
+
+  owner -> app [label="9: GET /, /api/events\n(Basic Auth)"];
+  app -> table [label="10: read"];
+  app -> blob [label="10: short-lived SAS"];
+}

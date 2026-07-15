@@ -556,6 +556,10 @@ def evaluate(model: GlassBreakSNN, loader: DataLoader, device: torch.device) -> 
         "precision": precision,
         "recall": recall,
         "f1": f1,
+        "tp": tp,
+        "tn": tn,
+        "fp": fp,
+        "fn": fn,
     }
 
 
@@ -596,6 +600,14 @@ def train(
                 f"f1={train_metrics['f1']:.3f} | "
                 f"val_loss={val_metrics['loss']:.4f}, val_acc={val_metrics['accuracy']:.3f}, "
                 f"val_f1={val_metrics['f1']:.3f}"
+            )
+            print(
+                f"  Confusion matrix (train): TN={train_metrics['tn']} FP={train_metrics['fp']} "
+                f"FN={train_metrics['fn']} TP={train_metrics['tp']}"
+            )
+            print(
+                f"  Confusion matrix (val): TN={val_metrics['tn']} FP={val_metrics['fp']} "
+                f"FN={val_metrics['fn']} TP={val_metrics['tp']}"
             )
             if val_metrics["f1"] > best_val_f1:
                 best_val_f1 = val_metrics["f1"]
@@ -707,11 +719,19 @@ def main() -> None:
     print("\n=== Hardware Parameter Mapping ===")
     beta_val = model.lif_hidden.beta.item()
     threshold_val = model.lif_hidden.threshold.item()
-    tau_mem = 1.0 / (1.0 - beta_val) if beta_val < 1.0 else float("inf")
+
+    # beta is unconstrained during training (learn_beta=True can push it >= 1,
+    # which isn't a valid leak rate for a physical LIF neuron). Clamp for
+    # reporting so tau_mem/pot_value stay finite and meaningful.
+    beta_val_clamped = min(max(beta_val, 0.0), 0.999)
+    if beta_val != beta_val_clamped:
+        print(f"NOTE: learned beta={beta_val:.4f} was outside valid (0,1) range, "
+            f"clamped to {beta_val_clamped:.4f} for hardware mapping.")
+
+    tau_mem = 1.0 / (1.0 - beta_val_clamped)
     pot_value = max(0, min(255, int(round((tau_mem - 1.0) / 10.0 * 255))))
-    print(f"Hidden layer: beta={beta_val:.4f}, tau_mem={tau_mem:.4f}, pot_value={pot_value} (threshold={threshold_val:.4f})")
-    print(f"Normalization params (for Arduino): MAX_HF_RATIO={cfg.max_hf_ratio_val:.4f}, "
-          f"MAX_ZCR={cfg.max_zcr_val:.4f}, MAX_CREST={cfg.max_crest_val:.4f}")
+    print(f"Hidden layer: beta={beta_val_clamped:.4f}, tau_mem={tau_mem:.4f}, "
+        f"pot_value={pot_value} (threshold={threshold_val:.4f})")
 
 
 if __name__ == "__main__":

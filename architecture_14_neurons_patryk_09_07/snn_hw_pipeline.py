@@ -75,6 +75,34 @@ NAMES_H = ["H0", "H1", "H2", "H3"]
 NAMES_G = ["G0", "G1", "G2"]
 NAMES_O = ["D"]
 
+# --- wariant SZEROKI (wide): H rozszerzona do 8 płytek, do wykorzystania 15 płytek ---
+# G nadal 3 (D ma fan-in 3), więc dodatkowa pojemność idzie w H. 8 płytek H, każda
+# fan-in 3, wszystkie 7 kanałów pokryte, kanały widmowe (5,6) rozłożone po połowie płytek.
+MASK_H8 = [[0, 1, 5],   # H0: peak, peak_cnt, hf_lo
+           [2, 3, 6],   # H1: cv, zcr, hf_hi
+           [0, 4, 5],   # H2: peak, flux, hf_lo
+           [1, 4, 6],   # H3: peak_cnt, flux, hf_hi
+           [0, 3, 6],   # H4: peak, zcr, hf_hi
+           [1, 2, 5],   # H5: peak_cnt, cv, hf_lo
+           [3, 4, 5],   # H6: zcr, flux, hf_lo
+           [2, 4, 6]]   # H7: cv, flux, hf_hi
+MASK_G8 = [[0, 1, 2],   # G0: H0,H1,H2
+           [3, 4, 5],   # G1: H3,H4,H5
+           [6, 7, 0]]   # G2: H6,H7,H0  (8 wyjść H -> 9 slotów G, H0 współdzielone)
+NAMES_H8 = ["H0", "H1", "H2", "H3", "H4", "H5", "H6", "H7"]
+
+
+def topo(wide):
+    """Zwraca (mask_h, n_h, names_h, mask_g) dla wariantu wąskiego/szerokiego."""
+    if wide:
+        return MASK_H8, 8, NAMES_H8, MASK_G8
+    return MASK_H, 4, NAMES_H, MASK_G
+
+
+def infer_wide(state_dict):
+    """Czy checkpoint jest wariantem szerokim — po liczbie płytek H (H.w wiersze)."""
+    return state_dict["H.w"].shape[0] == 8
+
 
 def dense_mask(mask, n_pre, n_post):
     m = torch.zeros(n_post, n_pre)
@@ -213,10 +241,12 @@ class LuiLayer(nn.Module):
 
 
 class LuiNet(nn.Module):
-    def __init__(self, hw=None, quantize=False):
+    def __init__(self, hw=None, quantize=False, wide=False):
         super().__init__()
-        self.H = LuiLayer(CH_IN, 4, MASK_H, NAMES_H, hw, quantize)
-        self.G = LuiLayer(4, 3, MASK_G, NAMES_G, hw, quantize)
+        mask_h, n_h, names_h, mask_g = topo(wide)
+        self.wide = wide
+        self.H = LuiLayer(CH_IN, n_h, mask_h, names_h, hw, quantize)
+        self.G = LuiLayer(n_h, 3, mask_g, NAMES_G, hw, quantize)
         self.O = LuiLayer(3, 1, MASK_O, NAMES_O, hw, quantize)
 
     def forward(self, x):
@@ -445,6 +475,38 @@ def robustness_check(model, loader, dev, n_passes=5):
             "f1_passes": [round(f, 4) for f in f1s]}
 
 
+@torch.no_grad()
+def robustness_check_ensemble(model, loader, dev, n_passes=8, k_of=3, need=2):
+    """Odporność z ENSEMBLE na neuronie decyzyjnym: warstwy H i G liczone raz
+    (jeden zestaw fizycznych płytek, ze swoim rozrzutem), a neuron D powielony
+    `k_of` razy z NIEZALEŻNYM rozrzutem trymerów, decyzja głosem `need`-z-`k_of`.
+    To mierzy, czy uśrednienie rozrzutu 3 kopii D podnosi najgorszy przypadek F1
+    (bo to rozrzut przy ręcznej kalibracji jest realnym ryzykiem)."""
+    model.set_mismatch(True)
+    f1s = []
+    for _ in range(n_passes):
+        tp = fp = fn = 0
+        for x, y in loader:
+            x, y = x.to(dev), y.to(dev)
+            sh, _ = model.H(x)        # H raz (z szumem tego przebiegu)
+            sg, _ = model.G(sh)       # G raz
+            votes = torch.zeros(x.shape[0], device=dev)
+            for _c in range(k_of):    # D powielony, każdy z własnym szumem
+                _, vo = model.O(sg)
+                vmax = vo.squeeze(-1).max(dim=1).values
+                votes += (vmax >= V_TH).float()
+            p = (votes >= need).float()
+            tp += ((p == 1) & (y == 1)).sum().item()
+            fp += ((p == 1) & (y == 0)).sum().item()
+            fn += ((p == 0) & (y == 1)).sum().item()
+        rec = tp / max(tp + fn, 1)
+        pre = tp / max(tp + fp, 1)
+        f1s.append(2 * pre * rec / max(pre + rec, 1e-9))
+    model.set_mismatch(False)
+    return {"f1_mean": float(np.mean(f1s)), "f1_min": float(np.min(f1s)),
+            "vote": f"{need}-z-{k_of}", "f1_passes": [round(f, 4) for f in f1s]}
+
+
 # ============================================================ eksport pod trymery
 
 def pulses_to_fire(w, tau_syn, tau_mem, v_leak, rate_hz=100.0, max_n=60):
@@ -468,7 +530,7 @@ def export_config(model, path, extra=None):
     cfg = {"dt_s": DT, "v_th": V_TH, "channels": CHANNELS, "boards": {}}
     if extra:
         cfg.update(extra)
-    pre_names = [CHANNELS, NAMES_H, NAMES_G]
+    pre_names = [CHANNELS, model.H.names, model.G.names]   # auto: 4 lub 8 płytek H
 
     for layer, pres in zip(model.layers(), pre_names):
         W = layer.weights().detach()
@@ -568,7 +630,9 @@ def train(args):
         dl_va = DataLoader(va_ds, batch_size=256)
     dl_va_full = DataLoader(va_ds, batch_size=256)
 
-    model = LuiNet(hw=hw, quantize=False).to(dev)
+    model = LuiNet(hw=hw, quantize=False, wide=args.wide).to(dev)
+    if args.wide:
+        print("[topo] wariant SZEROKI: H=8 płytek (7→8→3→1)", flush=True)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, args.epochs)
 
@@ -622,7 +686,7 @@ def train(args):
         if m["f1"] > best:
             best, since_best, tag = m["f1"], 0, " *"
             torch.save({"model": model.state_dict(), "epoch": ep, "phase": phase,
-                        "metrics": m}, args.ckpt)
+                        "metrics": m, "wide": args.wide}, args.ckpt)
         else:
             since_best += 1
             tag = ""
@@ -662,13 +726,19 @@ def train(args):
         print("[!] duży spadek F1 pod rozrzutem — kalibracja we wtorek musi być "
               "dokładna; rozważ dłuższą fazę HAT (--hat-frac)")
 
+    rob_ens = robustness_check_ensemble(model, dl_va_full, dev)
+    print(f"[odporność+ensemble] potrójny D, głos {rob_ens['vote']}: "
+          f"mean {rob_ens['f1_mean']:.3f}, min {rob_ens['f1_min']:.3f}", flush=True)
+
     print("[zdarzenia] walidacja (poziom klipów):")
     ev_va = evaluate_events(model, va_base, va_indices, dev)
     extra = {
         "val_metrics": {k: round(v, 4) for k, v in final.items()},
         "val_events": ev_va,
         "robustness": rob,
+        "robustness_ensemble": rob_ens,
         "best_epoch": state.get("epoch"),
+        "wide": bool(args.wide),
     }
     if args.test_data:
         ds_te = SpikeClips(args.test_data, T=args.T, stride=args.stride)
@@ -749,6 +819,8 @@ def main():
                    help="seed inicjalizacji — mała sieć ma dużą wariancję od startu")
     t.add_argument("--no-aug", dest="aug", action="store_false",
                    help="wyłącz augmentację spike-trainów (dropout+jitter)")
+    t.add_argument("--wide", action="store_true",
+                   help="wariant szeroki 7→8→3→1 (H=8 płytek, do wykorzystania 15 płytek)")
     t.add_argument("--no-quant", action="store_true")
     t.set_defaults(func=train)
 

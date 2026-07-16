@@ -18,7 +18,7 @@ import argparse, glob, os, sys
 import numpy as np
 import torch
 
-from snn_hw_pipeline import LuiNet, DT, V_LEAK_MAX, _inv_map, CH_IN
+from snn_hw_pipeline import LuiNet, DT, V_LEAK_MAX, _inv_map, CH_IN, infer_wide
 
 REFRAC_FRAMES = 500   # po alarmie system i tak budzi reaktor — 5 s martwej strefy
 
@@ -103,9 +103,10 @@ def main():
                          "fizycznie = niższy pasek LED na płytce D, zero zmian w treningu)")
     args = ap.parse_args()
 
-    model = LuiNet()
     state = torch.load(args.ckpt, map_location="cpu")
-    model.load_state_dict(state["model"] if "model" in state else state)
+    sd = state["model"] if "model" in state else state
+    model = LuiNet(wide=infer_wide(sd))     # auto: 4 lub 8 płytek H
+    model.load_state_dict(sd)
     if not args.no_quant:
         model.set_quantize(True)
     model.eval()

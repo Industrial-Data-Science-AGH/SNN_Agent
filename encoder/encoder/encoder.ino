@@ -2,7 +2,7 @@
 //  SNN Spike Encoder — Arduino  (Wersja 3-Kanałowa)
 //  Projekt: detekcja rozbijanego szkła
 //
-//  Wejście:  mikrofon (WM61-A) na pinie A0
+//  Wejście:  mikrofon MAX 4466 na pinie A0
 //  Wyjścia:  3 piny cyfrowe (Kanał 0: Peak, Kanał 1: Mean, Kanał 2: Std)
 //  Modyfikacja: Dostosowano pod układ LUI (Szerokość impulsu ~15ms)
 // ============================================================
@@ -31,7 +31,8 @@ void setup() {
 
 #if AUTO_CALIBRATE
   calStartMs = millis();
-  Serial.println(F("=== TRYB KALIBRACJI — 5 sekund ==="));
+  Serial.println(F("=== TRYB KALIBRACJI — 10 sekund ==="));
+  Serial.println(F("Puszczaj dzwieki stluczonego szkla"));
 #else
   Serial.println(F("=== SNN 3-Channel Encoder START ==="));
   #if ENCODER_MODE == RATE_CODING

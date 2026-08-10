@@ -43,11 +43,13 @@ const float LP_ALPHA[3] = {1.0f, 0.4f, 0.4f};
 
 #if AUTO_CALIBRATE == 0
   // domyślne wartości dla mikrofonu ze wzmocnieniem i bez
-  #define STRENGTHENED 0
+  // teraz daje wartosci dla mikrofonu ze wzmaczniaczem
+  // na podstawie średniej z kiklu dźwięków szkła
+  #define STRENGTHENED 1
     #if STRENGTHENED
-      #define MAX_PEAK_VAL   950.0f 
-      #define MAX_MEAN_VAL   520.0f
-      #define MAX_STD_VAL    0.4f
+      #define MAX_PEAK_VAL   597.3f
+      #define MAX_MEAN_VAL   563.8f
+      #define MAX_STD_VAL    0.03f
     #else
       #define MAX_PEAK_VAL   556.6f 
       #define MAX_MEAN_VAL   519.2f

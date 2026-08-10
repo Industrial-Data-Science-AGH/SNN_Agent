@@ -5,10 +5,7 @@ Cyfrowy bliźniak enkodera `encoder_v2.ino` w Pythonie.
 """
 from __future__ import annotations
 
-import csv
-import glob
 import math
-import os
 import wave
 from typing import Callable, Iterable
 

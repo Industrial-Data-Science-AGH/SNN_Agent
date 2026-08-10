@@ -3,6 +3,7 @@ digital_twin_encoder.py
 ========================
 Cyfrowy bliźniak enkodera `encoder_v2.ino` w Pythonie.
 """
+
 from __future__ import annotations
 
 import math
@@ -20,9 +21,11 @@ A_UP, A_DN, A_MAD, EPS = 0.0015, 0.0300, 0.0100, 1e-6
 PRIME_FRAMES = 50
 SPIKE_THR_INIT = 40.0
 
+
 def simulate_adc_raw(normalized_samples: np.ndarray, gain: float = 1.0) -> np.ndarray:
     x = normalized_samples.astype(np.float64)
     return np.clip(512.0 + x * 512.0 * gain, 0.0, 1023.0)
+
 
 def remove_dc(raw: np.ndarray) -> np.ndarray:
     b = [DC_ALPHA]
@@ -31,11 +34,18 @@ def remove_dc(raw: np.ndarray) -> np.ndarray:
     dc_est, _ = lfilter(b, a, raw, zi=zi)
     return raw - dc_est
 
+
 class EncoderState:
     __slots__ = (
-        "rms_prev", "floor_peak", "mad_peak", "spike_thr",
-        "floors_primed", "frame_idx", "prev_spectrum",
+        "rms_prev",
+        "floor_peak",
+        "mad_peak",
+        "spike_thr",
+        "floors_primed",
+        "frame_idx",
+        "prev_spectrum",
     )
+
     def __init__(self) -> None:
         self.rms_prev = 0.0
         self.floor_peak = 0.0
@@ -45,6 +55,7 @@ class EncoderState:
         self.frame_idx = 0
         self.prev_spectrum: np.ndarray | None = None
 
+
 def _update_peak_floor(state: EncoderState, peak_val: float) -> None:
     a = A_UP if peak_val > state.floor_peak else A_DN
     state.floor_peak += a * (peak_val - state.floor_peak)
@@ -53,6 +64,7 @@ def _update_peak_floor(state: EncoderState, peak_val: float) -> None:
     z = (peak_val - state.floor_peak) / (state.mad_peak + EPS)
     if z > CH_PEAK_THR_Z:
         state.floor_peak -= A_UP * (peak_val - state.floor_peak)
+
 
 def _frame_spectrum(x_frame: np.ndarray, fs: float) -> tuple[np.ndarray, dict]:
     n = len(x_frame)
@@ -86,20 +98,21 @@ def _frame_spectrum(x_frame: np.ndarray, fs: float) -> tuple[np.ndarray, dict]:
     }
     return spec, feats
 
+
 CHANNEL_EXTRACTORS: dict[str, Callable[[dict], float]] = {
     "peak": lambda s: s["peak"],
     "peak_cnt": lambda s: s["peak_cnt"],
     "crest": lambda s: s["peak"] / (s["rms"] + EPS),
     "cv": lambda s: math.sqrt(s["var_abs"]) / (s["mean_abs"] + EPS),
     "zcr": lambda s: s["zc"] / s["n"],
-    "flux": lambda s: max(0.0, math.log(s["rms"] + 1.0) - math.log(s["rms_prev"] + 1.0)),
-    
+    "flux": lambda s: max(
+        0.0, math.log(s["rms"] + 1.0) - math.log(s["rms_prev"] + 1.0)
+    ),
     "hjorth_mobility": lambda s: s["hjorth_mobility"],
     "tkeo_mean": lambda s: s["tkeo_mean"],
     "curve_length": lambda s: s["curve_length"],
     "autocorr_lag1": lambda s: s["autocorr_lag1"],
     "kurtosis": lambda s: s["kurtosis"],
-
     "spectral_centroid": lambda s: s["spectral_centroid"],
     "dominant_freq": lambda s: s["dominant_freq"],
     "band_energy_low": lambda s: s["band_energy_low"],
@@ -110,8 +123,17 @@ CHANNEL_EXTRACTORS: dict[str, Callable[[dict], float]] = {
 }
 
 HW_CHANNELS = ["peak", "peak_cnt", "crest", "cv", "zcr", "flux"]
-NEW_TIME_CHANNELS = ["hjorth_mobility", "tkeo_mean", "curve_length", "autocorr_lag1", "kurtosis"]
-FFT_CHANNELS = [c for c in CHANNEL_EXTRACTORS if c not in HW_CHANNELS and c not in NEW_TIME_CHANNELS]
+NEW_TIME_CHANNELS = [
+    "hjorth_mobility",
+    "tkeo_mean",
+    "curve_length",
+    "autocorr_lag1",
+    "kurtosis",
+]
+FFT_CHANNELS = [
+    c for c in CHANNEL_EXTRACTORS if c not in HW_CHANNELS and c not in NEW_TIME_CHANNELS
+]
+
 
 def encode_signal(
     normalized_samples: np.ndarray,
@@ -120,7 +142,9 @@ def encode_signal(
     channels: Iterable[str] | None = None,
 ) -> list[dict]:
     hop_samples = max(1, round(fs * HOP_MS / 1000.0))
-    selected = list(channels) if channels is not None else list(CHANNEL_EXTRACTORS.keys())
+    selected = (
+        list(channels) if channels is not None else list(CHANNEL_EXTRACTORS.keys())
+    )
     unknown = set(selected) - set(CHANNEL_EXTRACTORS)
     if unknown:
         raise ValueError(f"Nieznane kanały: {sorted(unknown)}")
@@ -142,10 +166,10 @@ def encode_signal(
 
         peak = float(ax_f.max())
         mean_abs = float(ax_f.mean())
-        mean_sq = float((x_f ** 2).mean())
-        var_abs = max(0.0, mean_sq - mean_abs ** 2)
+        mean_sq = float((x_f**2).mean())
+        var_abs = max(0.0, mean_sq - mean_abs**2)
         rms = math.sqrt(mean_sq)
-        zc = int(np.count_nonzero(crossings[max(i0 - 1, 0):max(i1 - 1, 0)]))
+        zc = int(np.count_nonzero(crossings[max(i0 - 1, 0) : max(i1 - 1, 0)]))
         peak_cnt = int(np.count_nonzero(ax_f > state.spike_thr))
 
         if len(x_f) > 1:
@@ -158,13 +182,13 @@ def encode_signal(
             autocorr_lag1 = num_ac / den_ac
         else:
             hjorth_mobility, curve_length, autocorr_lag1 = 0.0, 0.0, 0.0
-        
+
         if len(x_f) > 2:
-            tkeo = (x_f[1:-1]**2) - (x_f[:-2] * x_f[2:])
+            tkeo = (x_f[1:-1] ** 2) - (x_f[:-2] * x_f[2:])
             tkeo_mean = float(np.mean(tkeo))
         else:
             tkeo_mean = 0.0
-            
+
         mean_4 = float(np.mean(x_f**4))
         kurtosis = mean_4 / (var_abs**2 + EPS)
 
@@ -176,9 +200,15 @@ def encode_signal(
         state.prev_spectrum = spec
 
         stats = {
-            "peak": peak, "mean_abs": mean_abs, "var_abs": var_abs, "rms": rms,
-            "rms_prev": state.rms_prev, "zc": zc, "n": hop_samples, "peak_cnt": peak_cnt,
-            "spectral_flux": spectral_flux, 
+            "peak": peak,
+            "mean_abs": mean_abs,
+            "var_abs": var_abs,
+            "rms": rms,
+            "rms_prev": state.rms_prev,
+            "zc": zc,
+            "n": hop_samples,
+            "peak_cnt": peak_cnt,
+            "spectral_flux": spectral_flux,
             "hjorth_mobility": hjorth_mobility,
             "tkeo_mean": tkeo_mean,
             "curve_length": curve_length,
@@ -208,6 +238,7 @@ def encode_signal(
 
     return rows
 
+
 def _read_wav_normalized(file_path: str) -> tuple[np.ndarray, int]:
     with wave.open(file_path, "rb") as w:
         fs = w.getframerate()
@@ -219,14 +250,21 @@ def _read_wav_normalized(file_path: str) -> tuple[np.ndarray, int]:
     if sampwidth == 2:
         data = np.frombuffer(raw_bytes, dtype=np.int16).astype(np.float32) / 32768.0
     elif sampwidth == 4:
-        data = np.frombuffer(raw_bytes, dtype=np.int32).astype(np.float32) / 2147483648.0
+        data = (
+            np.frombuffer(raw_bytes, dtype=np.int32).astype(np.float32) / 2147483648.0
+        )
     else:
-        data = (np.frombuffer(raw_bytes, dtype=np.uint8).astype(np.float32) - 128.0) / 128.0
+        data = (
+            np.frombuffer(raw_bytes, dtype=np.uint8).astype(np.float32) - 128.0
+        ) / 128.0
 
     if n_channels > 1:
         data = data[::n_channels]
     return data, fs
 
-def encode_wav_file(file_path: str, channels: Iterable[str] | None = None) -> list[dict]:
+
+def encode_wav_file(
+    file_path: str, channels: Iterable[str] | None = None
+) -> list[dict]:
     data, fs = _read_wav_normalized(file_path)
     return encode_signal(data, fs, channels=channels)

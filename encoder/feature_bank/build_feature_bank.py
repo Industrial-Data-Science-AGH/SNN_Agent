@@ -3,6 +3,7 @@ build_feature_bank.py
 ======================
 Buduje "feature bank" z datasetu snn_input/positive i snn_input/negative.
 """
+
 from __future__ import annotations
 
 import glob
@@ -11,9 +12,13 @@ import sys
 
 import numpy as np
 
-from encoder.feature_bank.digital_twin_encoder import CHANNEL_EXTRACTORS, encode_wav_file
+from encoder.feature_bank.digital_twin_encoder import (
+    CHANNEL_EXTRACTORS,
+    encode_wav_file,
+)
 
 ALL_CHANNELS = list(CHANNEL_EXTRACTORS.keys())
+
 
 def _encode_dir(input_dir: str, label: int, group_offset: int):
     wav_files = sorted(glob.glob(os.path.join(input_dir, "*.wav")))
@@ -23,13 +28,13 @@ def _encode_dir(input_dir: str, label: int, group_offset: int):
 
     X_rows, y_rows, group_rows, file_names = [], [], [], []
     n_files = len(wav_files)
-    
+
     for i, wav_path in enumerate(wav_files):
         gid = group_offset + i
-        
+
         if i % 200 == 0 or i == n_files - 1:
-            print(f"  [{input_dir}] {i+1}/{n_files} plików...")
-            
+            print(f"  [{input_dir}] {i + 1}/{n_files} plików...")
+
         rows = encode_wav_file(wav_path, channels=ALL_CHANNELS)
 
         rows = [r for r in rows if not r.get("_priming")]
@@ -37,10 +42,11 @@ def _encode_dir(input_dir: str, label: int, group_offset: int):
             X_rows.append([r[c] for c in ALL_CHANNELS])
             y_rows.append(label)
             group_rows.append(gid)
-            
+
         file_names.append(os.path.basename(wav_path))
 
     return X_rows, y_rows, group_rows, file_names
+
 
 def build_feature_bank(
     positive_dir: str = "../snn_input/positive",
@@ -72,7 +78,14 @@ def build_feature_bank(
 
     print(f"[OK] Zapisano feature bank -> {output_path}")
     print(f"     ramki: {X.shape[0]}, kanały: {X.shape[1]}, plików: {len(file_names)}")
-    return {"X": X, "y": y, "groups": groups, "feature_names": ALL_CHANNELS, "file_names": file_names}
+    return {
+        "X": X,
+        "y": y,
+        "groups": groups,
+        "feature_names": ALL_CHANNELS,
+        "file_names": file_names,
+    }
+
 
 # ============================================================
 #  WERYFIKACJA BANKU - odpal PRZED podpięciem GA
@@ -82,7 +95,12 @@ def verify_feature_bank(bank: dict) -> None:
 
     print("\n=== 1. Sanity strukturalny ===")
     print("kształt X:", X.shape, " NaN:", np.isnan(X).any(), " Inf:", np.isinf(X).any())
-    print("balans klas: positive =", int((y == 1).sum()), " negative =", int((y == 0).sum()))
+    print(
+        "balans klas: positive =",
+        int((y == 1).sum()),
+        " negative =",
+        int((y == 0).sum()),
+    )
     const_cols = [names[i] for i in range(X.shape[1]) if np.std(X[:, i]) < 1e-9]
     if const_cols:
         print("[UWAGA] stałe kolumny (podejrzenie buga):", const_cols)
@@ -97,7 +115,9 @@ def verify_feature_bank(bank: dict) -> None:
         flag = "  <-- ma sygnał" if abs(d) > 0.2 else ""
         print(f"  {name:20s} d={d:+.3f}{flag}")
 
-    print("\n=== 3. Baseline: mała regresja logistyczna, split PO PLIKACH (bez wycieku) ===")
+    print(
+        "\n=== 3. Baseline: mała regresja logistyczna, split PO PLIKACH (bez wycieku) ==="
+    )
     from sklearn.linear_model import LogisticRegression
     from sklearn.model_selection import GroupShuffleSplit
     from sklearn.preprocessing import StandardScaler
@@ -106,14 +126,21 @@ def verify_feature_bank(bank: dict) -> None:
     train_idx, test_idx = next(gss.split(X, y, groups))
 
     scaler = StandardScaler().fit(X[train_idx])
-    clf = LogisticRegression(max_iter=1000).fit(scaler.transform(X[train_idx]), y[train_idx])
+    clf = LogisticRegression(max_iter=1000).fit(
+        scaler.transform(X[train_idx]), y[train_idx]
+    )
     acc = clf.score(scaler.transform(X[test_idx]), y[test_idx])
     print(f"accuracy na plikach nie widzianych w treningu: {acc:.3f}")
     if acc < 0.6:
-        print("[UWAGA] blisko przypadku (0.5) - zanim odpalisz GA, sprawdź dataset/etykiety,")
-        print("        bo przeszukiwanie architektury nie naprawi braku sygnału w danych.")
+        print(
+            "[UWAGA] blisko przypadku (0.5) - zanim odpalisz GA, sprawdź dataset/etykiety,"
+        )
+        print(
+            "        bo przeszukiwanie architektury nie naprawi braku sygnału w danych."
+        )
     else:
         print("jest sygnał ponad przypadek - bank nadaje się jako wejście dla GA.")
+
 
 if __name__ == "__main__":
     bank = build_feature_bank()

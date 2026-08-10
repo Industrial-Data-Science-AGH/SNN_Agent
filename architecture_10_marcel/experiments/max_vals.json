@@ -1,0 +1,7 @@
+{
+  "max_hf_ratio_val": 0.8519933819770813,
+  "max_zcr_val": 0.778124988079071,
+  "max_crest_val": 8.618175506591797,
+  "hpf_alpha_broad": 0.99,
+  "hpf_alpha_narrow": 0.85
+}

@@ -2,23 +2,25 @@
 """
 ga.py — silnik algorytmu genetycznego (single-objective, jeden run = jedno N).
 
-Sweep po liczbie neuronów robimy na zewnątrz (run_search.py): dla każdego N
-uruchamiamy osobny run GA z ustaloną liczbą neuronów, a potem porównujemy
-najlepsze osobniki między N. Dzięki temu każdy run optymalizuje wyłącznie
-OKABLOWANIE i układ warstw przy stałym budżecie sprzętowym.
+Fitness jest callable(Genome[, budget]) -> float (więcej = lepiej). Opcjonalny
+argument `budget` (0..1) skaluje koszt oceny (liczbę epok) — używany przez
+successive-halving przy inicjalizacji populacji. Fitness bez tego argumentu
+(np. synth) jest wywoływany po staremu.
 
-Fitness jest wstrzykiwany jako callable(Genome) -> float (im więcej tym lepiej),
-więc silnik nie zależy od torcha i da się go testować na funkcji syntetycznej.
+Higiena (#4): fitness nigdy nie jest NaN/inf — niepoprawne wartości są sprowadzane
+do -inf, żeby nie psuły sortowania i selekcji.
 """
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
 
 from genome import Genome, crossover, mutate, random_genome
 
-FitnessFn = Callable[[Genome], float]
+FitnessFn = Callable[..., float]
+NEG_INF = float("-inf")
 
 
 @dataclass
@@ -33,20 +35,33 @@ class GAConfig:
     max_hidden_layers: int = 4
     seed: int = 0
     patience: int = 6                # gen. bez poprawy -> stop
+    # successive-halving na starcie: oceń screen_mult*pop losowych osobników
+    # tanim budżetem, zatrzymaj najlepsze pop_size, dopiero je oceń pełnym.
+    screen_mult: int = 1             # 1 = wyłączone
+    screen_budget: float = 0.34      # ułamek pełnego budżetu na screening
 
 
 @dataclass
 class Individual:
     genome: Genome
-    fitness: float = float("-nan")
+    fitness: float = NEG_INF         # #4: nigdy NaN
 
 
 @dataclass
 class GAResult:
     n_total: int
     best: Individual
-    history: List[float] = field(default_factory=list)  # best fitness / generację
+    history: List[float] = field(default_factory=list)
     evaluated: int = 0
+
+
+def _finite(x) -> float:
+    """Sprowadź NaN/inf/None do -inf (higiena selekcji)."""
+    try:
+        x = float(x)
+    except (TypeError, ValueError):
+        return NEG_INF
+    return x if math.isfinite(x) else NEG_INF
 
 
 def _tournament_select(pop: List[Individual], k: int, rng: random.Random) -> Individual:
@@ -60,24 +75,39 @@ def run_ga(fitness: FitnessFn, cfg: GAConfig,
     cache: Dict[str, float] = {}
     evaluated = 0
 
-    def evaluate(g: Genome) -> float:
+    def _call(g: Genome, budget: float) -> float:
+        # wołaj fitness(g, budget) jeśli obsługuje budżet, inaczej fitness(g)
+        try:
+            return _finite(fitness(g, budget))
+        except TypeError:
+            return _finite(fitness(g))
+
+    def evaluate(g: Genome, budget: float = 1.0) -> float:
         nonlocal evaluated
-        key = g.key()
+        key = f"{g.key()}@{budget:.2f}"
         if key not in cache:
-            cache[key] = fitness(g)
+            cache[key] = _call(g, budget)
             evaluated += 1
         return cache[key]
 
-    # populacja startowa
-    pop: List[Individual] = []
-    tries = 0
-    while len(pop) < cfg.pop_size and tries < cfg.pop_size * 20:
-        tries += 1
-        g = random_genome(cfg.n_total, rng, cfg.max_hidden_layers)
-        if g.is_valid():
-            pop.append(Individual(g, evaluate(g)))
-    if not pop:
-        raise RuntimeError(f"nie udało się zbudować populacji dla N={cfg.n_total}")
+    def _rand_valid() -> Genome:
+        for _ in range(50):
+            g = random_genome(cfg.n_total, rng, cfg.max_hidden_layers)
+            if g.is_valid():
+                return g
+        raise RuntimeError(f"nie udało się zbudować genomu dla N={cfg.n_total}")
+
+    # populacja startowa (z opcjonalnym screeningiem)
+    if cfg.screen_mult > 1:
+        pool = [_rand_valid() for _ in range(cfg.screen_mult * cfg.pop_size)]
+        scored = sorted(pool, key=lambda g: evaluate(g, cfg.screen_budget), reverse=True)
+        survivors = scored[: cfg.pop_size]
+        log(f"[N={cfg.n_total}] screening {len(pool)} osobników @budżet "
+            f"{cfg.screen_budget:.2f} -> zostaje {len(survivors)}")
+        pop = [Individual(g, evaluate(g, 1.0)) for g in survivors]
+    else:
+        pop = [Individual(g := _rand_valid(), evaluate(g, 1.0))
+               for _ in range(cfg.pop_size)]
 
     pop.sort(key=lambda i: i.fitness, reverse=True)
     best = pop[0]
@@ -86,25 +116,23 @@ def run_ga(fitness: FitnessFn, cfg: GAConfig,
 
     since = 0
     for gen in range(1, cfg.generations + 1):
-        nxt: List[Individual] = pop[: cfg.elite]  # elityzm
+        nxt: List[Individual] = pop[: cfg.elite]
         while len(nxt) < cfg.pop_size:
             if rng.random() < cfg.crossover_p and len(pop) >= 2:
                 pa = _tournament_select(pop, cfg.tournament, rng)
                 pb = _tournament_select(pop, cfg.tournament, rng)
                 child = crossover(pa.genome, pb.genome, rng)
             else:
-                pa = _tournament_select(pop, cfg.tournament, rng)
-                child = pa.genome
+                child = _tournament_select(pop, cfg.tournament, rng).genome
             child = mutate(child, rng, cfg.mutation_rate)
             if not child.is_valid():
                 continue
-            nxt.append(Individual(child, evaluate(child)))
+            nxt.append(Individual(child, evaluate(child, 1.0)))
 
         nxt.sort(key=lambda i: i.fitness, reverse=True)
         pop = nxt
         if pop[0].fitness > best.fitness + 1e-9:
-            best = pop[0]
-            since = 0
+            best, since = pop[0], 0
         else:
             since += 1
         history.append(best.fitness)

@@ -1,0 +1,44 @@
+SNN_Agent\ga_neuron_search> ..\.venv\Scripts\python.exe calibrate.py --n 8 ` --arch-dir ..\architecture_14_neurons_patryk_09_07 `  --data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\train ` --val-data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\val ` --epochs-grid 2 4 6 8 12 --seeds 3
+
+[data] cache-direct: 102233 okien, pozytywnych 10549 (10.3%) <- ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\train\_cache_T200_s50.npz
+[data] cache-direct: 11928 okien, pozytywnych 1191 (10.0%) <- ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\val\_cache_T200_s50.npz
+[val] 3000 okien / 649 klipów (dekoder k=2, metryka=ap, seedy=1)
+[calib] topologia testowa [7, 3, 2, 2, 1]  N=8
+topologia 7 -> 3 -> 2 -> 2 -> 1  (N=8, warstw ukrytych=3)
+  H1: [0, 3, 5], [1, 4, 6], [1, 2]
+  H2: [1, 2], [0, 1]
+  H3: [0, 1], [0, 1]
+  D: [0, 1]
+
+==============================================================
+ epoki |  loss_end |        AP sr±std |    clipF1 sr±std
+--------------------------------------------------------------
+     2 |     3.312 |   0.424±0.137   |   0.338±0.230  
+     4 |     3.219 |   0.559±0.312   |   0.358±0.254  
+     6 |     3.072 |   0.560±0.311   |   0.364±0.257  
+     8 |     3.062 |   0.566±0.307   |   0.344±0.246  
+    12 |     2.289 |   0.346±0.018   |   0.501±0.060  
+==============================================================
+
+
+..\.venv\Scripts\python.exe calibrate.py --n 8 ` --arch-dir ..\architecture_14_neurons_patryk_09_07 ` --data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\train ` --val-data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\val --epochs-grid 12 16 20 --seeds 3                                                                                          
+[data] cache-direct: 102233 okien, pozytywnych 10549 (10.3%) <- ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\train\_cache_T200_s50.npz                                    
+[data] cache-direct: 11928 okien, pozytywnych 1191 (10.0%) <- ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\val\_cache_T200_s50.npz
+[val] 3000 okien / 649 klipów (dekoder k=2, metryka=ap, seedy=1)
+[calib] topologia testowa [7, 3, 2, 2, 1]  N=8
+topologia 7 -> 3 -> 2 -> 2 -> 1  (N=8, warstw ukrytych=3)
+  H1: [0, 3, 5], [1, 4, 6], [1, 2]
+  H2: [1, 2], [0, 1]
+  H3: [0, 1], [0, 1]
+  D: [0, 1]
+
+==============================================================
+ epoki |  loss_end |        AP sr±std |    clipF1 sr±std
+--------------------------------------------------------------
+    12 |     2.289 |   0.346±0.018   |   0.501±0.060  
+    16 |     1.836 |   0.345±0.029   |   0.502±0.058  
+    20 |     1.779 |   0.340±0.035   |   0.501±0.066  
+==============================================================
+Wybierz najmniejsze `epoki` z małym std AP i wyraznie nizszym loss_end.
+
+

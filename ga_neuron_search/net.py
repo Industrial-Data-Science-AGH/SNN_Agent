@@ -2,21 +2,24 @@
 """
 net.py — buduje sieć SNN z genomu, wykorzystując LuiLayer z snn_hw_pipeline.
 
-GenomeNet uogólnia LuiNet (który miał zaszyte 3 warstwy) na dowolny warstwowy
-genom. Reużywa DOKŁADNIE tej samej dynamiki płytki Lu.i (LuiLayer), stałych
-sprzętowych i modelu neuronu — GA zmienia tylko topologię, nie fizykę.
+GenomeNet uogólnia LuiNet (zaszyte 3 warstwy) na dowolny warstwowy genom.
+Reużywa tej samej dynamiki płytki Lu.i (LuiLayer), stałych i modelu neuronu —
+GA zmienia tylko topologię, nie fizykę.
 
-Wymaga, by folder architektury był na sys.path (patrz fitness.py / run_search.py).
+Ocena (#1): NIE zwijamy okna do vmax. Decyzja i metryki idą po LICZBIE SPIKÓW
+neuronu decyzyjnego D w czasie ("k spików w oknie") i są agregowane do poziomu
+KLIPU — tak jak działa demo na sprzęcie (evaluate_events w pipeline).
 """
 from __future__ import annotations
 
 import sys
 from typing import List
 
+import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
-# import z głównego pipeline'u (te same stałe i warstwa co w treningu HW)
 from snn_hw_pipeline import CH_IN, LuiLayer, V_TH  # noqa: E402
 
 from genome import Genome
@@ -28,7 +31,7 @@ class GenomeNet(nn.Module):
     forward zwraca:
         hidden : lista spike-tensorów warstw ukrytych [B,T,n_k]
         so     : spiki neuronu decyzyjnego [B,T,1]
-        vo     : membrana neuronu decyzyjnego [B,T]  (do BCE po vmax jak w oryginale)
+        vo     : membrana neuronu decyzyjnego [B,T]
     """
 
     def __init__(self, genome: Genome, hw=None, quantize: bool = False):
@@ -53,7 +56,6 @@ class GenomeNet(nn.Module):
                 hidden.append(s)
         return {"hidden": hidden, "so": s, "vo": v.squeeze(-1)}
 
-    # zgodność z LuiNet
     def layers(self):
         return list(self.layers_mod)
 
@@ -70,20 +72,33 @@ class GenomeNet(nn.Module):
             l.freeze_signs()
 
 
-def genome_loss(out, y, pos_weight, rate_lo=0.02, rate_hi=0.30, margin_w=0.5):
-    """Uogólniona strata (odpowiednik loss_fn z pipeline'u dla dowolnej liczby warstw).
+# ============================================================ strata (czasowa)
 
-    Decyzja po vmax membrany wyjściowej (7. dioda Lu.i) + margines na tle +
-    regularyzacja aktywności wszystkich warstw ukrytych (ani martwe, ani zasycone).
+def genome_loss(out, y, pos_weight, rate_lo=0.02, rate_hi=0.30, margin_w=0.5,
+                spk_w=0.5, k_ref=2.0):
+    """Strata z członem CZASOWYM.
+
+    Składniki:
+      * BCE po vmax membrany D — daje gęsty gradient od pierwszej epoki (neuron
+        rzadko strzela na starcie, więc sam człon spikowy by nie ruszył),
+      * człon spikowy (temporal): D ma dać >= k_ref spików na pozytywach i 0 na
+        tle — różniczkowalny przez surrogate-gradient na so. To on egzekwuje
+        dekoder "k spików w oknie", którego brakowało,
+      * margines na tle (membrana tła nie podchodzi pod próg),
+      * regularyzacja aktywności warstw ukrytych (ani martwe, ani zasycone).
     """
-    import torch.nn.functional as F
     vmax = out["vo"].max(dim=1).values
     logit = 6.0 * (vmax - V_TH)
     bce = F.binary_cross_entropy_with_logits(
         logit, y, pos_weight=torch.tensor(pos_weight, device=y.device))
 
-    neg = (y < 0.5).float()
+    pos = (y > 0.5).float()
+    neg = 1.0 - pos
     margin = ((vmax - 0.80).clamp(min=0) ** 2 * neg).sum() / neg.sum().clamp(min=1)
+
+    nspk = out["so"].sum(dim=(1, 2)).clamp(max=5.0)  # liczba spików D w oknie [B]
+    spk = ((k_ref - nspk).clamp(min=0) * pos).sum() / pos.sum().clamp(min=1) \
+        + (nspk * neg).sum() / neg.sum().clamp(min=1)
 
     reg = 0.0
     for sh in out["hidden"]:
@@ -91,21 +106,56 @@ def genome_loss(out, y, pos_weight, rate_lo=0.02, rate_hi=0.30, margin_w=0.5):
         reg = reg + ((rate_lo - r).clamp(min=0) ** 2).sum() \
                   + ((r - rate_hi).clamp(min=0) ** 2).sum()
 
-    return bce + margin_w * margin + 0.2 * reg, logit
+    total = bce + margin_w * margin + spk_w * spk + 0.2 * reg
+    return total, logit
+
+
+# ============================================================ ocena zdarzeniowa
+
+def _average_precision(y_true, score) -> float:
+    """AP (pole pod krzywą precision-recall) — bezprogowa, odporna na niebalans."""
+    y_true = np.asarray(y_true).astype(float)
+    order = np.argsort(-np.asarray(score))
+    y = y_true[order]
+    P = y.sum()
+    if P == 0:
+        return 0.0
+    tp = np.cumsum(y)
+    fp = np.cumsum(1.0 - y)
+    prec = tp / np.maximum(tp + fp, 1e-9)
+    rec = tp / P
+    rec_prev = np.concatenate([[0.0], rec[:-1]])
+    return float(np.sum((rec - rec_prev) * prec))
 
 
 @torch.no_grad()
-def genome_eval_f1(model, loader, dev):
+def genome_eval_events(model, win, lab, fidx, dev, k=2, bs=256):
+    """Metryki na poziomie KLIPU (jak na żywym demie).
+
+    Klip alarmuje, gdy KTÓREŚ jego okno ma >= k spików neuronu D. Zwraca
+    clip-F1/recall/precision/fa oraz AP po ciągłym score (max spików D w klipie).
+    Argumenty win/lab/fidx to tablice numpy (okna, etykiety, indeks pliku-klipu).
+    """
     model.eval()
-    tp = fp = fn = 0
-    for x, y in loader:
-        x, y = x.to(dev), y.to(dev)
-        vmax = model(x)["vo"].max(dim=1).values
-        p = (vmax >= V_TH).float()
-        tp += ((p == 1) & (y == 1)).sum().item()
-        fp += ((p == 1) & (y == 0)).sum().item()
-        fn += ((p == 0) & (y == 1)).sum().item()
-    rec = tp / max(tp + fn, 1)
-    pre = tp / max(tp + fp, 1)
+    n = len(lab)
+    nspk = np.zeros(n, dtype=np.float32)
+    for lo in range(0, n, bs):
+        x = torch.from_numpy(win[lo:lo + bs]).float().to(dev)
+        nspk[lo:lo + x.shape[0]] = model(x)["so"].sum(dim=(1, 2)).cpu().numpy()
+
+    files = np.unique(fidx)
+    f_lab = np.array([lab[fidx == f].max() for f in files])
+    f_spk = np.array([nspk[fidx == f].max() for f in files])
+
+    det = f_spk >= k
+    tp = float(((det == 1) & (f_lab == 1)).sum())
+    fp = float(((det == 1) & (f_lab == 0)).sum())
+    fn = float(((det == 0) & (f_lab == 1)).sum())
+    rec = tp / max(tp + fn, 1.0)
+    pre = tp / max(tp + fp, 1.0)
     f1 = 2 * pre * rec / max(pre + rec, 1e-9)
-    return {"recall": rec, "precision": pre, "f1": f1}
+    fa = fp / max(float((f_lab == 0).sum()), 1.0)
+    ap = _average_precision(f_lab, f_spk)
+    return {"clip_f1": f1, "clip_recall": rec, "clip_precision": pre,
+            "clip_fa_rate": fa, "ap": ap, "k": int(k),
+            "n_pos": int((f_lab == 1).sum()), "n_neg": int((f_lab == 0).sum())}

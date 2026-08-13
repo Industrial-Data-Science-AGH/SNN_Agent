@@ -27,6 +27,16 @@ def assert_valid(g: Genome, ctx: str):
             assert 1 <= len(n) <= MAX_FANIN, f"{ctx}: fan-in {len(n)}"
     want = min(OUT_FANIN, g.layer_sizes()[-2])
     assert len(g.layers[-1]) == 1 and len(g.layers[-1][0]) == want
+    # #3 anty-łańcuch: brak warstw ukrytych szerokości 1 (poza n_hidden==1),
+    # i silny bias ku fan-in >=2 (średni fan-in ukrytych wysoki).
+    hid = len(g.layers) - 1
+    if hid >= 2:
+        for k in range(hid):
+            assert len(g.layers[k]) >= 2, f"{ctx}: warstwa ukryta {k} szerokości 1 (łańcuch)"
+    fanins = [len(n) for k in range(hid) for n in g.layers[k]]
+    if fanins:
+        assert sum(fanins) / len(fanins) >= 1.9, \
+            f"{ctx}: średni fan-in ukrytych {sum(fanins)/len(fanins):.2f} < 1.9 (łańcuch?)"
 
 
 def test_random_and_N():

@@ -9,7 +9,7 @@
 resource "azurerm_log_analytics_workspace" "main" {
   name                = "log-snn-agents-${var.environment}"
   resource_group_name = azurerm_resource_group.main.name
-  location            = azurerm_resource_group.main.location
+  location            = var.compute_location
   sku                 = "PerGB2018"
   retention_in_days   = 30
 
@@ -19,7 +19,7 @@ resource "azurerm_log_analytics_workspace" "main" {
 resource "azurerm_container_app_environment" "main" {
   name                       = "cae-snn-agents-${var.environment}"
   resource_group_name       = azurerm_resource_group.main.name
-  location                   = azurerm_resource_group.main.location
+  location                   = var.compute_location
   log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
 
   tags = local.tags

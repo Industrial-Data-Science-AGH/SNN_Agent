@@ -1,49 +1,137 @@
 {% extends "base.html" %}
 {% block content %}
+<div class="page-intro">
+  <div>
+    <h1>Event history</h1>
+    <div class="sync-status" id="sync-status">
+      <span class="sync-dot"></span>
+      <span class="sync-text">Checking sync status…</span>
+    </div>
+  </div>
+  <span class="window-label">Last 30 days</span>
+</div>
+
 <div class="metrics">
-  <div class="metric">
-    <div class="value">{{ metrics.real_wakes }}</div>
+  <div class="metric metric-alarm">
     <div class="label">Real wakes</div>
+    <div class="value">{{ metrics.real_wakes }}</div>
   </div>
   <div class="metric">
-    <div class="value">{{ metrics.false_wakes }}</div>
     <div class="label">False wakes</div>
+    <div class="value">{{ metrics.false_wakes }}</div>
   </div>
   <div class="metric">
-    <div class="value">{{ metrics.non_escalating_wakes }}</div>
     <div class="label">Non-escalating</div>
+    <div class="value">{{ metrics.non_escalating_wakes }}</div>
+    <div class="sub">Cleared by the on-device prefilter before an expensive vision call was needed.</div>
   </div>
   <div class="metric">
-    <div class="value">{{ "%.0f"|format(metrics.email_delivery_rate * 100) }}%</div>
     <div class="label">Email delivery rate</div>
+    <div class="value">{{ "%.0f"|format(metrics.email_delivery_rate * 100) }}<span class="unit">%</span></div>
+  </div>
+  <div class="metric">
+    <div class="label">Gemini call success rate</div>
+    <div class="value">{{ "%.0f"|format(metrics.gemini_call_success_rate * 100) }}<span class="unit">%</span></div>
+    <div class="sub">Share of vision calls that got a real Gemini verdict, not a failsafe fallback.</div>
+  </div>
+  <div class="metric">
+    <div class="label">Window break confirmation rate</div>
+    <div class="value">{{ "%.0f"|format(metrics.window_break_confirmation_rate * 100) }}<span class="unit">%</span></div>
+    <div class="sub">Of Gemini's own verdicts, share it classified as a broken window — the SNN's actual detection target.</div>
   </div>
 </div>
 
-<table>
-  <thead>
-    <tr><th></th><th>Time (UTC)</th><th>Status</th><th>Reason</th></tr>
-  </thead>
-  <tbody>
-    {% for event in events %}
-    <tr data-href="/events/{{ event.event_id }}">
-      <td>
-        {% if event.image_url %}<img class="thumb" src="{{ event.image_url }}" alt="">{% endif %}
-      </td>
-      <td>{{ event.ts_wall_iso }}</td>
-      <td><span class="badge {{ 'alarm' if event.alarm else 'ok' }}">{{ 'ALARM' if event.alarm else 'clear' }}</span></td>
-      <td>{{ event.reason }}</td>
-    </tr>
-    {% else %}
-    <tr><td colspan="4">No events in this window.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+<div class="charts-grid">
+  <div class="chart-card chart-card-wide">
+    <h3>Wakes over time</h3>
+    <p class="chart-note">Real, false, and non-escalating wakes per day, oldest first.</p>
+    <div class="chart-canvas-wrap" data-chart-wrap="trend">
+      <canvas id="chart-trend"></canvas>
+    </div>
+  </div>
 
-<script>
-  document.querySelectorAll("tr[data-href]").forEach(function (row) {
-    row.addEventListener("click", function () {
-      window.location = row.getAttribute("data-href");
-    });
-  });
-</script>
+  <div class="chart-card">
+    <h3>Decision breakdown by vision path</h3>
+    <p class="chart-note">
+      Which vision path produced each outcome. This reflects what the pipeline
+      decided, not confirmed ground truth — a high "failsafe" share means
+      Gemini itself is failing or timing out often.
+    </p>
+    <div class="chart-canvas-wrap" data-chart-wrap="vision">
+      <canvas id="chart-vision"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <h3>Email delivery rate</h3>
+    <p class="chart-note">Share of escalated events whose alert email was delivered.</p>
+    <div class="chart-canvas-wrap" data-chart-wrap="delivery">
+      <canvas id="chart-delivery"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <h3>Latency</h3>
+    <p class="chart-note">Seconds from wake to decision, across this window.</p>
+    <div class="latency-stats" id="latency-stats">
+      <div class="chart-loading">Loading…</div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <h3>Trigger integrity</h3>
+    <p class="chart-note">
+      The deployed system only wakes on a genuine SNN hardware trigger — this
+      should always read 100%.
+    </p>
+    <div class="trigger-stat" id="trigger-stat">
+      <div class="chart-loading">Loading…</div>
+    </div>
+  </div>
+
+  <div class="chart-card chart-card-wide">
+    <h3>Review accuracy</h3>
+    <p class="chart-note">
+      Gemini's own judgment scored against what the owner manually confirmed
+      actually happened, event by event. Unlike the breakdowns above, this one
+      really is an accuracy measurement.
+    </p>
+    <div class="review-accuracy" id="review-accuracy">
+      <div class="chart-loading">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<div class="table-card">
+  <table>
+    <thead>
+      <tr><th>Snapshot</th><th>Time (UTC)</th><th>Status</th><th>Reason</th></tr>
+    </thead>
+    <tbody>
+      {% for event in events %}
+      <tr data-href="/events/{{ event.event_id }}">
+        <td class="col-thumb">
+          {% if event.image_url %}
+          <img class="thumb" src="{{ event.image_url }}" alt="">
+          {% else %}
+          <div class="thumb-placeholder">—</div>
+          {% endif %}
+        </td>
+        <td class="col-time">{{ event.ts_wall_iso }}</td>
+        <td class="col-status">
+          <span class="status-badges">
+            <span class="badge {{ 'alarm' if event.alarm else 'ok' }}">{{ 'ALARM' if event.alarm else 'clear' }}</span>
+            {% if event.window_broken is not none %}
+            <span class="badge {{ 'window-broken' if event.window_broken else 'window-intact' }}">{{ 'window broken' if event.window_broken else 'window intact' }}</span>
+            {% endif %}
+          </span>
+        </td>
+        <td class="col-reason">{{ event.reason }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="empty-state">No events in this window.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% endblock %}

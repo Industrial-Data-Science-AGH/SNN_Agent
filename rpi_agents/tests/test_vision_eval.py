@@ -155,6 +155,7 @@ def test_failsafe_counts_as_alarm(tmp_path: Path) -> None:
     assert pf.escalate, "Test precondition: moving clip must escalate"
 
     snapshot = frames[-1]
+
     def _raise(_s: np.ndarray) -> str:
         raise TimeoutError("simulated")
 

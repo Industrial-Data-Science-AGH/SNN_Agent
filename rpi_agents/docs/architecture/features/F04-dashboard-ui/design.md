@@ -24,13 +24,22 @@ straightforward fetch-and-render composition, not a multi-actor sequence.
   HTML band. `cloud/app/metrics.py` is the one aggregation implementation
   both the HTML band and the JSON route call — see "no separate aggregation
   endpoint... needed" below, which this supersedes.
+- *(ADR-0018, 2026-07-15)* The dashboard's first write path: `PATCH
+  /api/events/{event_id}` (F01 design) submits the owner's manual
+  ground-truth review (`window_broken_confirmed`, `intrusion_confirmed`).
+  Every prior contract here was read-only; this one is a server round-trip
+  initiated by a UI action (review form/buttons on the event detail view),
+  not client-side state — see Data model below.
 - No other contracts of its own exposed to other features.
 
 ## Data model
 
 Server-side view model derived from F01's data — no client-side persistent
 state (no localStorage, per the project's general conventions; there's no
-reason to cache home-security data in the browser anyway).
+reason to cache home-security data in the browser anyway). *(ADR-0018:
+the review submission is a `PATCH` request that persists straight to Table
+Storage — still no browser-side state; the browser holds nothing between
+page loads that the server doesn't already have.)*
 
 ### Views
 
@@ -56,6 +65,17 @@ reason to cache home-security data in the browser anyway).
    itself failed, which is operationally different from a confirmed
    intrusion), `email_sent` status, raw `score`/`motion`/`person` fields
    for anyone debugging prefilter behavior.
+4. **Review controls** *(2026-07-15, ADR-0018, new)* — on the event detail
+   view, for events with a real Gemini verdict: two confirm controls ("was
+   the window really broken?" / "was an intruder/person actually present?")
+   that submit `PATCH /api/events/{event_id}`. Once reviewed, the view shows
+   the owner's confirmed values alongside Gemini's original judgment (so
+   agreement/disagreement is visible at a glance) and a re-review action
+   (submitting again overwrites the prior review). The summary metrics band
+   gains a `review_accuracy` block — the one place on this dashboard that is
+   a genuine confusion matrix (TP/FP/TN/FN + accuracy) rather than an
+   operational breakdown, and only populated once at least one event has
+   been reviewed.
 
 ## Risks
 
@@ -69,6 +89,12 @@ reason to cache home-security data in the browser anyway).
   documented as a model-agreement/operational breakdown, not a confusion
   matrix — a real confusion matrix needs a ground-truth label this system
   doesn't capture, and adding one was explicitly deferred by the owner.)*
+  *(ADR-0018, 2026-07-15: the deferral above is resolved — manual review
+  (`PATCH /api/events/{event_id}`) now supplies that ground-truth label, and
+  `review_accuracy` in `GET /api/metrics` is a genuine confusion matrix.
+  `vision_source_breakdown`/`trigger_breakdown` remain useful for their own
+  operational purpose and are unchanged; `review_accuracy` is additive, not
+  a replacement.)*
 - **Server-side aggregation cost grows with `since` window** — acceptable at
   hobby-project volume (hundreds to low thousands of events); if this ever
   needs a full-year view over tens of thousands of events, that's the signal
@@ -92,6 +118,7 @@ reason to cache home-security data in the browser anyway).
 - ADR-0009 (shared Basic Auth protects these pages too).
 - ADR-0016 (`GET /api/metrics` server-side analytics endpoint for the
   premium chart-driven UI refresh).
+- ADR-0018 (manual ground-truth review; `review_accuracy` confusion matrix).
 
 ## Branch
 

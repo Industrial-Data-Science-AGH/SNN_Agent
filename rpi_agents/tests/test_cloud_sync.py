@@ -19,6 +19,7 @@ _RECORD = {
     "score": 0.5,
     "vision_source": "gemini",
     "is_intrusion": True,
+    "window_broken": True,
     "alarm": True,
     "reason": "test reason",
     "email_sent": True,

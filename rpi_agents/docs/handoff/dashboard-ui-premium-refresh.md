@@ -94,9 +94,9 @@ frontend build toolchain, a JS package manager, or a SPA framework for this.
 **Do not touch:**
 - Any `cloud/app/*.py` file (`main.py`, `routes_api.py`,
   `routes_dashboard.py`, `storage.py`, `schemas.py`, `metrics.py`,
-  `auth.py`) — the backend, including the new analytics endpoint below, is
-  already implemented and tested (183 passing tests). If you think you need
-  a new/changed API shape, stop and say so rather than editing Python.
+  `auth.py`) — the backend, including the analytics endpoint and the manual
+  review endpoint below, is already implemented and tested. If you think you
+  need a new/changed API shape, stop and say so rather than editing Python.
 - `cloud/infra/`, `.github/`, `agent/`, `docs/architecture/`, `docs/adr/`,
   `docs/plans/` — outside this task's scope entirely.
 - `cloud/app/static/` must only ever hold generic UI assets (CSS, JS,
@@ -137,6 +137,7 @@ Returns the most recent events first. `since` is an ISO date
     "score": 0.1547,
     "vision_source": "gemini",
     "is_intrusion": false,
+    "window_broken": false,
     "alarm": false,
     "reason": "vision: no person visible, likely a shadow",
     "email_sent": false,
@@ -166,7 +167,9 @@ above.
     "real_wakes": 12,
     "false_wakes": 34,
     "non_escalating_wakes": 210,
-    "email_delivery_rate": 0.92
+    "email_delivery_rate": 0.92,
+    "gemini_call_success_rate": 0.80,
+    "window_break_confirmation_rate": 0.75
   },
   "daily": [
     {"date": "2026-06-14", "real_wakes": 0, "false_wakes": 2, "non_escalating_wakes": 18, "total": 20},
@@ -177,9 +180,71 @@ above.
     "false_wakes": {"gemini": 30, "failsafe": 0, "none": 4},
     "non_escalating_wakes": {"gemini": 0, "failsafe": 0, "none": 210}
   },
+  "trigger_breakdown": {
+    "triggered": {"real_wakes": 12, "false_wakes": 34, "non_escalating_wakes": 210},
+    "not_triggered": {"real_wakes": 0, "false_wakes": 0, "non_escalating_wakes": 0}
+  },
+  "last_sync": {
+    "event_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "ts_wall": 1784048796.83,
+    "received_at": 1784048801.2
+  },
+  "review_accuracy": {
+    "reviewed_count": 18,
+    "window_broken": {"tp": 10, "fp": 1, "tn": 6, "fn": 1, "accuracy": 0.889},
+    "intrusion": {"tp": 8, "fp": 2, "tn": 7, "fn": 1, "accuracy": 0.833}
+  },
   "latency_s": {"avg": 8.2, "p50": 7.9, "p95": 14.1, "max": 22.0}
 }
 ```
+
+**Four fields added after the first UI pass (2026-07-15) — new to this
+version of the doc:**
+
+- **`summary.gemini_call_success_rate`** — of every event that actually
+  attempted a vision call (excludes non-escalating events, which never call
+  vision), what fraction got a real Gemini response rather than falling
+  back to failsafe (a timeout/exception). Render as a fifth KPI card,
+  same style as the other four in `summary`.
+- **`trigger_breakdown`** — outcome × `woken_by_trigger`, same shape as
+  `vision_source_breakdown`. The deployed system only wakes via a genuine
+  SNN hardware trigger, so `not_triggered` should normally be all zeros —
+  if you build a chart for this, treat a nonzero `not_triggered` value as
+  something to visually flag (e.g. a warning color), not just another data
+  point.
+- **`last_sync`** — the most recent event in the currently-selected window,
+  by `received_at` (when the cloud actually received the push — use this
+  one for "last synced," not `ts_wall`, which is when the Pi woke). `null`
+  when the window has no events at all. Put this somewhere prominent and
+  persistent — e.g. next to the page title/header, not buried in a card —
+  formatted as relative time ("Last synced 4 minutes ago") with the exact
+  timestamp available on hover/title attribute. If `last_sync` is `null`,
+  show something like "No sync in the last 30 days" rather than hiding the
+  element or leaving it blank — that's the state most worth surfacing
+  clearly, since it likely means the Pi has been offline or broken for a
+  while.
+- **`summary.window_break_confirmation_rate`** — of every event Gemini
+  actually classified (excludes failsafe fallbacks, which default this to
+  `true` conservatively but aren't a real visual confirmation), what
+  fraction did Gemini classify as showing a broken window. This is the
+  metric that most directly validates the SNN's own detection target
+  (glass breakage) rather than generic intrusion. Render as a sixth KPI
+  card, or pair it visually with `gemini_call_success_rate` since they're
+  both "how reliable/confirmatory is the vision stage" numbers. Each event
+  in `GET /api/events` also now carries its own `window_broken` field
+  (`true`/`false`/`null`) if you want to show it per-row or on the detail
+  page (e.g. a small "window" badge next to the existing alarm badge).
+
+**Fifth field added 2026-07-15, new to this version of the doc —
+`review_accuracy`.** Unlike everything else on this endpoint, this one
+genuinely **is** a confusion matrix — see the new "Manual review" section
+below for the full picture (both the write endpoint that produces this data
+and how to render it). Short version: `reviewed_count` tells you the sample
+size (0 until the owner has reviewed at least one event — render the whole
+block as an empty/placeholder state in that case, not 0% accuracy, which
+would be misleading); `window_broken` and `intrusion` are each `{tp, fp, tn,
+fn, accuracy}` scoring Gemini's own judgment against what the owner
+confirmed actually happened.
 
 `daily` is sorted **oldest first** (ready to plot left-to-right as a trend
 line — don't reverse it). `vision_source` is `"none"` for non-escalating
@@ -213,21 +278,98 @@ know:
   don't try to cache or persist these URLs (matches the project's "no
   localStorage / no client persistence" convention).
 
+## Manual review — the dashboard's first write action (new, 2026-07-15)
+
+Everything above this point is read-only. This is different: `PATCH
+/api/events/{event_id}` lets the owner confirm what actually happened for a
+given event — was the window really broken, and was an intruder/person
+actually present — closing the loop so `review_accuracy` (above) can be a
+real accuracy measurement instead of another operational breakdown.
+
+### `PATCH /api/events/{event_id}`
+
+Request body — both fields required, submitted together:
+```json
+{"window_broken_confirmed": true, "intrusion_confirmed": false}
+```
+
+Response `200` — the updated event, same shape as `GET
+/api/events/{event_id}` plus three new fields: `window_broken_confirmed`,
+`intrusion_confirmed` (both `null` until reviewed), `reviewed_at` (epoch
+seconds, server-assigned, `null` until reviewed). `404` if `event_id`
+doesn't exist. Same Basic Auth as everything else — the already-authenticated
+page's `fetch()` call just works, same as your `GET /api/metrics` calls.
+
+A second `PATCH` of the same `event_id` **overwrites** the previous review —
+this is the intended way for the owner to correct an earlier mistake, not an
+error case to guard against in the UI.
+
+### What to build
+
+- **On the event detail page**, for events that have a real Gemini verdict
+  (`vision_source == "gemini"` — don't offer review controls for
+  `failsafe`/`none` events, since there's no real prediction to score
+  against): two confirm controls, e.g. "Was the window really broken?" /
+  "Was an intruder or person actually present?" — each a yes/no toggle or a
+  pair of buttons, not a free-text field. Submitting both calls the `PATCH`
+  endpoint.
+- **Show the comparison, not just the input.** Once reviewed, display
+  Gemini's original call (`window_broken`/`is_intrusion`) next to the
+  owner's confirmed value — a simple "Gemini said X, you confirmed Y"
+  layout, with a visual match/mismatch indicator (e.g. a checkmark when they
+  agree, a distinct color/icon when they don't). This is the detail-page
+  payoff of the whole feature — make disagreement obvious at a glance.
+- **Allow re-review.** If `reviewed_at` is already set, still show the
+  controls (pre-filled with the existing confirmed values), not a locked
+  "already reviewed" state — the owner correcting themselves is normal.
+- **Render `review_accuracy` as a real confusion matrix** — this is the one
+  place on the dashboard where that framing is accurate (contrast with
+  `vision_source_breakdown`/`trigger_breakdown`, which must keep the
+  "operational breakdown, not accuracy" framing already established above).
+  A 2×2 grid (or two side-by-side grids, one per judgment) showing TP/FP/
+  TN/FN plus the accuracy percentage works well; show `reviewed_count`
+  prominently next to it so a small sample doesn't read as a confident
+  score. When `reviewed_count == 0`, show an empty/placeholder state with a
+  short explanation ("Review an event to start tracking accuracy") rather
+  than a bare 0%.
+
 ## Suggested chart set (not a rigid spec — use judgment)
 
 1. **Trend over time** — stacked or grouped chart from `daily`: real vs.
    false vs. non-escalating wakes per day.
-2. **Summary cards** — the four `summary` values, styled as premium KPI
-   cards rather than today's plain bordered boxes.
+2. **Summary cards** — the five `summary` values (now including
+   `gemini_call_success_rate`), styled as premium KPI cards rather than
+   today's plain bordered boxes.
 3. **Vision-source breakdown** — a heatmap/grid or grouped bar chart from
    `vision_source_breakdown`, labeled per the framing note above.
-4. **Email delivery rate** — could be its own small donut/gauge, or folded
+4. **Trigger breakdown** *(new)* — from `trigger_breakdown`. This can be
+   small/secondary (e.g. a compact stat: "212/212 wakes were genuine SNN
+   triggers") rather than a full chart, since `not_triggered` is expected
+   to always be zero — its whole purpose is to make a nonzero value stand
+   out immediately if it ever happens, not to visualize a normal
+   distribution.
+5. **Email delivery rate** — could be its own small donut/gauge, or folded
    into the summary cards.
-5. **Latency** — `latency_s`'s avg/p50/p95/max, e.g. as a small stat block
+6. **Latency** — `latency_s`'s avg/p50/p95/max, e.g. as a small stat block
    or a simple distribution indicator.
-6. Event list stays, but restyle: better thumbnails, refined badges,
+7. Event list stays, but restyle: better thumbnails, refined badges,
    premium table or card-grid layout — your call.
-7. Event detail page: larger hero image, cleaner metadata layout.
+8. Event detail page: larger hero image, cleaner metadata layout.
+
+## A framing note worth putting in the UI itself
+
+The owner's first reaction to the "Non-escalating" count being much larger
+than "Real"/"False" wakes was to wonder if something's wrong. It isn't —
+this project's SNN hardware trigger is a deliberately cheap, sensitive
+first-stage sensor (comparable to a smoke detector): it's *expected* to
+latch on plenty of things that aren't real intrusions, and the local
+prefilter + Gemini vision stages exist specifically to filter those out
+before anything reaches the owner. A large non-escalating count is the
+funnel working as intended. Consider a short subtitle/tooltip on that KPI
+card or chart section along these lines, so the next person looking at the
+dashboard doesn't have the same reaction — something like "Cleared by the
+on-device prefilter before an expensive vision call was needed" rather than
+leaving "Non-escalating" unexplained.
 
 ## How to run this locally to check your work
 
@@ -260,11 +402,18 @@ across a few days) so the charts have something to render, and open
       changed unless you also update the templates that extend it.
 - [ ] `cloud/app/templates/event_list.html` — premium metrics band + at
       least the trend and vision-source-breakdown charts, restyled table.
-- [ ] `cloud/app/templates/event_detail.html` — restyled detail view.
+- [ ] `cloud/app/templates/event_detail.html` — restyled detail view,
+      including the review controls and Gemini-vs-owner comparison (see
+      "Manual review" above) for events with a real Gemini verdict.
 - [ ] `cloud/app/static/` — CSS/JS (and logo asset if available) backing
       the above.
 - [ ] Charts fetch from `GET /api/metrics` client-side (don't have the
       Jinja route pre-compute chart data — that defeats the point of the
       new endpoint).
+- [ ] Review submission calls `PATCH /api/events/{event_id}` client-side and
+      updates the page (either an optimistic UI update or a refetch) without
+      a full reload.
+- [ ] `review_accuracy` rendered as a real confusion matrix (see "Manual
+      review" above), with an explicit empty state when `reviewed_count == 0`.
 - [ ] No changes to any `.py` file, `cloud/infra/`, or `docs/`.
 - [ ] Confirmed working locally against Azurite per the steps above.

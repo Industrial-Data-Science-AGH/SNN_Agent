@@ -18,6 +18,8 @@ def test_compute_metrics_on_empty_list():
         "false_wakes": 0,
         "non_escalating_wakes": 0,
         "email_delivery_rate": 0.0,
+        "gemini_call_success_rate": 0.0,
+        "window_break_confirmation_rate": 0.0,
     }
 
 

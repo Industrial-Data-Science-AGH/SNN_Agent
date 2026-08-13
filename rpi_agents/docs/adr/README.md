@@ -22,3 +22,5 @@ inline in the ADRs below, mainly ADR-0007.
 | [0014](0014-client-generated-event-id.md) | Pi generates `event_id` (ULID); ingest is an idempotent upsert | accepted | 2026-07-14 | F01_ingest_api, F03_pi_push_client |
 | [0015](0015-bounded-local-sync-queue.md) | Bounded local sync queue, flushed on every wake cycle (supersedes Tenet 2's original no-retry stance) | accepted | 2026-07-14 | F03_pi_push_client, F01_ingest_api |
 | [0016](0016-dashboard-analytics-endpoint.md) | Server-side `GET /api/metrics` endpoint (rollups + outcome/vision-source breakdown, not a ground-truth confusion matrix) | accepted | 2026-07-14 | F01_ingest_api, F04_dashboard_ui |
+| [0017](0017-window-broken-vision-field.md) | Gemini returns `window_broken` as a second, independent judgment from `is_intrusion`; does not drive the alarm decision | accepted | 2026-07-15 | F01_ingest_api, F03_pi_push_client |
+| [0018](0018-manual-event-review.md) | Manual ground-truth review (`PATCH /api/events/{event_id}`) enables real confusion-matrix accuracy tracking | accepted | 2026-07-15 | F01_ingest_api, F04_dashboard_ui |

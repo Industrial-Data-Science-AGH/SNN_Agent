@@ -1,1 +1,1 @@
-{"is_intrusion": true, "confidence": 0.90, "reason": "intruder at door"}
+{"window_broken": false, "is_intrusion": true, "confidence": 0.90, "reason": "intruder at door"}

@@ -33,6 +33,7 @@ _PAYLOAD_FIELDS = (
     "score",
     "vision_source",
     "is_intrusion",
+    "window_broken",
     "alarm",
     "reason",
     "email_sent",

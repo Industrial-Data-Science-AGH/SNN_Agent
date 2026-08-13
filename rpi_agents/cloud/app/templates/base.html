@@ -4,31 +4,20 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}wakeup-ai dashboard{% endblock %}</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 0; background: #111; color: #eee; }
-    header { padding: 1rem 1.5rem; border-bottom: 1px solid #333; }
-    header a { color: #eee; text-decoration: none; font-weight: 600; }
-    main { padding: 1.5rem; max-width: 960px; margin: 0 auto; }
-    a { color: #6cf; }
-    .metrics { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
-    .metric { background: #1c1c1c; border: 1px solid #333; border-radius: 8px; padding: 0.75rem 1rem; min-width: 140px; }
-    .metric .value { font-size: 1.5rem; font-weight: 700; }
-    .metric .label { font-size: 0.8rem; color: #999; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #222; vertical-align: middle; }
-    tr[data-href] { cursor: pointer; }
-    tr[data-href]:hover { background: #1a1a1a; }
-    img.thumb { width: 64px; height: 48px; object-fit: cover; border-radius: 4px; display: block; }
-    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
-    .badge.alarm { background: #5a1a1a; color: #ff9a9a; }
-    .badge.ok { background: #1a4a1a; color: #9affa0; }
-    .badge.source-gemini { background: #1a2a4a; color: #9ac2ff; }
-    .badge.source-failsafe { background: #4a3a1a; color: #ffd79a; }
-    .badge.source-none { background: #2a2a2a; color: #888; }
-  </style>
+  <link rel="stylesheet" href="/static/css/dashboard.css">
 </head>
 <body>
-  <header><a href="/">wakeup-ai dashboard</a></header>
+  <header class="site-header">
+    <a class="brand" href="/">
+      <img class="brand-mark" src="/static/img/ids-logo.png" alt="Industrial Data Science — wakeup-ai dashboard">
+    </a>
+  </header>
   <main>{% block content %}{% endblock %}</main>
+  <script
+    src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"
+    integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt"
+    crossorigin="anonymous"
+  ></script>
+  <script src="/static/js/dashboard.js"></script>
 </body>
 </html>

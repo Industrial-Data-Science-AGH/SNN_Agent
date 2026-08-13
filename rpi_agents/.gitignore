@@ -6,3 +6,10 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .ruff_cache/
+
+# Local secrets from the T01 Azure bootstrap — never commit these.
+cloud/infra/.secrets-local/
+*.tfstate
+*.tfstate.*
+.terraform/
+handoff/

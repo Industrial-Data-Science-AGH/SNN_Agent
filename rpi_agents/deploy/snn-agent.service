@@ -10,6 +10,12 @@ WorkingDirectory=__WORKDIR__
 Environment=SNN_AGENT_POWER_MODE=halt
 Environment=SNN_AGENT_LOG_LEVEL=INFO
 Environment=SNN_AGENT_VAR_DIR=__VAR_DIR__
+# Not a secret (public FQDN) -- CLOUD_SYNC_USER/PASSWORD (the actual
+# credential) still come from ~/.config/snn-agent/.env, loaded by
+# load_settings(). This one must be a real env var, not .env: config.py
+# reads it via os.getenv at module import time, before load_settings()
+# ever runs, so a .env-only value would be silently ignored.
+Environment=SNN_AGENT_CLOUD_SYNC_URL=__CLOUD_SYNC_URL__
 # Bring-up only: piezo buzzer not wired yet. Remove this line once it is.
 Environment=SNN_AGENT_BUZZER_ENABLED=false
 ExecStart=__VENV__/bin/python -m agent.main

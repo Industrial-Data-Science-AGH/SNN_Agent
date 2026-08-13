@@ -68,6 +68,7 @@ def run_cycle(wake_context: WakeContext) -> Decision:
                 confidence=1.0,
                 reason=f"machine-failsafe: {type(exc).__name__}",
                 source="failsafe",
+                window_broken=True,
             )
 
         if not verdict.is_intrusion:
@@ -113,6 +114,7 @@ def _build_record(
         "score": pf.score,
         "vision_source": verdict.source if verdict is not None else None,
         "is_intrusion": verdict.is_intrusion if verdict is not None else None,
+        "window_broken": verdict.window_broken if verdict is not None else None,
         "alarm": decision.alarm,
         "reason": decision.reason,
         "email_sent": email_sent,

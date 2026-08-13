@@ -69,6 +69,29 @@ def get_event_detail(event_id: str) -> schemas.EventDetail:
     return schemas.EventDetail(**event)
 
 
+@router.patch("/{event_id}", response_model=schemas.EventDetail)
+def submit_event_review(event_id: str, payload: schemas.EventReview) -> schemas.EventDetail:
+    """Owner's manual ground-truth review of a previously ingested event
+    (F01 design, "PATCH /api/events/{event_id}"; ADR-0018).
+
+    Both judgments (`window_broken_confirmed`, `intrusion_confirmed`) are
+    submitted together — a review confirms the whole event, not one field
+    at a time. `reviewed_at` is stamped server-side (`time.time()`), never
+    trusted from the request. A second PATCH of the same `event_id`
+    overwrites the prior review (the owner correcting an earlier mistake is
+    a normal, supported action).
+    """
+    event = storage.review_event(
+        event_id,
+        window_broken_confirmed=payload.window_broken_confirmed,
+        intrusion_confirmed=payload.intrusion_confirmed,
+        reviewed_at=time.time(),
+    )
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_MSG_EVENT_NOT_FOUND)
+    return schemas.EventDetail(**event)
+
+
 @metrics_router.get("/metrics", response_model=schemas.MetricsResponse)
 def get_metrics(
     since: str | None = Query(
@@ -92,11 +115,15 @@ def get_metrics(
     )
     until_date = datetime.now(UTC).strftime("%Y-%m-%d")
     events = storage.list_events_for_metrics(since=since_date)
+    last_sync = metrics.last_sync(events)
     return schemas.MetricsResponse(
         since=since_date,
         until=until_date,
         summary=metrics.summary_metrics(events),
         daily=metrics.daily_rollup(events),
         vision_source_breakdown=metrics.vision_source_breakdown(events),
+        trigger_breakdown=metrics.trigger_breakdown(events),
+        last_sync=schemas.LastSync(**last_sync) if last_sync else None,
+        review_accuracy=metrics.review_accuracy(events),
         latency_s=metrics.latency_stats(events),
     )

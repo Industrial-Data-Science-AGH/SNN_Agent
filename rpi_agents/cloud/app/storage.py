@@ -186,6 +186,19 @@ def list_events_for_metrics(since: str | None = None) -> list[dict]:
     return [_to_summary_dict(e) for e in events]
 
 
+def _find_entity_by_row_key(event_id: str) -> dict | None:
+    """Raw Table entity lookup by RowKey (event_id) — a filtered scan, not
+    a point-read, since no PartitionKey is available from `event_id` alone
+    (acceptable at this project's volume; revisit if the table ever grows
+    past hobby scale). Shared by `get_event()` and `review_event()`, both
+    of which need to locate an entity — including its `PartitionKey`, which
+    `_to_summary_dict()` doesn't expose — from just an `event_id`.
+    """
+    query_filter = f"RowKey eq '{_escape_odata_literal(event_id)}'"
+    matches = list(get_table_client().query_entities(query_filter=query_filter))
+    return matches[0] if matches else None
+
+
 def get_event(event_id: str) -> dict | None:
     """Fetch one event by its `event_id` (Table RowKey).
 
@@ -193,11 +206,35 @@ def get_event(event_id: str) -> dict | None:
     RowKey (a filtered scan, not a point-read) — acceptable at this
     project's volume; revisit if the table ever grows past hobby scale.
     """
-    query_filter = f"RowKey eq '{_escape_odata_literal(event_id)}'"
-    matches = list(get_table_client().query_entities(query_filter=query_filter))
-    if not matches:
+    entity = _find_entity_by_row_key(event_id)
+    return _to_summary_dict(entity) if entity is not None else None
+
+
+def review_event(
+    event_id: str, *, window_broken_confirmed: bool, intrusion_confirmed: bool, reviewed_at: float
+) -> dict | None:
+    """Owner's manual ground-truth review of a previously ingested event
+    (F01 design, `PATCH /api/events/{event_id}`; ADR-0018).
+
+    Returns the updated event (same shape as `get_event()`), or `None` if
+    `event_id` doesn't exist. A second review of the same event overwrites
+    the prior one — the owner correcting an earlier mistake is a normal,
+    supported action, not an error condition.
+    """
+    entity = _find_entity_by_row_key(event_id)
+    if entity is None:
         return None
-    return _to_summary_dict(matches[0])
+    get_table_client().update_entity(
+        mode=UpdateMode.MERGE,
+        entity={
+            "PartitionKey": entity["PartitionKey"],
+            "RowKey": event_id,
+            "window_broken_confirmed": window_broken_confirmed,
+            "intrusion_confirmed": intrusion_confirmed,
+            "reviewed_at": reviewed_at,
+        },
+    )
+    return get_event(event_id)
 
 
 def _escape_odata_literal(value: str) -> str:
@@ -223,10 +260,14 @@ def _to_summary_dict(entity: dict) -> dict:
         "score": entity.get("score", 0.0),
         "vision_source": entity.get("vision_source"),
         "is_intrusion": entity.get("is_intrusion"),
+        "window_broken": entity.get("window_broken"),
         "alarm": entity.get("alarm", False),
         "reason": entity.get("reason", ""),
         "email_sent": entity.get("email_sent", False),
         "latency_s": entity.get("latency_s", 0.0),
         "received_at": entity.get("received_at", 0.0),
         "image_url": mint_sas_url(entity.get("blob_name", "")),
+        "window_broken_confirmed": entity.get("window_broken_confirmed"),
+        "intrusion_confirmed": entity.get("intrusion_confirmed"),
+        "reviewed_at": entity.get("reviewed_at"),
     }

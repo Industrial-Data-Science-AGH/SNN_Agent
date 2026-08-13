@@ -16,20 +16,29 @@ from agent.types import VisionVerdict
 logger = logging.getLogger(__name__)
 
 _PROMPT = (
-    "You are a home-security analyst. Decide if this single frame shows a real "
-    "break-in or intruder vs a false alarm (pet, headlights, curtain, empty scene). "
-    'Return JSON {"is_intrusion": bool, "confidence": 0..1, "reason": short string}. '
-    "When uncertain, prefer is_intrusion=true."
+    "You are a home-security analyst reviewing a single frame captured after "
+    "a glass-break sensor triggered. Make two independent judgments:\n"
+    "1. window_broken: does this frame show visible evidence the window or "
+    "glass itself is broken (a shattered pane, a hole, cracks, glass shards "
+    "on the sill or floor)? Judge the window's physical state only -- not "
+    "whether anyone is present.\n"
+    "2. is_intrusion: does this frame show a real break-in or intruder, as "
+    "opposed to a false alarm (pet, headlights, curtain, empty scene, or a "
+    "window that looks broken but with no other sign of intrusion)?\n"
+    'Return JSON {"window_broken": bool, "is_intrusion": bool, "confidence": 0..1, '
+    '"reason": short string}. When uncertain on either judgment, prefer the '
+    "value that leads to an alert (window_broken=true or is_intrusion=true)."
 )
 
 _VERDICT_SCHEMA = {
     "type": "object",
     "properties": {
+        "window_broken": {"type": "boolean"},
         "is_intrusion": {"type": "boolean"},
         "confidence": {"type": "number"},
         "reason": {"type": "string"},
     },
-    "required": ["is_intrusion", "confidence", "reason"],
+    "required": ["window_broken", "is_intrusion", "confidence", "reason"],
 }
 
 
@@ -86,6 +95,8 @@ def _parse_verdict(raw: str) -> VisionVerdict:
 
     data = json.loads(stripped)
 
+    if "window_broken" not in data:
+        raise ValueError("Missing field: window_broken")
     if "is_intrusion" not in data:
         raise ValueError("Missing field: is_intrusion")
     if "confidence" not in data:
@@ -100,6 +111,7 @@ def _parse_verdict(raw: str) -> VisionVerdict:
         confidence=confidence,
         reason=str(data["reason"])[:200],
         source="gemini",
+        window_broken=bool(data["window_broken"]),
     )
 
 
@@ -129,4 +141,5 @@ def verdict(
             confidence=1.0,
             reason=f"failsafe: {type(exc).__name__}",
             source="failsafe",
+            window_broken=True,
         )

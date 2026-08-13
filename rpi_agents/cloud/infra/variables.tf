@@ -19,7 +19,13 @@ variable "environment" {
 variable "location" {
   description = "Azure region for all resources."
   type        = string
-  default     = "westeurope"
+  default     = "germanywestcentral"
+}
+
+variable "compute_location" {
+  description = "Azure region for the Container Apps environment + Log Analytics workspace. Separate from `location` because this subscription's Container Apps environment quota is exhausted in some regions (e.g. germanywestcentral) independently of where the resource group / storage account live."
+  type        = string
+  default     = "francecentral"
 }
 
 variable "image_tag" {

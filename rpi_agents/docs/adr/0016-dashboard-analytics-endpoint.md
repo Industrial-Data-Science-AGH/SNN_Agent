@@ -125,3 +125,85 @@ display cap — aggregation must reflect the whole window, not a page.
 - F04 design's original "no aggregation endpoint needed" note — superseded
   by this ADR, not by a Tenet-level PR/FAQ change (this is a feature-scope
   extension, not a reversal of a Tenet).
+
+## Addendum (2026-07-15): `trigger_breakdown`
+
+After reviewing the first rendered dashboard, the owner asked whether
+"non-escalating wakes" makes sense given the SNN's whole purpose is to
+detect a candidate glass-break event — doesn't every wake mean something
+was already detected?
+
+Answer: `escalate` and `woken_by_trigger` are two independent signals.
+`woken_by_trigger` (`agent/trigger.py`) records whether this specific boot
+was actually caused by the Arduino latching a real SNN trigger, as opposed
+to any other reason the Pi came up (manual/dev boot) — the deployed system
+is designed so every wake *is* a trigger (README: "wakes on an SNN hardware
+trigger"). `escalate` is a separate, later judgment: after capturing camera
+frames (regardless of why the Pi woke), does the local motion/person
+prefilter think the frames show something worth an expensive Gemini call?
+A genuine SNN trigger can still land in "non-escalating" — the SNN is a
+cheap, sensitive first-stage sensor (comparable to a smoke detector),
+expected to latch on non-intrusion events (wind, ambient noise with a
+similar spike signature); that's exactly why the prefilter and vision
+stages exist downstream. A funnel shape (many SNN triggers, few
+prefilter-escalations, fewer still confirmed alarms) is the system working
+as intended, not a sign anything is broken.
+
+`GET /api/metrics` gained a fourth field, `trigger_breakdown` (outcome x
+`woken_by_trigger`, same shape as `vision_source_breakdown`), so the
+dashboard can show this directly rather than leave it implicit — and so a
+nonzero `not_triggered` count (which shouldn't normally happen) is visible
+as the anomaly signal it actually is. `cloud/app/metrics.py::
+trigger_breakdown()`, `cloud/app/schemas.py::TriggerBreakdown`/
+`TriggerOutcomeCounts`, `MetricsResponse.trigger_breakdown` — same file set
+this ADR already covers, no new module. `docs/handoff/
+dashboard-ui-premium-refresh.md` was updated with this field so a follow-up
+UI pass can surface it.
+
+## Addendum (2026-07-15, same review pass): `gemini_call_success_rate`
+
+Same session, a second request: the owner wants a single "how often does
+the Gemini call itself actually succeed" number — e.g. "if I send 10
+requests to Gemini and 8 succeed, show 80%." This is a call-reliability
+metric, distinct from `vision_source_breakdown`'s per-outcome cross-tab:
+`vision_source == "failsafe"` already means the `vision.verdict()` call
+raised/timed out (`agent/machine.py`'s except block), so the data needed
+was already present — this is a new aggregation over an existing field, not
+new data collection on the Pi.
+
+Added as `summary.gemini_call_success_rate` (same "rate over a subset,
+0.0 when the subset is empty" shape as `email_delivery_rate`, same
+`summary_metrics()` function so it renders as a KPI card automatically,
+consistent with the other three): `successes / attempts`, where `attempts`
+counts every event with `vision_source` in `("gemini", "failsafe")` and
+`successes` counts `vision_source == "gemini"`. Non-escalating events
+(`vision_source` is `None`, no vision call was ever attempted) are
+excluded from both — including them in the denominator would understate
+the rate for a reason that has nothing to do with Gemini's reliability.
+
+## Addendum (2026-07-15, same review pass): `last_sync`
+
+Third request from the same pass: the owner wants to see, at a glance, when
+the dashboard last actually received data from the Pi — "so the user will
+see the data and when it was sent from the Raspberry Pi wake up."
+
+Added `last_sync` as a top-level field on `GET /api/metrics`'s response
+(sibling to `summary`/`daily`/etc.): the most recent event in the queried
+window, by `received_at` (cloud-side receipt time, not `ts_wall`'s Pi-side
+wake time — the two can differ by however long the push/queue took, and
+"last sync" should answer "when did the cloud last hear from the Pi," not
+"when did the Pi last wake"). `null` when the window has no events.
+
+Considered and rejected: a second, unbounded query across the whole table
+(to answer "when did the Pi last sync, ever," regardless of the `since`
+filter). Rejected because it would need a new Table access pattern
+(`storage.py` has no "give me the single most recent row across all
+partitions" query today, and Table Storage has no native support for
+this without either a full scan or a second index), and because scoping
+`last_sync` to the same window as everything else in the response is
+actually more informative, not less: if the Pi hasn't synced within the
+selected window at all, `last_sync: null` **is** the signal — the owner
+widening `since` to look further back is the same action they'd already
+take to investigate a gap in the `daily` trend chart. Consistent with how
+every other field on this endpoint is already window-scoped; no special
+case introduced.

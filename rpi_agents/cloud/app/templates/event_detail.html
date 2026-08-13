@@ -1,30 +1,82 @@
 {% extends "base.html" %}
 {% block content %}
-<p><a href="/">&larr; back to list</a></p>
+<a class="detail-back" href="/">&larr; back to list</a>
 <h1>Event {{ event.event_id }}</h1>
-<p>
-  {{ event.ts_wall_iso }}
-  &middot; <span class="badge {{ 'alarm' if event.alarm else 'ok' }}">{{ 'ALARM' if event.alarm else 'clear' }}</span>
-  &middot; <span class="badge source-{{ event.vision_source or 'none' }}">{{ event.vision_source or 'n/a' }}</span>
-</p>
+<div class="detail-meta">
+  <span>{{ event.ts_wall_iso }}</span>
+  <span class="badge {{ 'alarm' if event.alarm else 'ok' }}">{{ 'ALARM' if event.alarm else 'clear' }}</span>
+  <span class="badge source-{{ event.vision_source or 'none' }}">{{ event.vision_source or 'n/a' }}</span>
+  {% if event.window_broken is not none %}
+  <span class="badge {{ 'window-broken' if event.window_broken else 'window-intact' }}">{{ 'window broken' if event.window_broken else 'window intact' }}</span>
+  {% endif %}
+</div>
 
-{% if event.image_url %}
-<img src="{{ event.image_url }}" alt="snapshot" style="max-width: 100%; border-radius: 8px;">
-{% else %}
-<p><em>No snapshot was pushed for this event.</em></p>
+<div class="detail-hero">
+  {% if event.image_url %}
+  <img src="{{ event.image_url }}" alt="Event snapshot">
+  {% else %}
+  <p class="no-snapshot">No snapshot was pushed for this event.</p>
+  {% endif %}
+</div>
+
+<div class="detail-section">
+  <h2>Reason</h2>
+  <p class="detail-reason">{{ event.reason }}</p>
+</div>
+
+<div class="detail-section">
+  <h2>Details</h2>
+  <div class="detail-fields">
+    <table>
+      <tr><th>Email sent</th><td>{{ 'yes' if event.email_sent else 'no' }}</td></tr>
+      <tr><th>Score</th><td>{{ "%.4f"|format(event.score) }}</td></tr>
+      <tr><th>Motion</th><td>{{ event.motion }}</td></tr>
+      <tr><th>Person</th><td>{{ event.person }}</td></tr>
+      <tr><th>Window broken</th><td>{{ 'n/a' if event.window_broken is none else event.window_broken }}</td></tr>
+      <tr><th>Escalate</th><td>{{ event.escalate }}</td></tr>
+      <tr><th>Woken by trigger</th><td>{{ event.woken_by_trigger }}</td></tr>
+      <tr><th>Latency (s)</th><td>{{ "%.2f"|format(event.latency_s) }}</td></tr>
+    </table>
+  </div>
+</div>
+
+{% if event.vision_source == 'gemini' %}
+<div
+  class="detail-section"
+  id="review-section"
+  data-event-id="{{ event.event_id }}"
+  data-window-broken="{{ 'true' if event.window_broken == True else ('false' if event.window_broken == False else '') }}"
+  data-is-intrusion="{{ 'true' if event.is_intrusion == True else ('false' if event.is_intrusion == False else '') }}"
+  data-window-broken-confirmed="{{ 'true' if event.window_broken_confirmed == True else ('false' if event.window_broken_confirmed == False else '') }}"
+  data-intrusion-confirmed="{{ 'true' if event.intrusion_confirmed == True else ('false' if event.intrusion_confirmed == False else '') }}"
+  data-reviewed-at="{{ event.reviewed_at if event.reviewed_at is not none else '' }}"
+>
+  <h2>Manual review</h2>
+  <p class="chart-note">
+    Confirm what actually happened for this event — this is the ground truth
+    that closes the loop on Gemini's own accuracy.
+  </p>
+
+  <div class="review-comparison" id="review-comparison" style="display: none;"></div>
+
+  <div class="review-controls">
+    <div class="review-question">
+      <div class="review-question-label">Was the window really broken?</div>
+      <div class="review-toggle" data-field="window_broken_confirmed">
+        <button type="button" class="review-btn" data-value="true">Yes</button>
+        <button type="button" class="review-btn" data-value="false">No</button>
+      </div>
+    </div>
+    <div class="review-question">
+      <div class="review-question-label">Was an intruder or person actually present?</div>
+      <div class="review-toggle" data-field="intrusion_confirmed">
+        <button type="button" class="review-btn" data-value="true">Yes</button>
+        <button type="button" class="review-btn" data-value="false">No</button>
+      </div>
+    </div>
+    <button type="button" class="review-submit" id="review-submit" disabled>Submit review</button>
+    <div class="review-status" id="review-status"></div>
+  </div>
+</div>
 {% endif %}
-
-<h2>Reason</h2>
-<p>{{ event.reason }}</p>
-
-<h2>Details</h2>
-<table>
-  <tr><th>Email sent</th><td>{{ 'yes' if event.email_sent else 'no' }}</td></tr>
-  <tr><th>Score</th><td>{{ "%.4f"|format(event.score) }}</td></tr>
-  <tr><th>Motion</th><td>{{ event.motion }}</td></tr>
-  <tr><th>Person</th><td>{{ event.person }}</td></tr>
-  <tr><th>Escalate</th><td>{{ event.escalate }}</td></tr>
-  <tr><th>Woken by trigger</th><td>{{ event.woken_by_trigger }}</td></tr>
-  <tr><th>Latency (s)</th><td>{{ "%.2f"|format(event.latency_s) }}</td></tr>
-</table>
 {% endblock %}

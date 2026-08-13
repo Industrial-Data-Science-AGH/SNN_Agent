@@ -39,18 +39,45 @@ def summary_metrics(events: list[dict]) -> dict:
 
     Unchanged from the original `routes_dashboard.py::compute_metrics()` —
     moved here (ADR-0016) so the JSON route and the HTML band share one
-    implementation.
+    implementation. `gemini_call_success_rate` *(2026-07-15 addition, ADR-
+    0016 addendum)* is new: of every event that actually attempted a vision
+    call (`vision_source` is `"gemini"` or `"failsafe"` — non-escalating
+    events never call vision at all and are excluded), what fraction
+    returned a real Gemini verdict rather than falling back to failsafe
+    (`agent/machine.py`: a `vision.verdict()` exception/timeout sets
+    `source="failsafe"`, not a `"gemini"` value). Same "rate over a subset,
+    0.0 when the subset is empty" pattern as `email_delivery_rate`.
+    `window_break_confirmation_rate` *(2026-07-15, ADR-0017)* is also new:
+    of every event with a *real* Gemini verdict (`vision_source ==
+    "gemini"` specifically — failsafe verdicts are excluded, since their
+    `window_broken=True` is a conservative fail-open default, not an actual
+    visual confirmation), what fraction did Gemini classify as showing a
+    broken window. This is the metric that most directly validates the
+    SNN's own detection target (acoustic glass-break), as opposed to
+    `vision_source_breakdown`'s more general outcome/vision-path view.
     """
     real_wakes = sum(1 for event in events if event["alarm"])
     false_wakes = sum(1 for event in events if event["escalate"] and not event["alarm"])
     non_escalating = sum(1 for event in events if not event["escalate"])
     email_sent_count = sum(1 for event in events if event["email_sent"])
     email_delivery_rate = email_sent_count / real_wakes if real_wakes else 0.0
+    vision_attempts = sum(
+        1 for event in events if event.get("vision_source") in ("gemini", "failsafe")
+    )
+    gemini_successes = sum(1 for event in events if event.get("vision_source") == "gemini")
+    gemini_call_success_rate = gemini_successes / vision_attempts if vision_attempts else 0.0
+    gemini_verdicts = [event for event in events if event.get("vision_source") == "gemini"]
+    windows_confirmed_broken = sum(1 for event in gemini_verdicts if event.get("window_broken"))
+    window_break_confirmation_rate = (
+        windows_confirmed_broken / len(gemini_verdicts) if gemini_verdicts else 0.0
+    )
     return {
         "real_wakes": real_wakes,
         "false_wakes": false_wakes,
         "non_escalating_wakes": non_escalating,
         "email_delivery_rate": email_delivery_rate,
+        "gemini_call_success_rate": gemini_call_success_rate,
+        "window_break_confirmation_rate": window_break_confirmation_rate,
     }
 
 
@@ -93,6 +120,108 @@ def vision_source_breakdown(events: list[dict]) -> dict:
         source = event.get("vision_source") or "none"
         breakdown[_outcome(event)][source] += 1
     return breakdown
+
+
+def trigger_breakdown(events: list[dict]) -> dict:
+    """Outcome x `woken_by_trigger` cross-tab (2026-07-15 addition, ADR-0016
+    addendum) — distinguishes genuine SNN-hardware-latched wakes
+    (`agent/trigger.py`: `WAKE_CONFIRM_PIN` low means the Arduino actually
+    latched a trigger) from any other reason the Pi came up (manual/dev
+    boot). The deployed system is designed so every wake *is* an SNN
+    trigger (README: "wakes on an SNN hardware trigger") — so a nonzero
+    `not_triggered` count is itself an anomaly signal worth noticing, not
+    just descriptive data.
+
+    This is also the answer to "does a high non-escalating count mean
+    something is wrong?": no. The SNN is a deliberately cheap, sensitive
+    first-stage sensor — like a smoke detector, it is *expected* to latch
+    on plenty of things that aren't real intrusions (wind-driven vibration,
+    ambient noise with a spike signature similar to glass breaking, etc).
+    That's exactly why the prefilter and vision stages exist downstream: a
+    funnel shape where triggers vastly outnumber confirmed alarms is the
+    system working as intended, not a defect.
+    """
+    breakdown = {
+        "triggered": dict.fromkeys(_OUTCOMES, 0),
+        "not_triggered": dict.fromkeys(_OUTCOMES, 0),
+    }
+    for event in events:
+        key = "triggered" if event.get("woken_by_trigger") else "not_triggered"
+        breakdown[key][_outcome(event)] += 1
+    return breakdown
+
+
+def last_sync(events: list[dict]) -> dict | None:
+    """The most recent event in the queried window, by `received_at` (when
+    the cloud actually got the push, not `ts_wall`'s Pi-side wake time) —
+    lets the dashboard show "last synced X ago" (2026-07-15 addition).
+
+    `None` when `events` is empty. Deliberately scoped to the *same* window
+    the rest of `GET /api/metrics` already queried (`since`), not a second
+    unbounded Table scan: if the Pi hasn't synced within the selected
+    window, "no sync in this window" (a `None` here) is itself the useful
+    signal — the owner can widen `since` if they want to look further back.
+    """
+    if not events:
+        return None
+    latest = max(events, key=lambda event: event["received_at"])
+    return {
+        "event_id": latest["event_id"],
+        "ts_wall": latest["ts_wall"],
+        "received_at": latest["received_at"],
+    }
+
+
+def _confusion(events: list[dict], *, predicted_key: str, confirmed_key: str) -> dict:
+    """TP/FP/TN/FN + accuracy of `predicted_key` (Gemini's classification)
+    against `confirmed_key` (the owner's manually reviewed ground truth).
+    """
+    tp = fp = tn = fn = 0
+    for event in events:
+        predicted = bool(event.get(predicted_key))
+        confirmed = bool(event.get(confirmed_key))
+        if predicted and confirmed:
+            tp += 1
+        elif predicted and not confirmed:
+            fp += 1
+        elif not predicted and confirmed:
+            fn += 1
+        else:
+            tn += 1
+    total = tp + fp + tn + fn
+    return {"tp": tp, "fp": fp, "tn": tn, "fn": fn, "accuracy": (tp + tn) / total if total else 0.0}
+
+
+def review_accuracy(events: list[dict]) -> dict:
+    """Real confusion-matrix accuracy of Gemini's predictions against the
+    owner's manually confirmed ground truth (2026-07-15, ADR-0018) — the
+    accuracy measurement F04 design's Risks section and ADR-0016's addendum
+    both noted this system couldn't compute until reviews existed
+    (`PATCH /api/events/{event_id}`, `storage.review_event()`).
+
+    Only counts events with BOTH a real Gemini verdict (`vision_source ==
+    "gemini"` — a failsafe verdict has no real prediction to score) AND a
+    completed review (`reviewed_at` is not `None` — an unreviewed event has
+    no ground truth to compare against). Unlike `vision_source_breakdown`
+    and `trigger_breakdown`, this genuinely measures correctness, not just
+    an operational/agreement breakdown — it only exists because the owner
+    can now supply ground truth, closing the gap those two metrics were
+    explicit about not closing.
+    """
+    reviewed = [
+        event
+        for event in events
+        if event.get("vision_source") == "gemini" and event.get("reviewed_at") is not None
+    ]
+    return {
+        "reviewed_count": len(reviewed),
+        "window_broken": _confusion(
+            reviewed, predicted_key="window_broken", confirmed_key="window_broken_confirmed"
+        ),
+        "intrusion": _confusion(
+            reviewed, predicted_key="is_intrusion", confirmed_key="intrusion_confirmed"
+        ),
+    }
 
 
 def _percentile(sorted_values: list[float], pct: float) -> float:

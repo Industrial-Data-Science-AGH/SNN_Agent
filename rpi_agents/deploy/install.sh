@@ -11,6 +11,11 @@ USER_NAME="${SUDO_USER:-$USER}"
 VENV_DIR="$REPO_DIR/.venv"
 VAR_DIR="${SNN_AGENT_VAR_DIR:-$HOME/.local/var/snn-agent}"
 HALT_BIN="$(command -v halt 2>/dev/null || echo /usr/sbin/halt)"
+# Deployed Container App's ingest endpoint (T01 Terraform output
+# container_app_fqdn + the F01 ingest route, /api/events). Not a secret;
+# override by exporting SNN_AGENT_CLOUD_SYNC_URL before running this script
+# if the FQDN ever changes (e.g. a fresh `terraform apply`).
+CLOUD_SYNC_URL="${SNN_AGENT_CLOUD_SYNC_URL:-https://ca-snn-agents-dev--vbhrrke.thankfulbush-6febff14.francecentral.azurecontainerapps.io/api/events}"
 
 echo "==> Install config"
 echo "    REPO_DIR  : $REPO_DIR"
@@ -42,6 +47,7 @@ if [ ! -f "$ENV_FILE" ]; then
     chmod 600 "$ENV_FILE"
     echo "    Created $ENV_FILE"
     echo "    *** Fill in GEMINI_API_KEY, GMAIL_USER, GMAIL_APP_PASSWORD, ALERT_TO ***"
+    echo "    *** Also fill in CLOUD_SYNC_USER/CLOUD_SYNC_PASSWORD (same creds as the dashboard login) to enable cloud sync ***"
 else
     echo "    $ENV_FILE already exists — skipping (edit manually if needed)."
 fi
@@ -79,6 +85,7 @@ sed \
     -e "s|__WORKDIR__|${REPO_DIR}|g" \
     -e "s|__VENV__|${VENV_DIR}|g" \
     -e "s|__VAR_DIR__|${VAR_DIR}|g" \
+    -e "s|__CLOUD_SYNC_URL__|${CLOUD_SYNC_URL}|g" \
     "$UNIT_SRC" > "$UNIT_RENDERED"
 sudo cp "$UNIT_RENDERED" /etc/systemd/system/snn-agent.service
 rm -f "$UNIT_RENDERED"

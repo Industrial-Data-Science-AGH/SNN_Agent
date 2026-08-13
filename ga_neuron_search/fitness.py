@@ -163,10 +163,17 @@ class RealFitness:
         f1 = sum(f1s) / len(f1s)
         score = (ap if self.metric == "ap" else f1) \
             - self.fanout_penalty * _avg_fanout(g)
+        # GUARD anty-miraż: sieć, która przy progu k nic nie wykrywa (clipF1==0),
+        # jest bezużyteczna — AP potrafi wtedy fałszywie wyjść 1.0 przy prawie
+        # milczącym neuronie. Takie rozwiązanie dostaje fitness ~0.
+        dead = f1 <= 1e-9
+        if dead:
+            score = 0.0
         if self.verbose:
             std = (sum((a - ap) ** 2 for a in aps) / len(aps)) ** 0.5
             print(f"    [eval] {g.layer_sizes()} loss {l0:.3f}->{lN:.3f}  "
-                  f"AP {ap:.3f}±{std:.3f}  clipF1 {f1:.3f} (ep{epochs}, "
+                  f"AP {ap:.3f}±{std:.3f}  clipF1 {f1:.3f}"
+                  f"{'  [MARTWY->0]' if dead else ''} (ep{epochs}, "
                   f"seedy{self.fitness_seeds})", flush=True)
         return score
 

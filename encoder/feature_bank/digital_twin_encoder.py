@@ -8,12 +8,126 @@ from __future__ import annotations
 
 import math
 import wave
-from typing import Iterable
+from dataclasses import dataclass
+from typing import Callable, Iterable, Mapping
 
 import numpy as np
 from scipy.signal import lfilter
 
-from .feature_metrics import CHANNEL_EXTRACTORS
+try:
+    from feature_metrics import FEATURE_FUNCTIONS
+except ImportError:
+    from .feature_metrics import FEATURE_FUNCTIONS
+
+
+@dataclass
+class McuComplexity:
+    add: int = 0
+    mul: int = 0
+    cmp: int = 0
+    div: int = 0
+    sqrt: int = 0
+
+    def cycles_cortex_m4f(self) -> int:
+        """Szacowana liczba cykli dla ARM Cortex-M4F (FPU SP: ADD/MUL/CMP = 1, DIV/SQRT = 14)."""
+        return self.add * 1 + self.mul * 1 + self.cmp * 1 + self.div * 14 + self.sqrt * 14
+
+
+class FeatureExtractor:
+    def __init__(
+        self,
+        fn: Callable[[Mapping[str, object]], float],
+        is_spectral: bool = False,
+        complexity_fn: Callable[[int, int], McuComplexity] | None = None,
+    ):
+        self.fn = fn
+        self.is_spectral = is_spectral
+        self._complexity_fn = complexity_fn
+
+    def __call__(self, stats: Mapping[str, object]) -> float:
+        return self.fn(stats)
+
+    def complexity(self, n: int, n_fft: int) -> McuComplexity:
+        if self._complexity_fn:
+            return self._complexity_fn(n, n_fft)
+        return McuComplexity(add=1)
+
+
+def _build_extractors() -> dict[str, FeatureExtractor]:
+    def comp_peak(n: int, n_fft: int) -> McuComplexity:
+        return McuComplexity(cmp=n)
+
+    def comp_div1(n: int, n_fft: int) -> McuComplexity:
+        return McuComplexity(div=1)
+
+    def comp_cv(n: int, n_fft: int) -> McuComplexity:
+        return McuComplexity(div=1, sqrt=1)
+
+    def comp_tkeo(n: int, n_fft: int) -> McuComplexity:
+        return McuComplexity(add=n, mul=2 * n, div=1)
+
+    def comp_curve(n: int, n_fft: int) -> McuComplexity:
+        return McuComplexity(add=n, cmp=n)
+
+    def comp_kurtosis(n: int, n_fft: int) -> McuComplexity:
+        return McuComplexity(mul=2, div=1)
+
+    def comp_spectral_centroid(n: int, n_fft: int) -> McuComplexity:
+        return McuComplexity(add=n_fft, mul=n_fft, div=1)
+
+    def comp_dominant_freq(n: int, n_fft: int) -> McuComplexity:
+        return McuComplexity(cmp=n_fft)
+
+    def comp_band(n: int, n_fft: int) -> McuComplexity:
+        return McuComplexity(add=n_fft, div=1)
+
+    def comp_flatness(n: int, n_fft: int) -> McuComplexity:
+        return McuComplexity(add=n_fft, div=1)
+
+    def comp_flux(n: int, n_fft: int) -> McuComplexity:
+        return McuComplexity(add=n_fft, cmp=n_fft)
+
+    spectral_names = {
+        "spectral_centroid",
+        "dominant_freq",
+        "band_energy_low",
+        "band_energy_mid",
+        "band_energy_high",
+        "spectral_flatness",
+        "spectral_flux",
+    }
+
+    complexity_map = {
+        "peak": comp_peak,
+        "peak_cnt": comp_peak,
+        "crest": comp_div1,
+        "cv": comp_cv,
+        "zcr": comp_div1,
+        "flux": comp_div1,
+        "hjorth_mobility": comp_cv,
+        "tkeo_mean": comp_tkeo,
+        "curve_length": comp_curve,
+        "autocorr_lag1": comp_div1,
+        "kurtosis": comp_kurtosis,
+        "spectral_centroid": comp_spectral_centroid,
+        "dominant_freq": comp_dominant_freq,
+        "band_energy_low": comp_band,
+        "band_energy_mid": comp_band,
+        "band_energy_high": comp_band,
+        "spectral_flatness": comp_flatness,
+        "spectral_flux": comp_flux,
+    }
+
+    extractors = {}
+    for name, fn in FEATURE_FUNCTIONS.items():
+        is_spec = name in spectral_names
+        c_fn = complexity_map.get(name)
+        extractors[name] = FeatureExtractor(fn, is_spectral=is_spec, complexity_fn=c_fn)
+
+    return extractors
+
+
+CHANNEL_EXTRACTORS = _build_extractors()
 
 FS_HZ_HW = 19231.0
 HOP_MS = 10.0
@@ -202,27 +316,15 @@ def encode_signal(
 
         if len(x_f) > 1:
             dx = np.diff(x_f)
-
             var_dx = float(np.var(dx))
-
-            hjorth_mobility = math.sqrt(var_dx / (var_abs + 1e-6))
-
-            curve_length = float(np.sum(np.abs(dx)))
-
             num_ac = float(np.sum(x_f[:-1] * x_f[1:]))
-
             den_ac = float(np.sum(x_f**2)) + 1e-6
-
-            autocorr_lag1 = num_ac / den_ac
-
         else:
-            hjorth_mobility = 0.0
-            curve_length = 0.0
-            autocorr_lag1 = 0.0
+            var_dx = 0.0
+            num_ac = 0.0
+            den_ac = 1e-6
 
         mean_4 = float(np.mean(x_f**4))
-
-        kurtosis = mean_4 / (var_abs**2 + 1e-6)
 
         spec, spec_feats = _frame_spectrum(
             x_f,
@@ -253,10 +355,11 @@ def encode_signal(
             "n": hop_samples,
             "peak_cnt": peak_cnt,
             "spectral_flux": spectral_flux,
-            "hjorth_mobility": hjorth_mobility,
-            "curve_length": curve_length,
-            "autocorr_lag1": autocorr_lag1,
-            "kurtosis": kurtosis,
+            "var_dx": var_dx,
+            "num_ac": num_ac,
+            "den_ac": den_ac,
+            "mean_4": mean_4,
+            "frame": x_f,
             **spec_feats,
         }
 

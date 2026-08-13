@@ -3,7 +3,6 @@ build_feature_bank.py
 ======================
 Buduje "feature bank" z datasetu snn_input/positive i snn_input/negative.
 
-Plik znajduje się w encoder/feature_bank, dlatego importy są lokalne.
 """
 
 from __future__ import annotations
@@ -11,6 +10,11 @@ from __future__ import annotations
 import glob
 import os
 import sys
+
+# Dodanie katalogu skryptu do sys.path (rozwiazuje problemy z importami lokalnymi)
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
 
 import numpy as np
 

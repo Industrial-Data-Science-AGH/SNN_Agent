@@ -5,6 +5,7 @@ Buduje "feature bank" z datasetu snn_input/positive i snn_input/negative.
 
 Plik znajduje się w encoder/feature_bank, dlatego importy są lokalne.
 """
+
 from __future__ import annotations
 
 import glob
@@ -52,9 +53,7 @@ def build_feature_bank(
     output_path: str = "feature_bank.npz",
 ) -> dict:
     """Encode positive/negative WAV directories and save feature_bank.npz."""
-    X_pos, y_pos, g_pos, names_pos = _encode_dir(
-        positive_dir, label=1, group_offset=0
-    )
+    X_pos, y_pos, g_pos, names_pos = _encode_dir(positive_dir, label=1, group_offset=0)
     X_neg, y_neg, g_neg, names_neg = _encode_dir(
         negative_dir, label=0, group_offset=len(names_pos)
     )
@@ -78,10 +77,7 @@ def build_feature_bank(
     )
 
     print(f"[OK] Zapisano feature bank -> {output_path}")
-    print(
-        f"     ramki: {X.shape[0]}, kanały: {X.shape[1]}, "
-        f"plików: {len(file_names)}"
-    )
+    print(f"     ramki: {X.shape[0]}, kanały: {X.shape[1]}, plików: {len(file_names)}")
 
     return {
         "X": X,

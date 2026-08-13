@@ -39,9 +39,7 @@ NEW_TIME_CHANNELS = [
 ]
 
 FFT_CHANNELS = [
-    c
-    for c in CHANNEL_EXTRACTORS
-    if c not in HW_CHANNELS and c not in NEW_TIME_CHANNELS
+    c for c in CHANNEL_EXTRACTORS if c not in HW_CHANNELS and c not in NEW_TIME_CHANNELS
 ]
 
 
@@ -86,11 +84,7 @@ def _update_peak_floor(
     state: EncoderState,
     peak_val: float,
 ) -> None:
-    a = (
-        0.0015
-        if peak_val > state.floor_peak
-        else 0.0300
-    )
+    a = 0.0015 if peak_val > state.floor_peak else 0.0300
 
     state.floor_peak += a * (peak_val - state.floor_peak)
 
@@ -100,9 +94,7 @@ def _update_peak_floor(
     z = (peak_val - state.floor_peak) / (state.mad_peak + 1e-6)
 
     if z > 4.0:
-        state.floor_peak -= 0.0015 * (
-            peak_val - state.floor_peak
-        )
+        state.floor_peak -= 0.0015 * (peak_val - state.floor_peak)
 
 
 def _frame_spectrum(
@@ -117,39 +109,23 @@ def _frame_spectrum(
 
     mag_sum = spec.sum() + 1e-6
 
-    centroid = float(
-        (freqs * spec).sum() / mag_sum
-    )
+    centroid = float((freqs * spec).sum() / mag_sum)
 
-    dominant_freq = float(
-        freqs[int(np.argmax(spec))]
-    )
+    dominant_freq = float(freqs[int(np.argmax(spec))])
 
     nyquist = fs / 2.0
 
     low_mask = freqs < nyquist * 0.15
-    mid_mask = (
-        (freqs >= nyquist * 0.15)
-        & (freqs < nyquist * 0.5)
-    )
+    mid_mask = (freqs >= nyquist * 0.15) & (freqs < nyquist * 0.5)
     high_mask = freqs >= nyquist * 0.5
 
-    band_low = float(
-        spec[low_mask].sum() / mag_sum
-    )
-    band_mid = float(
-        spec[mid_mask].sum() / mag_sum
-    )
-    band_high = float(
-        spec[high_mask].sum() / mag_sum
-    )
+    band_low = float(spec[low_mask].sum() / mag_sum)
+    band_mid = float(spec[mid_mask].sum() / mag_sum)
+    band_high = float(spec[high_mask].sum() / mag_sum)
 
     log_spec = np.log(spec + 1e-6)
 
-    flatness = float(
-        np.exp(log_spec.mean())
-        / (spec.mean() + 1e-6)
-    )
+    flatness = float(np.exp(log_spec.mean()) / (spec.mean() + 1e-6))
 
     feats = {
         "spectral_centroid": centroid,
@@ -175,17 +151,13 @@ def encode_signal(
     )
 
     selected = (
-        list(channels)
-        if channels is not None
-        else list(CHANNEL_EXTRACTORS.keys())
+        list(channels) if channels is not None else list(CHANNEL_EXTRACTORS.keys())
     )
 
     unknown = set(selected) - set(CHANNEL_EXTRACTORS)
 
     if unknown:
-        raise ValueError(
-            f"Nieznane kanały: {sorted(unknown)}"
-        )
+        raise ValueError(f"Nieznane kanały: {sorted(unknown)}")
 
     raw = simulate_adc_raw(
         normalized_samples,
@@ -224,41 +196,22 @@ def encode_signal(
 
         rms = math.sqrt(mean_sq)
 
-        zc = int(
-            np.count_nonzero(
-                crossings[
-                    max(i0 - 1, 0) : max(i1 - 1, 0)
-                ]
-            )
-        )
+        zc = int(np.count_nonzero(crossings[max(i0 - 1, 0) : max(i1 - 1, 0)]))
 
-        peak_cnt = int(
-            np.count_nonzero(
-                ax_f > state.spike_thr
-            )
-        )
+        peak_cnt = int(np.count_nonzero(ax_f > state.spike_thr))
 
         if len(x_f) > 1:
             dx = np.diff(x_f)
 
             var_dx = float(np.var(dx))
 
-            hjorth_mobility = math.sqrt(
-                var_dx / (var_abs + 1e-6)
-            )
+            hjorth_mobility = math.sqrt(var_dx / (var_abs + 1e-6))
 
-            curve_length = float(
-                np.sum(np.abs(dx))
-            )
+            curve_length = float(np.sum(np.abs(dx)))
 
-            num_ac = float(
-                np.sum(x_f[:-1] * x_f[1:])
-            )
+            num_ac = float(np.sum(x_f[:-1] * x_f[1:]))
 
-            den_ac = (
-                float(np.sum(x_f**2))
-                + 1e-6
-            )
+            den_ac = float(np.sum(x_f**2)) + 1e-6
 
             autocorr_lag1 = num_ac / den_ac
 
@@ -267,24 +220,16 @@ def encode_signal(
             curve_length = 0.0
             autocorr_lag1 = 0.0
 
-        mean_4 = float(
-            np.mean(x_f**4)
-        )
+        mean_4 = float(np.mean(x_f**4))
 
-        kurtosis = (
-            mean_4
-            / (var_abs**2 + 1e-6)
-        )
+        kurtosis = mean_4 / (var_abs**2 + 1e-6)
 
         spec, spec_feats = _frame_spectrum(
             x_f,
             fs,
         )
 
-        if (
-            state.prev_spectrum is not None
-            and len(state.prev_spectrum) == len(spec)
-        ):
+        if state.prev_spectrum is not None and len(state.prev_spectrum) == len(spec):
             spectral_flux = float(
                 np.sum(
                     np.maximum(
@@ -335,9 +280,7 @@ def encode_signal(
 
         if not state.floors_primed:
             state.floor_peak = peak
-            state.mad_peak = (
-                0.1 * abs(peak) + 1e-6
-            )
+            state.mad_peak = 0.1 * abs(peak) + 1e-6
 
             state.frame_idx += 1
 
@@ -354,9 +297,7 @@ def encode_signal(
 
         state.spike_thr = float(
             np.clip(
-                3.0 * (
-                    state.floor_peak + 1e-6
-                ),
+                3.0 * (state.floor_peak + 1e-6),
                 8.0,
                 1023.0,
             )

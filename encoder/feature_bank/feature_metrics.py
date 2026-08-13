@@ -3,6 +3,7 @@
 Każda funkcja jest osobno importowalna. Funkcje otrzymują słownik statystyk
 jednej ramki; dla cech wymagających próbek ramki używane jest pole ``frame``.
 """
+
 from __future__ import annotations
 
 import math
@@ -36,8 +37,7 @@ def zcr(s: Mapping[str, object]) -> float:
 def flux(s: Mapping[str, object]) -> float:
     return max(
         0.0,
-        math.log(float(s["rms"]) + 1.0)
-        - math.log(float(s["rms_prev"]) + 1.0),
+        math.log(float(s["rms"]) + 1.0) - math.log(float(s["rms_prev"]) + 1.0),
     )
 
 

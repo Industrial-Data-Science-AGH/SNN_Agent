@@ -117,7 +117,9 @@ def baseline_classifier_report(
     train_idx, test_idx = next(gss.split(X, y, groups))
 
     scaler = StandardScaler().fit(X[train_idx])
-    clf = LogisticRegression(max_iter=1000).fit(scaler.transform(X[train_idx]), y[train_idx])
+    clf = LogisticRegression(max_iter=1000).fit(
+        scaler.transform(X[train_idx]), y[train_idx]
+    )
 
     y_true = y[test_idx]
     y_pred = clf.predict(scaler.transform(X[test_idx]))
@@ -134,12 +136,16 @@ def baseline_classifier_report(
 
     if verbose:
         print("\n=== Baseline: regresja logistyczna, split PO PLIKACH ===")
-        print(f"accuracy:            {result['accuracy']:.3f}  (naiwny baseline klasy większościowej: {majority_baseline:.3f})")
+        print(
+            f"accuracy:            {result['accuracy']:.3f}  (naiwny baseline klasy większościowej: {majority_baseline:.3f})"
+        )
         print(f"balanced_accuracy:   {result['balanced_accuracy']:.3f}")
         print(f"f1:                  {result['f1']:.3f}")
         print(f"roc_auc:             {result['roc_auc']:.3f}")
         if result["balanced_accuracy"] < 0.6:
-            print("[UWAGA] blisko przypadku - zanim odpalisz GA, sprawdź dataset/etykiety.")
+            print(
+                "[UWAGA] blisko przypadku - zanim odpalisz GA, sprawdź dataset/etykiety."
+            )
         else:
             print("jest sygnał ponad przypadek - bank nadaje się jako wejście dla GA.")
 

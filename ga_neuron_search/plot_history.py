@@ -26,7 +26,7 @@ def main():
         plt.plot(range(len(h)), h, marker="o",
                  label=f"N={r['n_total']}  (najlepsza: {sizes}, fit={r['fitness']:.3f})")
     plt.xlabel("pokolenie GA")
-    plt.ylabel("najlepszy fitness (AP)")
+    plt.ylabel("najlepszy fitness (metryka clip-F1 / AP)")
     plt.title("Algorytm genetyczny topologii SNN — poprawa z pokolenia na pokolenie")
     plt.grid(True, alpha=0.3)
     plt.legend(fontsize=8)

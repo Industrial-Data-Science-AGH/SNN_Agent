@@ -1,0 +1,95 @@
+n_total,fitness,hidden_layers,layer_sizes,evaluated,seconds
+6,0.5526,2,7-3-2-1,21,2599.3
+10,0.5633,2,7-7-2-1,28,6468.3
+
+
+całe:
+..\.venv\Scripts\python.exe run_search.py --neurons 6 10 --mode real ` --arch-dir ..\architecture_14_neurons_patryk_09_07 ` --data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\train ` --val-data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\val ` --epochs 12 --pop 8 --gens 5 --screen-mult 1 --metric clip_f1 --out wyniki_demo                   
+[data] cache-direct: 102233 okien, pozytywnych 10549 (10.3%) <- ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\train\_cache_T200_s50.npz                                                                 
+[data] cache-direct: 11928 okien, pozytywnych 1191 (10.0%) <- ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\val\_cache_T200_s50.npz                 
+[val] 3000 okien / 649 klipów (dekoder k=2, metryka=clip_f1, seedy=1)               
+[tryb] REAL - proxy-trening (12 epok, k=2, metryka=clip_f1, seedy=1)
+    [eval] [7, 3, 2, 1] loss 4.919->1.891  AP 0.322±0.000  clipF1 0.474 (ep12, seedy1)
+    [eval] [7, 3, 2, 1] loss 4.295->1.417  AP 0.310±0.000  clipF1 0.513 (ep12, seedy1)
+    [eval] [7, 2, 3, 1] loss 1.825->1.813  AP 0.360±0.000  clipF1 0.539 (ep12, seedy1)
+    [eval] [7, 3, 2, 1] loss 4.853->1.315  AP 0.352±0.000  clipF1 0.509 (ep12, seedy1)
+    [eval] [7, 3, 2, 1] loss 7.220->1.527  AP 0.370±0.000  clipF1 0.565 (ep12, seedy1)
+    [eval] [7, 2, 3, 1] loss 1.929->1.910  AP 0.340±0.000  clipF1 0.507 (ep12, seedy1)
+    [eval] [7, 3, 2, 1] loss 7.497->1.437  AP 0.293±0.000  clipF1 0.457 (ep12, seedy1)
+    [eval] [7, 2, 3, 1] loss 3.464->4.427  AP 1.000±0.000  clipF1 0.000  [MARTWY->0] (ep12, seedy1)
+[N=6] gen 0  best=0.5526  [7, 3, 2, 1]
+    [eval] [7, 3, 2, 1] loss 4.581->3.231  AP 1.000±0.000  clipF1 0.000  [MARTWY->0] (ep12, seedy1)
+    [eval] [7, 3, 2, 1] loss 7.445->1.352  AP 0.367±0.000  clipF1 0.432 (ep12, seedy1)
+    [eval] [7, 2, 3, 1] loss 1.928->2.031  AP 0.362±0.000  clipF1 0.562 (ep12, seedy1)
+    [eval] [7, 3, 2, 1] loss 5.774->4.021  AP 1.000±0.000  clipF1 0.000  [MARTWY->0] (ep12, seedy1)
+[N=6] gen 1  best=0.5526  gen_best=0.5526  [7, 3, 2, 1]  eval=12
+    [eval] [7, 2, 3, 1] loss 3.667->2.454  AP 0.225±0.000  clipF1 0.361 (ep12, seedy1)
+    [eval] [7, 3, 2, 1] loss 7.161->2.474  AP 0.318±0.000  clipF1 0.463 (ep12, seedy1)
+    [eval] [7, 2, 3, 1] loss 6.344->4.112  AP 1.000±0.000  clipF1 0.000  [MARTWY->0] (ep12, seedy1)
+[N=6] gen 2  best=0.5526  gen_best=0.5526  [7, 3, 2, 1]  eval=15
+    [eval] [7, 5, 1] loss 1.941->1.812  AP 0.362±0.000  clipF1 0.529 (ep12, seedy1)
+    [eval] [7, 5, 1] loss 1.909->1.315  AP 0.370±0.000  clipF1 0.473 (ep12, seedy1)
+    [eval] [7, 3, 2, 1] loss 7.271->1.686  AP 0.362±0.000  clipF1 0.539 (ep12, seedy1)
+[N=6] gen 3  best=0.5526  gen_best=0.5526  [7, 3, 2, 1]  eval=18
+    [eval] [7, 2, 3, 1] loss 6.352->4.048  AP 1.000±0.000  clipF1 0.000  [MARTWY->0] (ep12, seedy1)
+    [eval] [7, 5, 1] loss 1.909->1.315  AP 0.370±0.000  clipF1 0.473 (ep12, seedy1)
+[N=6] gen 4  best=0.5526  gen_best=0.5526  [7, 3, 2, 1]  eval=20
+    [eval] [7, 5, 1] loss 1.827->1.816  AP 0.357±0.000  clipF1 0.513 (ep12, seedy1)
+[N=6] gen 5  best=0.5526  gen_best=0.5526  [7, 3, 2, 1]  eval=21
+
+=== N=6: best clip-F1=0.5526 (21 ocen, 2599s) ===
+topologia 7 -> 3 -> 2 -> 1  (N=6, warstw ukrytych=2)
+  H1: [0, 1, 5], [2, 6], [3, 4]
+  H2: [0, 1, 2], [0, 1, 2]
+  D: [0, 1]
+
+    [eval] [7, 2, 2, 3, 2, 1] loss 4.184->4.681  AP 1.000±0.000  clipF1 0.000  [MARTWY->0] (ep12, seedy1)
+    [eval] [7, 4, 3, 2, 1] loss 6.312->1.469  AP 0.316±0.000  clipF1 0.540 (ep12, seedy1)
+    [eval] [7, 9, 1] loss 4.125->1.701  AP 0.359±0.000  clipF1 0.530 (ep12, seedy1)
+    [eval] [7, 7, 2, 1] loss 5.171->2.342  AP 0.302±0.000  clipF1 0.408 (ep12, seedy1)
+    [eval] [7, 9, 1] loss 4.462->1.545  AP 0.359±0.000  clipF1 0.539 (ep12, seedy1)
+    [eval] [7, 9, 1] loss 2.848->1.808  AP 0.362±0.000  clipF1 0.577 (ep12, seedy1)
+    [eval] [7, 7, 2, 1] loss 6.383->1.597  AP 0.340±0.000  clipF1 0.530 (ep12, seedy1)
+    [eval] [7, 5, 4, 1] loss 3.643->4.215  AP 1.000±0.000  clipF1 0.000  [MARTWY->0] (ep12, seedy1)
+[N=10] gen 0  best=0.5534  [7, 9, 1]
+    [eval] [7, 9, 1] loss 2.548->1.717  AP 0.356±0.000  clipF1 0.523 (ep12, seedy1)
+    [eval] [7, 4, 3, 2, 1] loss 6.299->2.939  AP 0.160±0.000  clipF1 0.213 (ep12, seedy1)
+    [eval] [7, 4, 3, 2, 1] loss 6.312->1.475  AP 0.318±0.000  clipF1 0.539 (ep12, seedy1)
+[N=10] gen 1  best=0.5534  gen_best=0.5534  [7, 9, 1]  eval=11
+    [eval] [7, 4, 3, 2, 1] loss 5.298->1.528  AP 0.380±0.000  clipF1 0.548 (ep12, seedy1)
+    [eval] [7, 4, 2, 3, 1] loss 5.741->1.399  AP 0.353±0.000  clipF1 0.543 (ep12, seedy1)
+    [eval] [7, 9, 1] loss 2.852->1.848  AP 0.370±0.000  clipF1 0.530 (ep12, seedy1)
+    [eval] [7, 7, 2, 1] loss 6.388->1.298  AP 0.371±0.000  clipF1 0.583 (ep12, seedy1)
+    [eval] [7, 9, 1] loss 3.897->1.505  AP 0.324±0.000  clipF1 0.505 (ep12, seedy1)
+[N=10] gen 2  best=0.5633  gen_best=0.5633  [7, 7, 2, 1]  eval=16
+    [eval] [7, 7, 2, 1] loss 3.221->1.316  AP 0.366±0.000  clipF1 0.504 (ep12, seedy1)
+    [eval] [7, 9, 1] loss 1.474->1.514  AP 0.401±0.000  clipF1 0.562 (ep12, seedy1)
+    [eval] [7, 6, 3, 1] loss 7.172->1.818  AP 0.370±0.000  clipF1 0.572 (ep12, seedy1)
+    [eval] [7, 6, 3, 1] loss 6.342->1.565  AP 0.382±0.000  clipF1 0.563 (ep12, seedy1)
+[N=10] gen 3  best=0.5633  gen_best=0.5633  [7, 7, 2, 1]  eval=20
+    [eval] [7, 5, 4, 1] loss 1.940->1.519  AP 0.373±0.000  clipF1 0.552 (ep12, seedy1)
+    [eval] [7, 9, 1] loss 6.110->2.826  AP 0.154±0.000  clipF1 0.145 (ep12, seedy1)
+    [eval] [7, 9, 1] loss 6.433->3.867  AP 1.000±0.000  clipF1 0.000  [MARTWY->0] (ep12, seedy1)
+    [eval] [7, 9, 1] loss 2.957->2.756  AP 0.186±0.000  clipF1 0.316 (ep12, seedy1)
+    [eval] [7, 7, 2, 1] loss 5.987->1.618  AP 0.368±0.000  clipF1 0.531 (ep12, seedy1)
+[N=10] gen 4  best=0.5633  gen_best=0.5633  [7, 7, 2, 1]  eval=25
+    [eval] [7, 9, 1] loss 2.629->2.045  AP 0.225±0.000  clipF1 0.345 (ep12, seedy1)
+    [eval] [7, 6, 3, 1] loss 6.895->1.810  AP 0.263±0.000  clipF1 0.435 (ep12, seedy1)
+    [eval] [7, 7, 2, 1] loss 6.388->1.316  AP 0.362±0.000  clipF1 0.574 (ep12, seedy1)
+[N=10] gen 5  best=0.5633  gen_best=0.5633  [7, 7, 2, 1]  eval=28
+
+=== N=10: best clip-F1=0.5633 (28 ocen, 6468s) ===
+topologia 7 -> 7 -> 2 -> 1  (N=10, warstw ukrytych=2)
+  H1: [0, 1], [2, 3, 4], [2, 5, 6], [2, 4], [1, 3], [0, 1, 6], [0, 3]
+  H2: [0, 1, 2], [0, 2]
+  D: [0, 1]
+
+
+====================================================
+   N |  clip_f1 |            warstwy | ocen
+----------------------------------------------------
+  10 |   0.5633 |            7-7-2-1 | 28
+   6 |   0.5526 |            7-3-2-1 | 21
+====================================================
+[parsymonia] najlepszy F1=0.5633; w zasięgu eps=0.0 -> wybór N=10 (F1=0.5633)
+zapisano: wyniki_demo.json , wyniki_demo.csv

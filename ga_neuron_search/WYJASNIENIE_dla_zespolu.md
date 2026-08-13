@@ -103,26 +103,37 @@ successive-halving (na tym zbiorze wyłączony, bo tani budżet = szum).
 
 ---
 
-## 5. Interpretacja realnych wyników (proxy, demo)
+## 5. Interpretacja realnych wyników (demo, proxy)
 
-Z częściowego przebiegu demo (N=6, 12 epok) widać, że **potok działa i sieć się
-uczy**: loss spada w trakcie treningu (np. `4.9 → 1.9`), a topologie są realnymi
-sieciami:
+Demo (metryka clip-F1, dekoder k=2, 12 epok, pop 8, gens 5, N=6 i N=10) dało:
 
-```
-[eval] 7-3-2-1  loss 4.92->1.89  AP 0.322  clipF1 0.474
-[eval] 7-3-2-1  loss 4.30->1.42  AP 0.310  clipF1 0.513
-[eval] 7-2-3-1  loss 1.83->1.81  AP 0.360  clipF1 0.539
-```
+| N | najlepsza topologia | clip-F1 | krzywa (pokolenia 0→5) |
+|---|---|---|---|
+| 6 | 7 → 3 → 2 → 1 | **0.553** | 0.553 płasko |
+| 10 | 7 → 7 → 2 → 1 | **0.563** | 0.553 → skok w gen 2 → 0.563 |
 
-Jak to czytać: AP ~0.31–0.36 przy ~10% klasie pozytywnej to 3–3.6× powyżej
-poziomu losowego; clipF1 ~0.47–0.54 to metryka „czy klip alarmuje". **To są
-liczby proxy** (12 epok, mała populacja) — służą do RANKINGU topologii, nie są
-finalną jakością. Pełny zwycięzca (60 epok HAT→QAT) wypada lepiej.
+Jak to czytać:
+- **Obie sieci to realne detektory** clip-F1 ~0.55–0.56 (na ~10% klasie
+  pozytywnej), poprawnie sprzętowe (fan-in/out ≤ 3) i **rozgałęzione, nie
+  łańcuchowe** — np. N=10 to 7 kanałów → 7 płytek → 2 płytki → 1 decyzyjna.
+- **N=10 wygrał minimalnie** (0.563 vs 0.553). Dokładanie płytek z 6 do 10 dało
+  tylko +0.01 — czyli parsymonia (`--parsimony-eps`) wskazałaby raczej **N=6**:
+  praktycznie ta sama jakość, mniej płytek.
+- **Krzywa jest płaska** (N=6 wcale, N=10 jeden skok w gen 2). To uczciwy efekt
+  malutkiego budżetu: przy pop 8 / gens 5 losowa populacja startowa już
+  zawierała rozwiązanie bliskie najlepszemu, więc GA nie miał się z czego mocno
+  poprawić. Żeby pokazać WYRAŹNĄ krzywą poprawy, trzeba więcej populacji i
+  pokoleń — a to realnie wymaga GPU (na CPU jedna ocena to ~3 min).
 
-Wizualny dowód dla zespołu: `plot_history.py` rysuje krzywą best-fitness w
-kolejnych pokoleniach — jeśli rośnie, GA faktycznie znajduje coraz lepsze
-okablowanie.
+Guard anty-miraż zadziałał: rozwiązania, które przy progu nic nie wykrywają
+(clipF1=0, a AP fałszywie 1.0), dostają w logu `[MARTWY->0]` i fitness 0 — nie
+zatruwają wyniku.
+
+**Co to udowadnia zespołowi:** potok działa end-to-end na realnych danych, sam
+znajduje poprawne sprzętowo, rozgałęzione topologie, które faktycznie wykrywają
+zdarzenie, i porównuje liczbę płytek. To dowód, że **podejście ma sens**; do
+finalnej jakości brakuje mocy obliczeniowej (więcej pokoleń + pełny trening
+zwycięzcy na GPU). Wykres krzywej: `wyniki_demo.png` (z `plot_history.py`).
 
 ---
 

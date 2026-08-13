@@ -30,7 +30,9 @@ class McuComplexity:
 
     def cycles_cortex_m4f(self) -> int:
         """Szacowana liczba cykli dla ARM Cortex-M4F (FPU SP: ADD/MUL/CMP = 1, DIV/SQRT = 14)."""
-        return self.add * 1 + self.mul * 1 + self.cmp * 1 + self.div * 14 + self.sqrt * 14
+        return (
+            self.add * 1 + self.mul * 1 + self.cmp * 1 + self.div * 14 + self.sqrt * 14
+        )
 
 
 class FeatureExtractor:

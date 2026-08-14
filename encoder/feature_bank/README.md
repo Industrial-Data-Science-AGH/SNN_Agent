@@ -77,3 +77,14 @@ CPU Load: 1.7%
 ```
 
 
+# Jak korzystać z metryk z ```feature_metrics.py```
+
+
+## Użycie
+
+```python
+from encoder.feature_bank.feature_metrics import FEATURE_FUNCTIONS
+
+# można brać wybrane, po nazwach
+from encoder.feature_bank.feature_metrics import crest, zcr, flux
+```

@@ -10,15 +10,14 @@ from __future__ import annotations
 import glob
 import os
 import sys
+import numpy as np
+from digital_twin_encoder import CHANNEL_EXTRACTORS, encode_wav_file
+
 
 # Dodanie katalogu skryptu do sys.path (rozwiazuje problemy z importami lokalnymi)
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
-
-import numpy as np
-
-from digital_twin_encoder import CHANNEL_EXTRACTORS, encode_wav_file
 
 ALL_CHANNELS = list(CHANNEL_EXTRACTORS.keys())
 

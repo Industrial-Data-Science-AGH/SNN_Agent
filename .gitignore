@@ -32,3 +32,4 @@ notebooks/dataset/glass/*
 notebooks/dataset/negative/*
 positive/*
 negative/*
+.npz

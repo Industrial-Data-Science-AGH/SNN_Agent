@@ -82,13 +82,30 @@ def run_ga(fitness: FitnessFn, cfg: GAConfig,
         except TypeError:
             return _finite(fitness(g))
 
-    def evaluate(g: Genome, budget: float = 1.0) -> float:
+    def _eval_many(genomes: List[Genome], budget: float) -> List[float]:
+        """Oceń partię genomów jednym wywołaniem fitness.batch (gdy dostępne).
+
+        Dedup przez cache topologii `key@budget`. Wewnątrz partii powtórzony
+        genom jest oznaczany jako "w trakcie" (None) i nie jest liczony 2x.
+        Kolejność wyników = kolejność wejścia — GA pozostaje deterministyczny:
+        te same genomy -> te same fitnessy co w wersji sekwencyjnej.
+        """
         nonlocal evaluated
-        key = f"{g.key()}@{budget:.2f}"
-        if key not in cache:
-            cache[key] = _call(g, budget)
-            evaluated += 1
-        return cache[key]
+        keys = [f"{g.key()}@{budget:.2f}" for g in genomes]
+        fresh = [(key, g) for key, g in zip(keys, genomes) if key not in cache]
+        for key, _ in fresh:
+            cache[key] = None  # in-flight (dedup w obrębie partii)
+        if fresh:
+            if hasattr(fitness, "batch"):
+                vals = fitness.batch([g for _, g in fresh], budget)
+            else:
+                vals = [_call(g, budget) for _, g in fresh]
+            for (key, _), v in zip(fresh, vals):
+                cache[key], evaluated = v, evaluated + 1
+        return [cache[k] for k in keys]
+
+    def evaluate(g: Genome, budget: float = 1.0) -> float:
+        return _eval_many([g], budget)[0]
 
     def _rand_valid() -> Genome:
         for _ in range(50):
@@ -100,14 +117,15 @@ def run_ga(fitness: FitnessFn, cfg: GAConfig,
     # populacja startowa (z opcjonalnym screeningiem)
     if cfg.screen_mult > 1:
         pool = [_rand_valid() for _ in range(cfg.screen_mult * cfg.pop_size)]
-        scored = sorted(pool, key=lambda g: evaluate(g, cfg.screen_budget), reverse=True)
-        survivors = scored[: cfg.pop_size]
+        sc_fits = _eval_many(pool, cfg.screen_budget)
+        scored = sorted(zip(pool, sc_fits), key=lambda x: x[1], reverse=True)
+        survivors = [g for g, _ in scored[: cfg.pop_size]]
         log(f"[N={cfg.n_total}] screening {len(pool)} osobników @budżet "
             f"{cfg.screen_budget:.2f} -> zostaje {len(survivors)}")
-        pop = [Individual(g, evaluate(g, 1.0)) for g in survivors]
+        pop = [Individual(g, f) for g, f in zip(survivors, _eval_many(survivors, 1.0))]
     else:
-        pop = [Individual(g := _rand_valid(), evaluate(g, 1.0))
-               for _ in range(cfg.pop_size)]
+        init = [_rand_valid() for _ in range(cfg.pop_size)]
+        pop = [Individual(g, f) for g, f in zip(init, _eval_many(init, 1.0))]
 
     pop.sort(key=lambda i: i.fitness, reverse=True)
     best = pop[0]
@@ -116,8 +134,8 @@ def run_ga(fitness: FitnessFn, cfg: GAConfig,
 
     since = 0
     for gen in range(1, cfg.generations + 1):
-        nxt: List[Individual] = pop[: cfg.elite]
-        while len(nxt) < cfg.pop_size:
+        children: List[Genome] = []
+        while len(children) < cfg.pop_size - cfg.elite:
             if rng.random() < cfg.crossover_p and len(pop) >= 2:
                 pa = _tournament_select(pop, cfg.tournament, rng)
                 pb = _tournament_select(pop, cfg.tournament, rng)
@@ -127,7 +145,9 @@ def run_ga(fitness: FitnessFn, cfg: GAConfig,
             child = mutate(child, rng, cfg.mutation_rate)
             if not child.is_valid():
                 continue
-            nxt.append(Individual(child, evaluate(child, 1.0)))
+            children.append(child)
+        nxt: List[Individual] = pop[: cfg.elite]
+        nxt += [Individual(g, f) for g, f in zip(children, _eval_many(children, 1.0))]
 
         nxt.sort(key=lambda i: i.fitness, reverse=True)
         pop = nxt

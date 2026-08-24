@@ -36,7 +36,7 @@ def main():
     ap.add_argument("--epochs-grid", type=int, nargs="+", default=[2, 4, 6, 8, 12])
     ap.add_argument("--seeds", type=int, default=3)
     ap.add_argument("--num-samples", type=int, default=6000)
-    ap.add_argument("--k", type=int, default=2)
+    ap.add_argument("--k", type=int, default=1)
     ap.add_argument("--topo-seed", type=int, default=0)
     args = ap.parse_args()
 

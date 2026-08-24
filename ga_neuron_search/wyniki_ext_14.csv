@@ -1,0 +1,2 @@
+n_total,fitness,hidden_layers,layer_sizes,n_features_used,features_used,evaluated,seconds
+8,0.6654,3,14-2-2-3-1,4,peak|hf_hi|crest|spectral_flatness,10,541.4

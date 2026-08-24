@@ -1,0 +1,2 @@
+n_total,fitness,hidden_layers,layer_sizes,n_features_used,features_used,evaluated,seconds
+8,0.6110,2,7-5-2-1,5,peak|peak_cnt|flux|hf_lo|hf_hi,15,725.1

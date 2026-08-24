@@ -1,0 +1,76 @@
+########## A/B probe: 7 HW ##########
+[data] cache-direct: 9766 okien, pozytywnych 3903 (40.0%) <- spikes_ext/train\_cache_T200_s50.npz
+[data] cache-direct: 2187 okien, pozytywnych 849 (38.8%) <- spikes_ext/val\_cache_T200_s50.npz
+[val] 2187 okien / 1334 klipów (dekoder k=1, metryka=clip_f1, seedy=1, kana³y=7)
+[tryb] REAL - proxy-trening (8 epok, k=1, metryka=clip_f1, seedy=1, kanaly=7: peak,peak_cnt,cv,zcr,flux,hf_lo,hf_hi)
+    [eval] [7, 3, 2, 2, 1] loss 5.395->5.158  AP 0.329±0.000  clipF1 0.000  cechy 5  [MARTWY->0] (ep8, seedy1)
+    [eval] [7, 2, 3, 2, 1] loss 5.871->5.517  AP 0.307±0.000  clipF1 0.000  cechy 4  [MARTWY->0] (ep8, seedy1)
+    [eval] [7, 5, 2, 1] loss 6.013->2.842  AP 0.668±0.000  clipF1 0.647  cechy 6 (ep8, seedy1)
+    [eval] [7, 2, 2, 3, 1] loss 4.268->4.131  AP 0.498±0.000  clipF1 0.443  cechy 4 (ep8, seedy1)
+    [eval] [7, 3, 4, 1] loss 4.175->2.877  AP 0.609±0.000  clipF1 0.612  cechy 5 (ep8, seedy1)
+    [eval] [7, 2, 2, 3, 1] loss 3.577->3.685  AP 0.479±0.000  clipF1 0.639  cechy 5 (ep8, seedy1)
+[N=8] gen 0  best=0.5998  [7, 5, 2, 1]
+    [eval] [7, 5, 2, 1] loss 6.005->2.802  AP 0.676±0.000  clipF1 0.654  cechy 5 (ep8, seedy1)
+    [eval] [7, 5, 2, 1] loss 6.117->2.898  AP 0.693±0.000  clipF1 0.635  cechy 5 (ep8, seedy1)
+    [eval] [7, 3, 4, 1] loss 5.774->5.471  AP 0.307±0.000  clipF1 0.000  cechy 5  [MARTWY->0] (ep8, seedy1)
+[N=8] gen 1  best=0.6098  gen_best=0.6098  [7, 5, 2, 1]  eval=9
+    [eval] [7, 5, 2, 1] loss 6.032->2.840  AP 0.662±0.000  clipF1 0.630  cechy 5 (ep8, seedy1)
+    [eval] [7, 2, 2, 3, 1] loss 4.319->3.404  AP 0.524±0.000  clipF1 0.608  cechy 5 (ep8, seedy1)
+    [eval] [7, 5, 2, 1] loss 6.014->2.856  AP 0.674±0.000  clipF1 0.647  cechy 5 (ep8, seedy1)
+[N=8] gen 2  best=0.6098  gen_best=0.6098  [7, 5, 2, 1]  eval=12
+    [eval] [7, 4, 3, 1] loss 5.735->5.295  AP 0.392±0.000  clipF1 0.115  cechy 5 (ep8, seedy1)
+    [eval] [7, 5, 2, 1] loss 6.131->2.814  AP 0.651±0.000  clipF1 0.654  cechy 5 (ep8, seedy1)
+    [eval] [7, 5, 2, 1] loss 6.083->3.338  AP 0.603±0.000  clipF1 0.491  cechy 5 (ep8, seedy1)
+[N=8] gen 3  best=0.6110  gen_best=0.6110  [7, 5, 2, 1]  eval=15
+
+=== N=8: best clip_f1=0.6110 (15 ocen, 725s) ===
+topologia 7 -> 5 -> 2 -> 1  (N=8, warstw ukrytych=2)
+  H1: [0, 1, 5], [0, 1], [4, 5], [4, 5, 6], [1, 4, 6]
+  H2: [1, 2, 4], [0, 2, 3]
+  D: [0, 1]
+  kanaly encodera (5): peak, peak_cnt, flux, hf_lo, hf_hi
+
+
+====================================================
+   N |  clip_f1 |            warstwy | ocen
+----------------------------------------------------
+   8 |   0.6110 |            7-5-2-1 | 15
+====================================================
+[parsymonia] najlepszy clip_f1=0.6110; w zasiêgu eps=0.0 -> wybór N=8 (clip_f1=0.6110, kana³y=peak,peak_cnt,flux,hf_lo,hf_hi)
+zapisano: wyniki_ext_hw7.json , wyniki_ext_hw7.csv
+########## A/B probe: 14 kanalow ##########
+[data] cache-direct: 9766 okien, pozytywnych 3903 (40.0%) <- spikes_ext/train\_cache_T200_s50.npz
+[data] cache-direct: 2187 okien, pozytywnych 849 (38.8%) <- spikes_ext/val\_cache_T200_s50.npz
+[val] 2187 okien / 1334 klipów (dekoder k=1, metryka=clip_f1, seedy=1, kana³y=14)
+[tryb] REAL - proxy-trening (8 epok, k=1, metryka=clip_f1, seedy=1, kanaly=14: peak,peak_cnt,cv,zcr,flux,hf_lo,hf_hi,hjorth_mobility,autocorr_lag1,curve_length,crest,spectral_flatness,spectral_centroid,band_energy_low)
+    [eval] [14, 3, 2, 2, 1] loss 5.868->3.957  AP 0.660±0.000  clipF1 0.625  cechy 7 (ep8, seedy1)
+    [eval] [14, 2, 3, 2, 1] loss 5.744->5.396  AP 0.307±0.000  clipF1 0.000  cechy 3  [MARTWY->0] (ep8, seedy1)
+    [eval] [14, 5, 2, 1] loss 8.582->4.670  AP 0.565±0.000  clipF1 0.645  cechy 9 (ep8, seedy1)
+    [eval] [14, 2, 2, 3, 1] loss 5.770->3.462  AP 0.536±0.000  clipF1 0.651  cechy 5 (ep8, seedy1)
+    [eval] [14, 3, 4, 1] loss 3.421->3.131  AP 0.463±0.000  clipF1 0.478  cechy 6 (ep8, seedy1)
+    [eval] [14, 2, 2, 3, 1] loss 5.770->2.696  AP 0.742±0.000  clipF1 0.692  cechy 5 (ep8, seedy1)
+[N=8] gen 0  best=0.6512  [14, 2, 2, 3, 1]
+    [eval] [14, 2, 2, 3, 1] loss 5.770->2.665  AP 0.736±0.000  clipF1 0.703  cechy 4 (ep8, seedy1)
+    [eval] [14, 3, 2, 2, 1] loss 5.868->3.123  AP 0.694±0.000  clipF1 0.676  cechy 6 (ep8, seedy1)
+[N=8] gen 1  best=0.6654  gen_best=0.6654  [14, 2, 2, 3, 1]  eval=8
+    [eval] [14, 2, 2, 3, 1] loss 5.770->2.772  AP 0.728±0.000  clipF1 0.695  cechy 4 (ep8, seedy1)
+    [eval] [14, 2, 2, 3, 1] loss 5.771->2.736  AP 0.730±0.000  clipF1 0.685  cechy 4 (ep8, seedy1)
+[N=8] gen 2  best=0.6654  gen_best=0.6654  [14, 2, 2, 3, 1]  eval=10
+[N=8] gen 3  best=0.6654  gen_best=0.6654  [14, 2, 2, 3, 1]  eval=10
+
+=== N=8: best clip_f1=0.6654 (10 ocen, 541s) ===
+topologia 14 -> 2 -> 2 -> 3 -> 1  (N=8, warstw ukrytych=3)
+  H1: [0, 10, 11], [0, 6, 11]
+  H2: [0, 1], [0, 1]
+  H3: [0, 1], [0, 1], [0, 1]
+  D: [0, 1, 2]
+  kanaly encodera (4): peak, hf_hi, crest, spectral_flatness
+
+
+====================================================
+   N |  clip_f1 |            warstwy | ocen
+----------------------------------------------------
+   8 |   0.6654 |         14-2-2-3-1 | 10
+====================================================
+[parsymonia] najlepszy clip_f1=0.6654; w zasiêgu eps=0.0 -> wybór N=8 (clip_f1=0.6654, kana³y=peak,hf_hi,crest,spectral_flatness)
+zapisano: wyniki_ext_14.json , wyniki_ext_14.csv

@@ -39,7 +39,10 @@ class GenomeNet(nn.Module):
         assert genome.is_valid(), f"niepoprawny genom: {genome.violations()}"
         self.genome = genome
         self.layers_mod = nn.ModuleList()
-        prev = CH_IN
+        # liczba wejść = rozmiar warstwy cech genomu (pula kanałów encodera),
+        # a nie zaszyte CH_IN — dzięki temu GA może działać na dowolnym zestawie
+        # kanałów (musi zgadzać się z liczbą kanałów w danych treningowych).
+        prev = genome.layer_sizes()[0]
         for k, layer in enumerate(genome.layers):
             n_post = len(layer)
             names = [f"L{k+1}n{i}" for i in range(n_post)]
@@ -75,7 +78,7 @@ class GenomeNet(nn.Module):
 # ============================================================ strata (czasowa)
 
 def genome_loss(out, y, pos_weight, rate_lo=0.02, rate_hi=0.30, margin_w=0.5,
-                spk_w=0.5, k_ref=2.0):
+                spk_w=0.5, k_ref=1.0):
     """Strata z członem CZASOWYM.
 
     Składniki:
@@ -129,7 +132,7 @@ def _average_precision(y_true, score) -> float:
 
 
 @torch.no_grad()
-def genome_eval_events(model, win, lab, fidx, dev, k=2, bs=256):
+def genome_eval_events(model, win, lab, fidx, dev, k=1, bs=256):
     """Metryki na poziomie KLIPU (jak na żywym demie).
 
     Klip alarmuje, gdy KTÓREŚ jego okno ma >= k spików neuronu D. Zwraca

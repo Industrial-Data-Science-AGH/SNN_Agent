@@ -1,0 +1,38 @@
+{
+  "channels": [
+    "peak",
+    "peak_cnt",
+    "cv",
+    "zcr",
+    "flux",
+    "hf_lo",
+    "hf_hi",
+    "hjorth_mobility",
+    "autocorr_lag1",
+    "curve_length",
+    "crest",
+    "spectral_flatness",
+    "spectral_centroid",
+    "band_energy_low"
+  ],
+  "n_hw": 7,
+  "thresholds": [
+    1.2053018808364868,
+    0.23626230657100677,
+    68.14594268798828,
+    3.4953103065490723,
+    0.6384550929069519,
+    4112.779296875,
+    0.1684369146823883
+  ],
+  "directions": [
+    1,
+    -1,
+    1,
+    1,
+    1,
+    1,
+    -1
+  ],
+  "bg_rate": 0.08
+}

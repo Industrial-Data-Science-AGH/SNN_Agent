@@ -79,9 +79,10 @@ class RealFitness:
     def __init__(self, arch_dir: str, data: str, val_data: Optional[str] = None,
                  limit: Optional[int] = None, epochs: int = 4, T: int = 200,
                  stride: int = 50, bs: int = 128, lr: float = 3e-3,
-                 num_samples: int = 6000, val_cap: int = 3000, k: int = 2,
-                 metric: str = "ap", fitness_seeds: int = 1,
+                 num_samples: int = 6000, val_cap: int = 3000, k: int = 1,
+                 metric: str = "clip_f1", fitness_seeds: int = 1,
                  pos_weight: float = 3.0, fanout_penalty: float = 0.01,
+                 feature_penalty: float = 0.005, channels_head: Optional[int] = None,
                  verbose: bool = True, seed: int = 0, device: Optional[str] = None):
         assert metric in ("ap", "clip_f1"), "metric: 'ap' albo 'clip_f1'"
         arch_dir = os.path.abspath(arch_dir)
@@ -98,13 +99,21 @@ class RealFitness:
         self.epochs = epochs
         self.bs, self.lr, self.num_samples = bs, lr, num_samples
         self.pos_weight, self.fanout_penalty = pos_weight, fanout_penalty
+        self.feature_penalty = feature_penalty
         self.metric, self.fitness_seeds = metric, fitness_seeds
         self.verbose, self.seed, self.k = verbose, seed, k
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
         ds = load_clips(data, T, stride, limit, SpikeClips)
+        # A/B selekcji cech: ogranicz do pierwszych `channels_head` kanałów (w
+        # spikes_ext pierwsze 7 to HW) — pozwala porównać 7 HW vs 14 na TYM SAMYM
+        # zbiorze/val/k (zmienia się tylko pula cech).
+        if channels_head:
+            ds.win = ds.win[..., :channels_head]
         if val_data:
             va = load_clips(val_data, T, stride, None, SpikeClips)
+            if channels_head:
+                va.win = va.win[..., :channels_head]
             self.tr_ds, self.tr_lab = ds, ds.lab
             vw, vl, vf = va.win, va.lab, va.fidx
         else:
@@ -117,8 +126,16 @@ class RealFitness:
             sub = rng.choice(len(vl), size=val_cap, replace=False)
             vw, vl, vf = vw[sub], vl[sub], vf[sub]
         self.va_win, self.va_lab, self.va_fidx = vw, vl.astype(np.float32), vf
+
+        # liczba kanałów encodera bierze się z danych (nie zaszyta na 7) — GA
+        # selekcjonuje spośród nich. Nazwy: najpierw sidecar channels.json obok
+        # danych (rozszerzone zbiory 14-kanałowe), potem pipeline, na końcu ch{i}.
+        self.n_channels = int(self.va_win.shape[-1])
+        self.channel_names = _load_channel_names(val_data or data, self.n_channels)
+
         print(f"[val] {len(self.va_lab)} okien / {len(np.unique(self.va_fidx))} klipów "
-              f"(dekoder k={k}, metryka={metric}, seedy={fitness_seeds})", flush=True)
+              f"(dekoder k={k}, metryka={metric}, seedy={fitness_seeds}, "
+              f"kanały={self.n_channels})", flush=True)
 
     def eval_events(self, model, k: Optional[int] = None):
         import net
@@ -161,8 +178,13 @@ class RealFitness:
             l0, lN = loss0, lossN
         ap = sum(aps) / len(aps)
         f1 = sum(f1s) / len(f1s)
+        n_feat = len(g.features_used())
+        # kara parsymonii: drobny minus za okablowanie (fan-out) i za liczbę
+        # użytych kanałów encodera — rozstrzyga remisy na korzyść MNIEJSZEGO
+        # zestawu wejść (selekcja cech), nie przebijając realnych różnic jakości.
         score = (ap if self.metric == "ap" else f1) \
-            - self.fanout_penalty * _avg_fanout(g)
+            - self.fanout_penalty * _avg_fanout(g) \
+            - self.feature_penalty * n_feat
         # GUARD anty-miraż: sieć, która przy progu k nic nie wykrywa (clipF1==0),
         # jest bezużyteczna — AP potrafi wtedy fałszywie wyjść 1.0 przy prawie
         # milczącym neuronie. Takie rozwiązanie dostaje fitness ~0.
@@ -172,10 +194,38 @@ class RealFitness:
         if self.verbose:
             std = (sum((a - ap) ** 2 for a in aps) / len(aps)) ** 0.5
             print(f"    [eval] {g.layer_sizes()} loss {l0:.3f}->{lN:.3f}  "
-                  f"AP {ap:.3f}±{std:.3f}  clipF1 {f1:.3f}"
+                  f"AP {ap:.3f}±{std:.3f}  clipF1 {f1:.3f}  cechy {n_feat}"
                   f"{'  [MARTWY->0]' if dead else ''} (ep{epochs}, "
                   f"seedy{self.fitness_seeds})", flush=True)
         return score
+
+
+def _load_channel_names(data_dir: str, n_channels: int):
+    """Nazwy kanałów: sidecar channels.json obok danych (zbiory rozszerzone),
+    inaczej pipeline CHANNELS (gdy pasuje liczebnością), inaczej ch{i}."""
+    import json
+    cands = [data_dir]
+    if data_dir:
+        cands.append(os.path.dirname(data_dir.rstrip("/\\")))
+    for d in cands:
+        p = os.path.join(d, "channels.json") if d else None
+        if p and os.path.exists(p):
+            try:
+                names = json.load(open(p, encoding="utf-8"))
+                if isinstance(names, dict):
+                    names = names.get("channels", [])
+                # przy --channels-head sidecar ma więcej nazw niż kanałów — obetnij
+                if len(names) >= n_channels:
+                    return list(names)[:n_channels]
+            except Exception:
+                pass
+    try:
+        from snn_hw_pipeline import CHANNELS as PIPE_CHANNELS
+        if len(PIPE_CHANNELS) == n_channels:
+            return list(PIPE_CHANNELS)
+    except Exception:
+        pass
+    return [f"ch{i}" for i in range(n_channels)]
 
 
 def _avg_fanout(g: Genome) -> float:

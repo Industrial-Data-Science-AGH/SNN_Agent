@@ -39,6 +39,22 @@ MAX_FANIN = 3
 MAX_FANOUT = 3
 OUT_FANIN = 3  # neuron decyzyjny ma dokładnie tyle wejść
 MIN_FANIN_HIDDEN = 2  # neuron ukryty ma mieszać >=2 sygnały (nie łańcuch 1-wejściowy)
+MIN_FEATURES_USED = 2  # sieć nie może zdegenerować poniżej tylu kanałów encodera
+
+
+def configure_features(n_features: int, names: Optional[List[str]] = None) -> None:
+    """Ustaw rozmiar warstwy cech (liczbę kanałów encodera) dla całego GA.
+
+    Dzięki temu pula wejść NIE jest zaszyta na 7 — bierze się z danych. GA sam
+    WYBIERA, które kanały wpiąć (nie wymuszamy użycia wszystkich — patrz
+    `_ensure_min_features`). Wołaj RAZ, przed budowaniem genomów.
+    """
+    global N_FEATURES, FEATURE_NAMES
+    N_FEATURES = int(n_features)
+    if names is not None and len(names) == N_FEATURES:
+        FEATURE_NAMES = list(names)
+    elif len(FEATURE_NAMES) != N_FEATURES:
+        FEATURE_NAMES = [f"ch{i}" for i in range(N_FEATURES)]
 
 
 @dataclass
@@ -129,6 +145,11 @@ class Genome:
             for neuron in self.layers[0]:
                 used.update(neuron)
         return used
+
+    def feature_names_used(self) -> List[str]:
+        """Nazwy kanałów encodera, które GA faktycznie wpiął (wynik selekcji cech)."""
+        return [FEATURE_NAMES[i] for i in sorted(self.features_used())
+                if 0 <= i < len(FEATURE_NAMES)]
 
     # ---------------------------------------------------------------- hash / io
     def key(self) -> str:
@@ -307,8 +328,9 @@ def repair(g: Genome, rng: random.Random) -> Genome:
     #     zapas fan-out (bezpieczne — nie łamie fan-out<=3)
     _repair_hidden_fanin(g, rng)
 
-    # 4) pokrycie cech (miękkie): wepnij nieużytą cechę zamiast losowej w L1
-    _cover_features(g, rng)
+    # 4) selekcja cech należy do GA — NIE wymuszamy użycia wszystkich kanałów.
+    #    Pilnujemy tylko, by sieć nie zdegenerowała poniżej MIN_FEATURES_USED.
+    _ensure_min_features(g, rng)
 
     return g
 
@@ -358,24 +380,32 @@ def _fix_decision(g: Genome, rng: random.Random) -> None:
     g.layers[-1][0] = sorted(dec)
 
 
-def _cover_features(g: Genome, rng: random.Random) -> None:
+def _ensure_min_features(g: Genome, rng: random.Random) -> None:
+    """NIE wymuszamy użycia wszystkich cech — to jest zadanie selekcji dla GA.
+    Gwarantujemy tylko, że sieć bierze >= MIN_FEATURES_USED różnych kanałów
+    encodera (inaczej warstwa 0 zdegenerowałaby do 1 wejścia = brak mieszania)."""
     if not g.layers:
         return
+    target = min(MIN_FEATURES_USED, N_FEATURES)
     used = g.features_used()
-    missing = [f for f in range(N_FEATURES) if f not in used]
-    if not missing:
+    if len(used) >= target:
         return
     counts = g.fanout_counts(0)
+    missing = [f for f in range(N_FEATURES) if f not in used]
+    rng.shuffle(missing)
     for f in missing:
-        # znajdź neuron w L1, gdzie można podmienić wejście o wysokim fan-out
+        if len(used) >= target:
+            break
+        # podmień w jakimś neuronie L1 wejście o zapasie fan-out na brakującą cechę
         for neuron in g.layers[0]:
-            swappable = [s for s in neuron if counts[s] > 1]
-            if swappable and counts[f] < MAX_FANOUT:
+            swappable = [s for s in neuron if counts[s] > 1 and s in used]
+            if swappable and counts[f] < MAX_FANOUT and f not in neuron:
                 old = swappable[0]
                 neuron[neuron.index(old)] = f
                 neuron.sort()
                 counts[old] -= 1
                 counts[f] += 1
+                used.add(f)
                 break
 
 
@@ -401,11 +431,34 @@ def _repair_min_width(g: Genome, rng: random.Random) -> None:
     g.layers = new_hidden + [g.layers[-1]]
 
 
+def _wire_layer_balanced(prev: int, size: int, want: int,
+                         rng: random.Random) -> List[List[int]]:
+    """Zbalansowane okablowanie warstwy metodą round-robin: każdy neuron dostaje
+    `want` różnych wejść, a fan-out rozkłada się równo (<= ceil(size*want/prev)).
+    Gdy `2*size <= 3*prev`, gwarantuje fan-in >=2 przy fan-out <=3 — bez ślepych
+    zaułków, w które wpada wariant zachłanny."""
+    order = list(range(prev))
+    rng.shuffle(order)
+    ptr = 0
+    layer: List[List[int]] = []
+    for _ in range(size):
+        ins: List[int] = []
+        tries = 0
+        while len(ins) < want and tries < 3 * prev:
+            c = order[ptr % prev]
+            ptr += 1
+            tries += 1
+            if c not in ins:
+                ins.append(c)
+        layer.append(sorted(ins))
+    return layer
+
+
 def _repair_hidden_fanin(g: Genome, rng: random.Random) -> None:
-    """Bias anty-łańcuch: dociągnij fan-in neuronów UKRYTYCH do >=2, ale TYLKO
-    gdy źródło ma jeszcze zapas fan-out (nie łamiemy fan-out<=3). W bardzo
-    szerokich warstwach część neuronów może zostać z fan-in 1 — to nieuniknione,
-    bo suma wejść = suma wyjść <= 3*prev."""
+    """Bias anty-łańcuch: dociągnij fan-in neuronów UKRYTYCH do >=2. Najpierw
+    tanio i zachowawczo (dobierz wejście z zapasem fan-out), a gdy zachłanność
+    utknie w ślepym zaułku (np. fan-out poprzedniej warstwy = [3,3,1]) i warstwa
+    JEST wykonalna w >=2 — przepnij ją całą zbalansowanym round-robinem."""
     sizes = g.layer_sizes()
     for k in range(len(g.layers) - 1):        # tylko warstwy ukryte
         prev = sizes[k]
@@ -420,6 +473,12 @@ def _repair_hidden_fanin(g: Genome, rng: random.Random) -> None:
                 pick = rng.choice(cand)
                 neuron.append(pick); neuron.sort()
                 counts[pick] += 1
+        # jeśli mimo to został neuron poniżej celu, a warstwa jest wykonalna —
+        # zbuduj okablowanie od nowa zbalansowanym round-robinem (bez zaułka)
+        size = len(g.layers[k])
+        if (want >= 2 and MIN_FANIN_HIDDEN * size <= MAX_FANOUT * prev
+                and any(len(n) < want for n in g.layers[k])):
+            g.layers[k] = _wire_layer_balanced(prev, size, want, rng)
 
 
 # ==================================================================== mutacje
@@ -503,12 +562,38 @@ def mut_merge_layers(g: Genome, rng: random.Random) -> None:
         neuron[:] = [s for s in neuron if s < prev] or [rng.randrange(prev)]
 
 
+def mut_drop_feature(g: Genome, rng: random.Random) -> None:
+    """Selekcja cech: spróbuj PORZUCIĆ jeden kanał encodera, przepinając jego
+    użycia w warstwie 0 na inne JUŻ używane cechy z zapasem fan-out. Gdy się nie
+    da (brak miejsca) — no-op. Pozwala GA szukać mniejszych zestawów wejść."""
+    if not g.layers:
+        return
+    used = sorted(g.features_used())
+    if len(used) <= min(MIN_FEATURES_USED, N_FEATURES):
+        return
+    drop = rng.choice(used)
+    counts = g.fanout_counts(0)
+    targets = [u for u in used if u != drop]
+    for neuron in g.layers[0]:
+        if drop not in neuron:
+            continue
+        cand = [t for t in targets if counts[t] < MAX_FANOUT and t not in neuron]
+        if not cand:
+            continue
+        t = rng.choice(cand)
+        neuron[neuron.index(drop)] = t
+        neuron.sort()
+        counts[drop] -= 1
+        counts[t] += 1
+
+
 MUTATIONS = [
-    (mut_rewire, 0.40),
-    (mut_fanin, 0.20),
-    (mut_move_neuron, 0.15),
-    (mut_split_layer, 0.15),
+    (mut_rewire, 0.32),
+    (mut_fanin, 0.18),
+    (mut_move_neuron, 0.12),
+    (mut_split_layer, 0.12),
     (mut_merge_layers, 0.10),
+    (mut_drop_feature, 0.16),   # selekcja cech encodera
 ]
 
 

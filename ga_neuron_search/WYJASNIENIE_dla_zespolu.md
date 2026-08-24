@@ -277,7 +277,82 @@ Parametry `export_winner.py`:
 `.\run.bat test_genome.py`.
 
 ### Słowniczek pojęć z logu
-- `[eval] 7-3-2-1 loss 4.9->1.9 AP 0.32 clipF1 0.47` — jedna oceniona topologia:
-  7 kanałów→3→2→1 neuron, loss spadł (uczy się), AP i clipF1 na walidacji.
+- `[eval] [7,3,2,1] loss 4.9->1.9 AP 0.32 clipF1 0.47 cechy 5` — jedna oceniona
+  topologia: 7 kanałów→3→2→1 neuron, loss spadł (uczy się), AP i clipF1 na
+  walidacji, `cechy N` = ile kanałów encodera GA wpiął (selekcja cech).
 - `[N=6] gen 3 best=0.36` — koniec pokolenia 3 dla N=6; `best` ma rosnąć.
+- `kanaly encodera (5): zcr, hf_hi, hjorth_mobility, ...` — które cechy wybrał
+  zwycięzca danego N.
 - `[parsymonia] ... wybór N=...` — którą liczbę neuronów rekomenduje sweep.
+
+---
+
+## 10. Jak sprawdzić, czy nowa wersja jest LEPSZA (test A/B)
+
+> Uwaga: `..\.venv\Scripts\python.exe` — jeśli u Ciebie środowisko to `SNN\`,
+> użyj `..\SNN\Scripts\python.exe`. Wszystko odpalamy z katalogu `ga_neuron_search`.
+
+### 10.0. Najpierw: co z czym wolno porównywać
+Wynik zależy od **trójki (dataset, k, metryka)**. **Nie** porównuj:
+- `spikes_ext` (14 kanałów, VOICe) z liczbą oryginału **0.51** (`spikes_manifest7`,
+  inny zbiór) — to inne dane, inne klipy.
+- `AP@k=2` z `clip_f1@k=1` — inne metryki i inny dekoder.
+
+Dlatego „czy jest lepiej" sprawdzamy **A/B na TYM SAMYM zbiorze**, zmieniając
+**tylko jedną rzecz**. Każdy przebieg zapisz do `WYNIKI.md`.
+
+### 10.1. Czy mocniejsze cechy pomagają? (7 HW vs 14 kanałów, ten sam val, k=1)
+To jest właściwe pytanie po dodaniu `spikes_ext`. Dwa sweepy różnią się **tylko
+pulą cech** (`--channels-head 7` = same kanały HW; bez flagi = wszystkie 14):
+
+```
+:: BASELINE — tylko 7 kanałów HW
+..\.venv\Scripts\python.exe run_search.py --neurons 6 8 10 --mode real ^
+  --arch-dir ..\architecture_14_neurons_patryk_09_07 ^
+  --data spikes_ext\train --val-data spikes_ext\val ^
+  --channels-head 7 --k 1 --metric clip_f1 --epochs 12 --pop 12 --gens 8 ^
+  --fitness-seeds 3 --feature-penalty 0.005 --out wyniki_ext_hw7
+
+:: NOWE — pełne 14 kanałów (GA sam wybiera podzbiór)
+..\.venv\Scripts\python.exe run_search.py --neurons 6 8 10 --mode real ^
+  --arch-dir ..\architecture_14_neurons_patryk_09_07 ^
+  --data spikes_ext\train --val-data spikes_ext\val ^
+  --k 1 --metric clip_f1 --epochs 12 --pop 12 --gens 8 ^
+  --fitness-seeds 3 --feature-penalty 0.005 --out wyniki_ext_14
+```
+
+**Jak czytać wynik (to jest odpowiedź „lepiej czy nie"):**
+- Porównaj **najlepsze `clip_f1@k=1`** z obu przebiegów (tabela na końcu logu i w
+  `wyniki_ext_*.csv`). Ten sam val, to samo k → liczby **są** porównywalne.
+- Zobacz, **które kanały wybrał zwycięzca 14-kanałowy** (log `kanaly encodera (...)`
+  i pole `features_used` w JSON). Jeśli 14 wygrywa **i** wpina nowe cechy
+  (`hjorth_mobility`, `spectral_*`, `autocorr_lag1`) — to bezpośredni dowód, że
+  mocniejsze cechy pomagają, a stare HW (peak/peak_cnt/flux) są zbędne.
+- Jeśli 14 ≈ 7 HW — bogatszy encoder nic nie daje na tych danych (też wynik).
+
+### 10.2. Czy k=1 jest spójne (sanity)
+W logu każdego `[eval]` i w `[val] ... dekoder k=1` musi być **k=1**. Jeśli gdzieś
+widzisz k=2 — użyłeś starej komendy; dodaj `--k 1`.
+
+### 10.3. Wykres krzywej uczenia (do slajdu)
+```
+..\.venv\Scripts\python.exe plot_history.py wyniki_ext_14.json
+```
+Rosnąca krzywa best-fitness = GA faktycznie ulepsza (przy małym budżecie bywa
+płaska — to nie błąd, to za mało pokoleń, patrz sekcja 5).
+
+### 10.4. Porównanie z oryginałem NA UCZCIWYCH ZASADACH (opcjonalnie)
+`spikes_ext` ≠ oryginalny zbiór, więc bezpośrednio się nie da. Żeby porównać z
+siecią 0.51, trzeba **oryginalnego audio** (ESC-50/notebooks) albo pliku manifestu
+— wtedy `build_ext_dataset.py` przebuduje `spikes_manifest7` z 14 kanałami 1:1 i
+dopiero `clip_f1@k=1` na tym samym val będzie porównywalne z oryginałem.
+
+### 10.5. Gdzie lądują wyniki
+`wyniki_*.json` (topologie + `features_used` + historia), `wyniki_*.csv` (tabela
+z kolumną `features_used`), tabela + `[parsymonia]` w konsoli. **Przeklej
+podsumowanie do `WYNIKI.md`** (jest tam szablon i tabela zbiorcza).
+
+### 10.6. Koszt
+Jedna ocena topologii ~kilka min na CPU (12 epok). Pełny A/B (2 × pop 12 × gens 8
+× 3 wartości N × 3 seedy) to godziny na CPU — na próbę zmniejsz do
+`--pop 6 --gens 4 --fitness-seeds 1 --neurons 8`, docelowo GPU.

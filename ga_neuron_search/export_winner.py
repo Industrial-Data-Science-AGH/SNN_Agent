@@ -28,7 +28,7 @@ def main():
     ap.add_argument("--n", type=int, default=None,
                     help="które N wziąć; domyślnie topologia o najlepszym fitness")
     ap.add_argument("--epochs", type=int, default=60, help="epoki pełnego HAT->QAT")
-    ap.add_argument("--k", type=int, default=2)
+    ap.add_argument("--k", type=int, default=1, help="dekoder: >=k spikow D = alarm (k=1 spojnie)")
     ap.add_argument("--arch-dir", default="../architecture_14_neurons_patryk_09_07")
     ap.add_argument("--data", required=True)
     ap.add_argument("--val-data", default=None)
@@ -55,9 +55,12 @@ def main():
 
     rf = RealFitness(arch_dir=args.arch_dir, data=args.data, val_data=args.val_data,
                      epochs=12, k=args.k, verbose=False)
+    # pula kanałów encodera = to, co jest w danych (spójne z siecią z sweepu)
+    from genome import configure_features
+    configure_features(rf.n_channels, rf.channel_names)
     model, m = train_full(rf, g, epochs=args.epochs, ckpt=f"{args.out}_winner.pt")
     cfg_path = f"{args.out}_hw_config.json"
-    export_genome_config(model, cfg_path,
+    export_genome_config(model, cfg_path, channels=rf.channel_names,
                          extra={"winner_val_metrics": m, "n_total": r["n_total"],
                                 "sweep_fitness": r["fitness"],
                                 "source_json": args.winner_json})

@@ -95,6 +95,29 @@ def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
     return model, best_m
 
 
+# ============================================================ strojenie dekodera
+
+def tune_k(model, rf, k_range=(1, 2, 3, 4, 5, 6)):
+    """Przebieg progu dekodera k (>= k spików D w oknie = alarm) na wytrenowanym
+    modelu. Nie dotyka wag — tylko metryki na zbiorze walidacyjnym, więc tanie.
+    Zwraca (najlepsze_k, jego metryki, tabela wszystkich k)."""
+    best, best_k, table = None, k_range[0], []
+    for k in k_range:
+        m = rf.eval_events(model, k=k)
+        table.append({"k": int(k),
+                      "clip_f1": m["clip_f1"], "clip_recall": m["clip_recall"],
+                      "clip_precision": m["clip_precision"],
+                      "clip_fa_rate": m["clip_fa_rate"], "ap": m["ap"]})
+        print(f"[tune-k] k={k}: clipF1 {m['clip_f1']:.3f} rec {m['clip_recall']:.3f} "
+              f"prec {m['clip_precision']:.3f} FA {m['clip_fa_rate']:.3f} "
+              f"AP {m['ap']:.3f}")
+        if best is None or m["clip_f1"] > best["clip_f1"]:
+            best, best_k = m, k
+    print(f"[tune-k] wybor k={best_k} (clipF1 {best['clip_f1']:.3f}, "
+          f"FA {best['clip_fa_rate']:.3f})")
+    return best_k, best, table
+
+
 # ============================================================ eksport nastaw
 
 def export_genome_config(model, path: str, channels=None, extra: Optional[dict] = None):

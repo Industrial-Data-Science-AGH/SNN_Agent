@@ -91,3 +91,66 @@ The `.pt` is the network weights for simulation/checkpointing; the `.json` is th
 
 9. **More generations or adaptive mutation** if the goal is squeezing the last 0.01 of F1 — several N runs improved only in the final generations, hinting the search was still productive when stopped.
 10. **N-budget sweep granularity** (e.g. 4,5,6,7,8,9,10) to localize the elbow better; or a Pareto front instead of separate runs per N (README TODO).
+
+---
+
+# Follow-up (2026-08-24) — parallel eval, stabler defaults, deployment tuning
+
+This section implements the top items from §6 above (1, 3, 6 + the k/pos_weight part of 5/6/7), scoped to a **smoke test** of the parallel path (no full re-sweep) and a **full pos_weight grid + k-tuning** on the existing winner.
+
+## 1. Parallel GA evaluation (`ParallelFitness`, `--workers`) — implemented + verified
+
+- New `ParallelFitness` in `fitness.py`: a `ProcessPoolExecutor` where each worker builds its **own `RealFitness`** and pins `torch.set_num_threads(1)` (without that, 18 workers × 18 torch threads thrash). `ga.run_ga` now evaluates every generation in one `fitness.batch(...)` call, dedup'd via the existing topology cache; the fallback path is unchanged for synth/tests.
+- **Correctness (the critical check):** a real smoke run (`--neurons 4 6 --pop 8 --gens 3 --epochs 2`, workers=1 vs workers=8) produced **bit-for-bit identical** `wyniki_*.json` (same best topology, same fitness, same eval count) — parallel changes the wall-clock only, never the result.
+- **Speed (measured on this M5 Pro, 18 cores):**
+  - tiny 30-eval run: 74.6 s → **24.7 s** (3.0×; spawn + data-load of 8 workers dominates at this size),
+  - representative 97-eval run (N=7, pop 24, gens 4, `--workers 16`): **42.4 s wall** vs ~453 s of CPU work → **~10.7×** once startup amortizes.
+  - Full-sweep expectation: ~1 h 48 m → **~10–15 min** (not re-run).
+- `torch.set_num_threads(1)` is also pinned in the main process (`--mode real`) — a tiny SNN gains nothing from threaded matmul, and a single thread in main == single thread in workers keeps sequential and parallel runs comparable/deterministic. MPS stays off (measured 3× slower).
+
+## 2. Stabler/cheaper search by default
+
+`run_search.py` defaults changed: `--screen-mult 1 → 3` (successive-halving screening: rank 3·pop candidates at 0.34 budget before the full eval) and `--fitness-seeds 1 → 3` (fitness averaged over 3 training seeds — lower selection variance). Both were already implemented; they are now on by default. `--screen-mult 1 --fitness-seeds 1` restores the old behaviour.
+
+## 3. Deployment tuning on the winner — FA-rate 0.229 → 0.170
+
+**k-sweep on the original winner** (pw=3.0, k=2 → clip-F1 0.605, FA 0.229). Raising the decoder threshold alone:
+
+| k | clip-F1 | recall | precision | FA-rate |
+|---|--------:|-------:|----------:|--------:|
+| 1 | 0.595 | 0.846 | 0.458 | 0.250 |
+| 2 | 0.605 | 0.831 | 0.476 | 0.229 |
+| 3 | 0.607 | 0.808 | 0.486 | 0.214 |
+| **6** | **0.627** | 0.762 | 0.532 | **0.168** |
+
+**pos_weight grid** (winner `7-4-3-1`, 60-ep HAT→QAT each, ~4 min per value):
+
+| pos_weight | clip-F1 | FA | recall | AP |
+|---|---- |---- |---- |---- |
+| **1.5** | **0.651** | **0.189** | 0.846 | 0.522 |
+| 2.0 | 0.637 | 0.195 | 0.831 | 0.491 |
+| 3.0 (org) | 0.605 | 0.229 | 0.831 | 0.473 |
+
+**k-sweep on the tuned winner (pw=1.5):** best clip-F1 **0.654** at k=3 (FA 0.170); lowest FA **0.139** at k=6 (clip-F1 0.653).
+
+**Net deployment win vs the original export** (pw=3.0, k=2):
+clip-F1 **0.605 → 0.654** (+0.049), FA-rate **0.229 → 0.179** (−0.059), precision 0.476 → 0.546, at `pos_weight=1.5, k=3`. Recall stays ≥ 0.81 at the chosen k.
+
+## 4. Export round-trip validation (`validate_hw_config.py`) — PASS
+
+Rebuilds the network from the exported JSON (trimmer %, sign, wiring, τ_syn/τ_mem, V_leak → model params, `quantize=True`) and re-evaluates on the same validation subset. On the **tuned** config:
+- k=2: rebuilt clip-F1 **0.6509** vs checkpoint 0.6509 → **Δ 0.0000, PASS**;
+- k=3 (deployed threshold): **0.6543**, matching the tune-k table → **PASS**.
+
+All synapse pots are ≥ 7.1 % (above the 5 % trimmer floor — nothing was zeroed). This is the software-only proxy for board validation; the real check (`snn_hw_pipeline.py compare`) still needs hardware recordings of this config.
+
+## 5. New / changed artifacts
+
+| File | What |
+|---|---|
+| `wyniki_real_winner_N8_pw{1.5,2.0,3.0}.pt` | per-pos_weight full-trained checkpoints |
+| `wyniki_real_tuned_winner_N8.pt` | best grid checkpoint (pw=1.5) + tuned_k=3 |
+| `wyniki_real_tuned_hw_config_N8.json` | deployment config: `pos_weight`, `tuned_k`, `tune_k_table` added |
+| `fitness.py` / `ga.py` / `run_search.py` / `winner.py` / `validate_hw_config.py` | new flags + parallel path (see README) |
+
+Config one-liner for the boards: `--pos-weight 1.5 --train-winner --tune-k 1 2 3 4 5 6` on the winning topology (README section "Strojenie do wdrożenia").

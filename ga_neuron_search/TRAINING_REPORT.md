@@ -154,3 +154,46 @@ All synapse pots are ≥ 7.1 % (above the 5 % trimmer floor — nothing was zero
 | `fitness.py` / `ga.py` / `run_search.py` / `winner.py` / `validate_hw_config.py` | new flags + parallel path (see README) |
 
 Config one-liner for the boards: `--pos-weight 1.5 --train-winner --tune-k 1 2 3 4 5 6` on the winning topology (README section "Strojenie do wdrożenia").
+
+---
+
+# Follow-up 2 (2026-08-24) — best-parameter campaign: clip-F1-ranked search + fine pw grid
+
+Goal: **beat clip-F1 0.654 / FA 0.170** with hardware-achievable parameters. Two experiments ran back-to-back.
+
+## 1. Clip-F1-ranked GA sweep (N=4..10) — does NOT beat the AP-ranked winner
+
+`run_search.py --neurons 4..10 --metric clip_f1 --k 2 --pos-weight 1.5 --pop 24 --gens 16 --screen-mult 3 --fitness-seeds 3 --workers 18` (results in `wyniki_best.json`). Ranking the search directly on the deployment metric (report §6 item 5) changed the outcome, but **not for the better after full training**:
+
+| N | proxy clip-F1 | topology | full clip-F1 (best pw) | FA |
+|--:|--:|--|--:|--:|
+| 4 | 0.536 | `7-3-1` | — | — |
+| **5** | **0.561** | **`7-4-1`** | **0.597** (pw 2.0) | 0.225 |
+| 6 | 0.544 | `7-3-2-1` | — | — |
+| 7 | 0.558 | `7-6-1` | 0.593 (pw 2.0) | 0.243 |
+| 8 | 0.546 | `7-3-2-2-1` | — | — |
+| 9 | 0.556 | `7-8-1` | 0.591 (pw 1.5) | 0.274 |
+| 10 | 0.548 | `7-9-1` | — | — |
+
+The parsimony pick N=5 full-trained to only **0.597** — well below the existing N=8 `7-4-3-1` champion (0.654). Runners-up N=7/N=9 full-trained to 0.593/0.591, and their exports contained sub-resolution synapses (pot 0–4 %). **Conclusion: the clip-F1-ranked search steered toward smaller nets that train worse in full HAT→QAT; the AP-ranked N=8 topology from the original sweep remains the best topology.** New artifacts: `wyniki_best.json/csv`, `wyniki_best_winner_N5_pw{1.2..2.0}.pt`, `wyniki_best_tuned_hw_config_N5.json`, `wyniki_best_runner_N{7,9}_hw_config.json`.
+
+## 2. Fine pos_weight sweep on the champion (`7-4-3-1`) — NEW BEST: clip-F1 0.658, FA 0.158
+
+The champion topology was already optimal; the previous pw grid ({1.5, 2.0, 3.0}) was coarse. A fine grid {1.2…1.7} at 60-ep HAT→QAT each (`wyniki_fine_*.pt`):
+
+| pos_weight | clip-F1 (k=2) | FA |
+|---|--:|--:|
+| 1.2 | 0.648 | 0.179 |
+| **1.4** | **0.652** | **0.171** |
+| 1.5 (prev) | 0.651 | 0.189 |
+| 1.6 | 0.647 | 0.185 |
+| 1.7 | 0.645 | 0.191 |
+
+**k-sweep on the pw=1.4 winner:** best clip-F1 **0.658** at k=3 (FA 0.158, rec 0.800, prec 0.559); lowest FA 0.127 at k=6 (clip-F1 0.648).
+
+**Net result vs previous champion (pw=1.5, k=3):** clip-F1 **0.654 → 0.658** (+0.004), FA-rate **0.170 → 0.158** (−0.012).
+
+**Round-trip validation (new config): PASS** — rebuilt clip-F1 **0.6582** at k=3 (rec 0.800, prec 0.559, FA 0.158), matching the tune-k table; Δ vs stored metric 0.0059 (tol 0.02). All synapse pots ≥ 8 % — nothing below the 5 % trimmer floor.
+
+**Final best hardware-achievable parameters (8 boards, topology `7 → 4 → 3 → 1`):**
+`pos_weight=1.4`, `tuned_k=3`, clip-F1 **0.658**, FA-rate **0.158**, recall 0.800, precision 0.559, AP 0.510. Artifacts: `wyniki_fine_tuned_winner_N8.pt` + **`wyniki_fine_tuned_hw_config_N8.json`** (the file to flash to the boards).

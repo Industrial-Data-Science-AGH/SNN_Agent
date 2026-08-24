@@ -136,6 +136,12 @@ python run_search.py --neurons 4 6 8 10 --mode real ... --workers 18 --out wynik
   stabilszy/tańszy search domyślnie (`--screen-mult 3`, `--fitness-seeds 3`),
   strojenie wdrożenia (`--pos-weight-grid`, `--tune-k`), round-trip walidacja
   eksportu (`validate_hw_config.py`).
+- **Najlepsze parametry (2026-08-24)**: topologia **`7→4→3→1`** (8 płytek, N=8),
+  `pos_weight=1.4`, `tuned_k=3` → **clip-F1 0.658, FA 0.158, rec 0.80, prec 0.56** —
+  `wyniki_fine_tuned_hw_config_N8.json` (nastawy płytek). Kampania pokazała, że
+  ranking searchu po `--metric clip_f1` NIE przebija ranking po `ap` dla tego
+  zbioru (mniejsze sieci gorzej trenują w pełnym HAT→QAT) — topologia z oryginalnego
+  sweepu pozostaje zwycięska, zysk jest w strojeniu `pos_weight` (1.4 zamiast 1.5).
 - **TODO opcjonalnie**: front Pareto zamiast osobnych runów per N, eksport
   wygranej topologii wprost do `hw_config.json`, walidacja `compare` na prawdziwych
   płytkach (nagrania tej konfiguracji).

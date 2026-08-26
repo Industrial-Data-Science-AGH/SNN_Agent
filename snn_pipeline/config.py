@@ -301,22 +301,19 @@ class PathConfig:
 # ESC-50 — mapowanie klas
 # =============================================================================
 # ESC-50 ma 50 klas, każda po 40 próbek = 2000 total
-# Klasa "glass_breaking" to ID 38 (fold 1-5)
-ESC50_GLASS_BREAKING_CLASS: int = 38
+ESC50_GLASS_BREAKING_CLASS: int = 39
 ESC50_NUM_CLASSES: int = 50
 ESC50_SAMPLES_PER_CLASS: int = 40
 ESC50_URL: str = "https://github.com/karoldvl/ESC-50/archive/master.zip"
 
-# Klasy tła / negatywne do analizy confusion matrix
 ESC50_HVAC_CLASSES: List[int] = [
-    36,  # air_conditioner
-    37,  # car_horn (blisko, ale inny charakter)
-    41,  # siren
+    35,  # washing_machine — ciągły szum maszynowy (najbliżej „air_conditioner")
+    36,  # vacuum_cleaner
 ]
 
 ESC50_BACKGROUND_CLASSES: List[int] = [
-    40,  # hand_saw
-    43,  # engine
+    49,  # hand_saw
+    44,  # engine
     45,  # train
 ]
 

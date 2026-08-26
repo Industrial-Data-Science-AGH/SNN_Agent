@@ -33,10 +33,13 @@ Użycie (z katalogu ga_neuron_search):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -114,14 +117,108 @@ def _apply_threshold(vals: np.ndarray, thr: float, direction: int) -> np.ndarray
     return out
 
 
-def _split_files(files, val_frac, test_frac, rng):
-    idx = list(range(len(files)))
-    rng.shuffle(idx)
-    n = len(files)
-    n_test = int(round(test_frac * n))
-    n_val = int(round(val_frac * n))
-    test = {files[i] for i in idx[:n_test]}
-    val = {files[i] for i in idx[n_test:n_test + n_val]}
+def _sha256_file(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def _provenance(arch_dir, dataset_version, seed, warmup_seconds):
+    """Skąd wziął się ten artefakt.
+
+    Zbiór spike'owy jest funkcją trzech rzeczy: AUDIO, ENKODERA i BANKU CECH.
+    Bez zapisania ich tożsamości nie da się później powiedzieć, czy dwa wyniki
+    są porównywalne — a to jest dokładnie ten błąd, przez który stare wiersze
+    w WYNIKI.md trzeba było unieważnić. Zamiast ręcznie wpisywanego numeru
+    wersji bierzemy sumę kontrolną plików, które realnie decydują o wyniku.
+    """
+    enc = os.path.join(os.path.abspath(arch_dir), "encoder_twin.py")
+    return {
+        "dataset_version": dataset_version,
+        "encoder_file": "encoder_twin.py",
+        "encoder_sha256": _sha256_file(enc) if os.path.exists(enc) else None,
+        "feature_bank_file": "build_ext_dataset.py",
+        "feature_bank_sha256": _sha256_file(os.path.abspath(__file__)),
+        "split": {"grouped_by": "miks VOICe (synthetic_NNN), wspólnie dla obu klas",
+                  "seed": seed},
+        "warmup_seconds": warmup_seconds,
+        "stream_shuffled": True,
+        "built_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+
+
+def _splits_from_manifest(arch_dir, version):
+    """Podział wzięty WPROST z zatwierdzonej wersji zbioru głównego.
+
+    Jeśli podasz `--dataset-version v1.0.0`, nie liczymy własnego podziału tylko
+    czytamy kolumnę `split` z `dataset/versions/v1.0.0/manifest.csv`. Dzięki temu
+    artefakt spike'owy jest jednoznacznie pochodną zatwierdzonej wersji audio,
+    a nie osobnym losowaniem, które może się z nią rozjechać.
+
+    Zwraca {sciezka_absolutna: split} albo None, jeśli wersji nie ma.
+    """
+    if not re.match(r"^v\d+\.\d+\.\d+$", str(version)):
+        return None
+    repo = os.path.abspath(os.path.join(arch_dir, ".."))
+    man = os.path.join(repo, "dataset", "versions", version, "manifest.csv")
+    if not os.path.exists(man):
+        print(f"[!] nie znaleziono {man} — używam własnego podziału po grupach",
+              flush=True)
+        return None
+    import csv as _csv
+    out = {}
+    with open(man, encoding="utf-8") as fh:
+        for row in _csv.DictReader(fh):
+            out[os.path.abspath(os.path.join(repo, row["filepath"]))] = row["split"]
+    print(f"[pochodzenie] podział wzięty z manifestu {version} ({len(out)} rekordów)",
+          flush=True)
+    return out
+
+
+def _group_of(path):
+    """Nagranie źródłowe wycinka.
+
+    Nazwa: voiceglass_00000_synthetic_001_4.00-5.36.wav -> grupa `synthetic_001`.
+    Wszystkie wycinki z jednego miksu VOICe dzielą akustykę wnętrza, tło i często
+    tę samą próbkę zdarzenia, więc muszą trafić do tego samego splitu.
+    """
+    m = re.search(r"_(synthetic_\d+)_", os.path.basename(path))
+    return m.group(1) if m else os.path.basename(path)
+
+
+def _split_groups(all_files, val_frac, test_frac, rng):
+    """Split po NAGRANIU ŹRÓDŁOWYM, raz dla OBU klas naraz.
+
+    glass/ i hard_negative/ pochodzą z tych samych 207 miksów VOICe, więc podział
+    musi być wspólny — inaczej ten sam miks dałby pozytywy do treningu, a negatywy
+    do testu, i sieć mogłaby uczyć się pomieszczenia zamiast dźwięku.
+
+    Grupy przydzielamy w całości, ale limity liczymy w PLIKACH, żeby proporcje
+    70/15/15 przetrwały mimo różnej liczby wycinków na miks.
+    """
+    by_group = {}
+    for f in all_files:
+        by_group.setdefault(_group_of(f), []).append(f)
+
+    groups = sorted(by_group)          # determinizm niezależny od kolejności dysku
+    rng.shuffle(groups)
+
+    n = len(all_files)
+    want_test = int(round(test_frac * n))
+    want_val = int(round(val_frac * n))
+
+    test, val = set(), set()
+    n_test = n_val = 0
+    for g in groups:
+        chunk = by_group[g]
+        if n_test < want_test:
+            test.update(chunk); n_test += len(chunk)
+        elif n_val < want_val:
+            val.update(chunk); n_val += len(chunk)
+        else:
+            break                      # reszta grup idzie do train
     return val, test
 
 
@@ -149,7 +246,14 @@ def main():
                     help="docelowy odsetek ramek ze spikiem na TLE dla nowych kanałów")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--limit", type=int, default=None, help="max plików/klasę (smoke test)")
+    ap.add_argument("--dataset-version", default="voice_extracted (niewersjonowane)",
+                    help="wersja zbioru audio, z której powstaje ten artefakt, np. v1.0.0")
     args = ap.parse_args()
+
+    prov = _provenance(args.arch_dir, args.dataset_version, args.seed, args.warmup_seconds)
+    print(f"[pochodzenie] audio={prov['dataset_version']}  "
+          f"encoder={str(prov['encoder_sha256'])[:12]}…  "
+          f"bank={prov['feature_bank_sha256'][:12]}…", flush=True)
 
     et = _import_encoder(args.arch_dir)
     import glob
@@ -165,8 +269,37 @@ def main():
           f"kanały={len(ALL_NAMES)}: {','.join(ALL_NAMES)}", flush=True)
 
     rng = __import__("random").Random(args.seed)
-    g_val, g_test = _split_files(glass, args.val_frac, args.test_frac, rng)
-    n_val, n_test = _split_files(neg, args.val_frac, args.test_frac, rng)
+    # Podział: najpierw próbujemy wziąć go z zatwierdzonej wersji zbioru głównego
+    # (wtedy artefakt jest jej jednoznaczną pochodną). Jeśli wersji nie ma —
+    # liczymy własny, po grupach, co też nie przecieka, ale nie jest powiązane
+    # z żadną zatwierdzoną wersją audio.
+    man_split = _splits_from_manifest(args.arch_dir, args.dataset_version)
+    if man_split:
+        all_val = {f for f in glass + neg if man_split.get(os.path.abspath(f)) == "val"}
+        all_test = {f for f in glass + neg if man_split.get(os.path.abspath(f)) == "test"}
+        brak = [f for f in glass + neg if os.path.abspath(f) not in man_split]
+        if brak:
+            sys.exit(f"[BŁĄD] {len(brak)} plików nie ma w manifeście {args.dataset_version} "
+                     f"(np. {os.path.basename(brak[0])}) — artefakt nie byłby pochodną tej wersji")
+    else:
+        # jeden podział miksów, potem rozbity z powrotem na klasy — reszta main()
+        # dostaje dokładnie te same cztery zbiory co wcześniej
+        all_val, all_test = _split_groups(glass + neg, args.val_frac, args.test_frac, rng)
+    g_val = {f for f in glass if f in all_val}
+    g_test = {f for f in glass if f in all_test}
+    n_val = {f for f in neg if f in all_val}
+    n_test = {f for f in neg if f in all_test}
+
+    # kontrola przecieku — asercja, nie ozdoba: jeśli zapłonie, split znów jest zły
+    _gr = {"train": set(), "val": set(), "test": set()}
+    for f in glass + neg:
+        _gr["test" if f in all_test else "val" if f in all_val else "train"].add(_group_of(f))
+    _leak = (_gr["train"] & _gr["test"]) | (_gr["train"] & _gr["val"]) | (_gr["val"] & _gr["test"])
+    print(f"[split] miksy: train={len(_gr['train'])} val={len(_gr['val'])} "
+          f"test={len(_gr['test'])} | wspólnych={len(_leak)}", flush=True)
+    print(f"[split] pliki: train={len(glass) + len(neg) - len(all_val) - len(all_test)} "
+          f"val={len(all_val)} test={len(all_test)}", flush=True)
+    assert not _leak, f"przeciek grup: {sorted(_leak)[:5]}"
 
     def split_of(f, val_set, test_set):
         return "test" if f in test_set else ("val" if f in val_set else "train")
@@ -177,7 +310,13 @@ def main():
     used = set(neg_train[:n_used])
 
     # strumień: najpierw pozostałe negatywy, potem glass (jak ciągła praca urządzenia)
+    # Stan enkodera jest CIĄGŁY, więc zakodowanie pliku zależy od tego, co było
+    # przed nim. Przy układzie blokowym (wszystkie negatywy, potem wszystkie
+    # pozytywy) ta zależność koreluje z etykietą i adaptacyjny floor kanałów
+    # z-score dryfuje razem z klasą. Tasujemy, żeby historia była nieskorelowana
+    # z etykietą — i żeby strumień przypominał ciągłą pracę urządzenia.
     stream = [(0, f) for f in neg if f not in used] + [(1, f) for f in glass]
+    rng.shuffle(stream)
 
     # PASS: policz 7 HW (encode_file) + 7 nowych (ciągłe) frame-aligned
     recs = []  # (label, split, hw[n,7], new[n,7])
@@ -250,7 +389,8 @@ def main():
         np.savez_compressed(cache, win=win, lab=lab, fidx=fidx,
                             file_lab=file_lab, sig=sig)
         json.dump({"channels": ALL_NAMES, "n_hw": len(HW_NAMES),
-                   "thresholds": thrs, "directions": dirs, "bg_rate": args.bg_rate},
+                   "thresholds": thrs, "directions": dirs, "bg_rate": args.bg_rate,
+                   "provenance": prov},
                   open(d / "channels.json", "w", encoding="utf-8"),
                   ensure_ascii=False, indent=2)
         print(f"[ok] {split}: {len(lab)} okien / {len(filelab)} klipów, "

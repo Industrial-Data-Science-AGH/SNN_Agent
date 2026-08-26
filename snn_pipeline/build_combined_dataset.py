@@ -21,6 +21,7 @@ Użycie:
 
 import argparse
 import csv
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -28,7 +29,7 @@ import pandas as pd
 import soundfile as sf
 from sklearn.model_selection import GroupShuffleSplit
 
-ESC50_GLASS_BREAKING_CLASS = 38  # zgodne z snn_pipeline/config.py
+ESC50_GLASS_BREAKING_CLASS = 39  # zgodne z snn_pipeline/config.py (38 to clock_tick!)
 VOICE_CROP_PADDING_S = 0.1
 VOICE_MIN_SEGMENT_S = 0.15
 RANDOM_SEED = 42
@@ -80,6 +81,25 @@ def collect_esc50(repo_root: Path) -> List[Entry]:
   return entries
 
 
+# Pliki pobrane z Freesound niosą w nazwie ID uploadu:
+# `Glass_Breaking.204777__ngruber__breaking-glass-2.wav`. Jeden upload bywa
+# pocięty na kilkanaście plików (np. 396289 dał 16, 483590 dwanaście), więc
+# grupowanie po nazwie pliku rozsypałoby je po splitach i przywróciło przeciek,
+# przed którym broni group_based_split.
+_FREESOUND_RE = re.compile(r"\.(\d{4,})__")
+# Fallback dla nazw pociętych sekwencyjnie (`cos-07.wav`, `cos_07.wav`).
+_SEQ_SUFFIX_RE = re.compile(r"[-_]\d+$")
+
+
+def _recording_group(wav: Path, prefix: str, strip_seq: bool = False) -> str:
+  """Identyfikator NAGRANIA ŹRÓDŁOWEGO, z którego pochodzi plik."""
+  m = _FREESOUND_RE.search(wav.name)
+  if m:
+    return f"{prefix}_fs{m.group(1)}"
+  stem = _SEQ_SUFFIX_RE.sub("", wav.stem) if strip_seq else wav.stem
+  return f"{prefix}_{stem}"
+
+
 def collect_datasec(repo_root: Path) -> List[Entry]:
   base = repo_root / "dataset" / "datasec" / "PT_DATASET_250314"
   if not base.exists():
@@ -94,7 +114,10 @@ def collect_datasec(repo_root: Path) -> List[Entry]:
       subclass = (
           wav.parent.name if wav.parent != class_dir else class_dir.name
       )
-      group_id = f"datasec_{wav.stem}"
+      # DataSEC nazywa pliki `<Klasa>-NNN.wav` i każdy jest osobnym, wyciętym
+      # przez autorów zdarzeniem — dlatego BEZ strip_seq (indeks to numer
+      # nagrania w klasie, nie numer fragmentu jednego nagrania).
+      group_id = _recording_group(wav, "datasec")
       entries.append(
           Entry(
               str(wav.relative_to(repo_root)),
@@ -122,7 +145,11 @@ def collect_notebooks(repo_root: Path) -> List[Entry]:
     if not d.exists():
       continue
     for wav in sorted(d.glob("*.wav")):
-      group_id = f"notebooks_{wav.stem}"
+      # To są pliki pobrane z Freesound (`Glass_Breaking.204777__ngruber__…`),
+      # gdzie jeden upload bywa pocięty na kilkanaście plików — grupujemy po ID
+      # uploadu. Dla nazw bez ID obcinamy końcowy indeks fragmentu; ta druga
+      # reguła jest ZGADYWANA, bo notebooks/dataset nie ma dziś w repo.
+      group_id = _recording_group(wav, "notebooks", strip_seq=True)
       entries.append(
           Entry(
               str(wav.relative_to(repo_root)),
@@ -132,7 +159,12 @@ def collect_notebooks(repo_root: Path) -> List[Entry]:
               group_id,
           )
       )
-  print(f"[INFO] notebooks/dataset: {len(entries)} plików")
+  n_groups = len({e.group_id for e in entries})
+  print(f"[INFO] notebooks/dataset: {len(entries)} plików w {n_groups} grupach")
+  if entries and n_groups == len(entries):
+    print("[WARN] notebooks: każdy plik to osobna grupa — jeśli te nagrania "
+          "powstały z pocięcia dłuższych, reguła grupy jest za słaba i przeciek "
+          "wróci. Sprawdź nazewnictwo i popraw _NOTEBOOKS_GROUP_RE.")
   return entries
 
 

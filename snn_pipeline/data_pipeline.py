@@ -306,7 +306,7 @@ def augment_glass_break(
     Args:
         audio: Oryginalne audio glass_break (mono).
         sr: Częstotliwość próbkowania.
-        esc50_dir: Ścieżka do ESC-50 (potrzebna do additive noise z klasy air_conditioner).
+        esc50_dir: Ścieżka do ESC-50 (potrzebna do additive noise z klasy vacuum_cleaner).
 
     Returns:
         Lista krotek (augmented_audio, opis_augmentacji).
@@ -334,10 +334,10 @@ def augment_glass_break(
         scaled = np.clip(scaled, -1.0, 1.0)
         augmented.append((scaled, f"volume_{scale}"))
 
-    # 4. Additive noise (HVAC / air_conditioner z ESC-50)
+    # 4. Additive noise (ciągły szum maszynowy z ESC-50)
     noise_audio = None
     if esc50_dir is not None:
-        # Szukamy plików klasy air_conditioner (klasa 36, fold 1-5)
+        # Klasa 36 = vacuum_cleaner (ESC-50 nie ma klasy air_conditioner)
         ac_files = list((esc50_dir / "audio").glob("*-36-*.wav"))
         if ac_files:
             noise_audio, _ = librosa.load(str(ac_files[0]), sr=sr, mono=True)

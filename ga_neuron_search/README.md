@@ -84,12 +84,18 @@ python test_genome.py
 # szybki sweep na fitnessie syntetycznym
 python run_search.py --neurons 4 6 8 10 --mode synth --out wyniki_synth
 
-# realny sweep z proxy-treningiem na spike-CSV
+# realny sweep z proxy-treningiem na zbiorze 14-kanałowym
+# UWAGA: zawsze podawaj --val-data. Bez niego fitness dzieli trening sam
+# (split_by_file), co NIE usuwa przecieku po nagraniu źródłowym.
 python run_search.py --neurons 4 6 8 10 \
-    --mode real --data ../data/spikes_csv \
+    --mode real --data spikes_ext/train --val-data spikes_ext/val \
     --arch-dir ../architecture_14_neurons_patryk_09_07 \
-    --limit 120 --epochs 4 --pop 24 --gens 15 --out wyniki_real
+    --k 1 --metric clip_f1 --epochs 12 --pop 24 --gens 15 --out wyniki_real
 ```
+
+Zbiory do wyboru: `spikes_ext` (14 kanałów, budowany przez `build_ext_dataset.py`)
+albo `../architecture_14_neurons_patryk_09_07/spikes_manifest7` (7 kanałów HW).
+Katalog `../data/spikes_csv` nie istnieje — był tu wcześniej przez pomyłkę.
 
 Wynik: dla każdego N najlepsza topologia + jej F1, tabela porównawcza i pliki
 `*.json` / `*.csv`. Najlepszą topologię przenosisz do treningu docelowego,

@@ -1,0 +1,53 @@
+[dane] glass 4444 (poz.), hard_negative 4444 (neg.)  kanały=14: peak,peak_cnt,cv,zcr,flux,hf_lo,hf_hi,hjorth_mobility,autocorr_lag1,curve_length,crest,spectral_flatness,spectral_centroid,band_energy_low
+[split] miksy: train=144 val=32 test=31 | wspólnych=0
+[split] pliki: train=6174 val=1378 test=1336
+[warmup] rozgrzano stan enkodera na 12 plikach tła (31.0s realnego audio, odrzucone)
+[enc] 500/8876 plików (24s)
+[enc] 1000/8876 plików (50s)
+[enc] 1500/8876 plików (77s)
+[enc] 2000/8876 plików (106s)
+[enc] 2500/8876 plików (128s)
+[enc] 3000/8876 plików (159s)
+[enc] 3500/8876 plików (188s)
+[enc] 4000/8876 plików (227s)
+[enc] 4500/8876 plików (264s)
+[enc] 5000/8876 plików (303s)
+[enc] 5500/8876 plików (339s)
+[enc] 6000/8876 plików (376s)
+[enc] 6500/8876 plików (409s)
+[enc] 7000/8876 plików (447s)
+[enc] 7500/8876 plików (470s)
+[enc] 8000/8876 plików (500s)
+[enc] 8500/8876 plików (530s)
+[enc] gotowe: 8876 plików w 554s
+
+[kalibracja nowych kanałów]  (thr z tła, kierunek z separacji)
+  hjorth_mobility      fire gdy v > 1.2085  (neg_śr 0.5588, pos_śr 0.7609)
+  autocorr_lag1        fire gdy v < 0.2311  (neg_śr 0.7571, pos_śr 0.5674)
+  curve_length         fire gdy v > 68.0300  (neg_śr 23.0589, pos_śr 26.2083)
+  crest                fire gdy v > 3.4873  (neg_śr 2.5135, pos_śr 2.5890)
+  spectral_flatness    fire gdy v > 0.6382  (neg_śr 0.3131, pos_śr 0.4095)
+  spectral_centroid    fire gdy v > 4125.1250  (neg_śr 2182.6094, pos_śr 2778.8572)
+  band_energy_low      fire gdy v < 0.1664  (neg_śr 0.5458, pos_śr 0.4546)
+[ok] train: 9774 okien / 6162 klipów, pozytywnych 3870 (39.6%) -> spikes_ext/train/_cache_T200_s50.npz
+[ok] val: 2203 okien / 1378 klipów, pozytywnych 858 (38.9%) -> spikes_ext/val/_cache_T200_s50.npz
+[ok] test: 2083 okien / 1336 klipów, pozytywnych 824 (39.6%) -> spikes_ext/test/_cache_T200_s50.npz
+
+[firing-rate %]  (kanal                  glass |  tlo  | roznica)
+  peak                    2.1 |   1.9 |   +0.3
+  peak_cnt                4.5 |   4.2 |   +0.4
+  cv                      0.5 |   0.4 |   +0.2
+  zcr                     4.7 |   2.9 |   +1.8
+  flux                    5.0 |   4.4 |   +0.6
+  hf_lo                   9.8 |   4.2 |   +5.6
+  hf_hi                   4.3 |   1.2 |   +3.1
+  hjorth_mobility        13.2 |   4.6 |   +8.7  <-- separuje
+  autocorr_lag1          12.9 |   4.5 |   +8.4  <-- separuje
+  curve_length            5.8 |   4.5 |   +1.3
+  crest                   7.6 |   5.8 |   +1.8
+  spectral_flatness      13.3 |   4.8 |   +8.5  <-- separuje
+  spectral_centroid      13.3 |   4.6 |   +8.7  <-- separuje
+  band_energy_low        11.7 |   4.6 |   +7.1
+
+[gotowe] zbiór 14-kanałowy w spikes_ext/  (train/val/test + channels.json). Użyj w GA:
+  --data spikes_ext/train --val-data spikes_ext/val

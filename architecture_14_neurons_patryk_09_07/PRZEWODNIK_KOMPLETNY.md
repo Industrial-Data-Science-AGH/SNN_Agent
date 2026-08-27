@@ -451,12 +451,19 @@ w `lu.i-neuron-pcb/` albo BOM Lu.i — sprawdź przed zamówieniem.
 
 ## Dodatek A — Reprodukcja (trening od zera; NIE potrzebne do budowy)
 
+> **UWAGA (issue #34/#36):** poniższa procedura odtwarza artefakt `spikes_manifest7`,
+> który jest NIEAKTUALNY z dwóch niezależnych powodów: powstał ze zbioru
+> z odwróconymi etykietami VOICe (1412 klipów szkła oznaczonych jako tło) oraz
+> zawiera 40 nagrań ESC-50 klasy 38 = `clock_tick` w klasie pozytywnej. Wszystkie
+> liczby w §15 i w `hw7_config.json` z niego pochodzą. Używaj zatwierdzonej wersji
+> zbioru z `dataset/versions/`, nie `dataset/combined/manifest.csv`.
+
 ```bash
-cd /home/umarly-poeta/projects/SNN_Agent
+cd "$(git rev-parse --show-toplevel)"
 # 1. zakoduj audio na spiki (~15-20 min)
 .venv/bin/python architecture_14_neurons_patryk_09_07/encoder_twin.py build-manifest \
-    --manifest dataset/combined/manifest.csv --root . \
-    --out architecture_14_neurons_patryk_09_07/spikes_manifest7 --warmup-seconds 30
+    --manifest dataset/versions/v2.0.0/manifest.csv --root . \
+    --out architecture_14_neurons_patryk_09_07/spikes_v2 --warmup-seconds 30
 
 # 2. trening (zwycięska konfiguracja: seed 2, pos_weight 1.0)
 cd architecture_14_neurons_patryk_09_07

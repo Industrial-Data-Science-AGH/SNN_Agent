@@ -106,10 +106,15 @@ Bez zmian względem `kalibracja_sciaga.md` sekcje 1/3/5 (kolejność H→G→D, 
   składaj v2, a v3 wgraj po zweryfikowaniu timingu. Model i tabela v3 są gotowe niezależnie.
 
 ## Reprodukcja
+
+> **UWAGA:** metryki w tym dokumencie pochodzą ze zbioru sprzed naprawy #34
+> (odwrócone etykiety VOICe) i z artefaktu z klasą `clock_tick` w pozytywach.
+> Przed cytowaniem przelicz na `dataset/versions/v2.0.0`.
+
 ```
 # enkoder v3 (7 kanałów) już w encoder_twin.py; przekoduj:
-python encoder_twin.py build-manifest --manifest ../dataset/combined/manifest.csv \
-    --root .. --out spikes_manifest7
+python encoder_twin.py build-manifest --manifest ../dataset/versions/v2.0.0/manifest.csv \
+    --root .. --out spikes_v2
 # trening (zwycięzca: seed 2, pos_weight 1.0):
 python snn_hw_pipeline.py train --data spikes_manifest7/train \
     --val-data spikes_manifest7/val --test-data spikes_manifest7/test \

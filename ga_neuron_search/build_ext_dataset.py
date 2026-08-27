@@ -33,6 +33,7 @@ Użycie (z katalogu ga_neuron_search):
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import os
@@ -149,15 +150,15 @@ def _provenance(arch_dir, dataset_version, seed, warmup_seconds):
     }
 
 
-def _splits_from_manifest(arch_dir, version):
-    """Podział wzięty WPROST z zatwierdzonej wersji zbioru głównego.
+def _labels_and_splits_from_manifest(arch_dir, version):
+    """{sciezka_absolutna: (split, label)} z zatwierdzonej wersji zbioru.
 
-    Jeśli podasz `--dataset-version v1.0.0`, nie liczymy własnego podziału tylko
-    czytamy kolumnę `split` z `dataset/versions/v1.0.0/manifest.csv`. Dzięki temu
-    artefakt spike'owy jest jednoznacznie pochodną zatwierdzonej wersji audio,
-    a nie osobnym losowaniem, które może się z nią rozjechać.
+    Etykieta MUSI pochodzić stąd, nie z nazwy katalogu — inaczej dwa artefakty
+    stemplowane tą samą `dataset_version` mogą się różnić etykietą (zmierzone
+    na v1.0.0: 1653 pliki różniły się między tym artefaktem a manifestem).
 
-    Zwraca {sciezka_absolutna: split} albo None, jeśli wersji nie ma.
+    Zwraca None, jeśli wersji nie ma — wtedy main() liczy własny podział po
+    grupach, ale artefakt nie jest wtedy pochodną żadnej zatwierdzonej wersji.
     """
     if not re.match(r"^v\d+\.\d+\.\d+$", str(version)):
         return None
@@ -167,13 +168,13 @@ def _splits_from_manifest(arch_dir, version):
         print(f"[!] nie znaleziono {man} — używam własnego podziału po grupach",
               flush=True)
         return None
-    import csv as _csv
     out = {}
     with open(man, encoding="utf-8") as fh:
-        for row in _csv.DictReader(fh):
-            out[os.path.abspath(os.path.join(repo, row["filepath"]))] = row["split"]
-    print(f"[pochodzenie] podział wzięty z manifestu {version} ({len(out)} rekordów)",
-          flush=True)
+        for row in csv.DictReader(fh):
+            key = os.path.abspath(os.path.join(repo, row["filepath"]))
+            out[key] = (row["split"], row["label"])
+    print(f"[pochodzenie] podział I ETYKIETY z manifestu {version} "
+          f"({len(out)} rekordów)", flush=True)
     return out
 
 
@@ -261,8 +262,6 @@ def main():
     neg_dir = args.neg_dir or os.path.join(args.arch_dir, "voice_extracted", "hard_negative")
     glass = sorted(glob.glob(os.path.join(glass_dir, "**", "*.wav"), recursive=True))
     neg = sorted(glob.glob(os.path.join(neg_dir, "**", "*.wav"), recursive=True))
-    if args.limit:
-        glass, neg = glass[:args.limit], neg[:args.limit]
     if not glass or not neg:
         sys.exit(f"brak .wav (glass={len(glass)} w {glass_dir}, neg={len(neg)} w {neg_dir})")
     print(f"[dane] glass {len(glass)} (poz.), hard_negative {len(neg)} (neg.)  "
@@ -273,15 +272,47 @@ def main():
     # (wtedy artefakt jest jej jednoznaczną pochodną). Jeśli wersji nie ma —
     # liczymy własny, po grupach, co też nie przecieka, ale nie jest powiązane
     # z żadną zatwierdzoną wersją audio.
-    man_split = _splits_from_manifest(args.arch_dir, args.dataset_version)
+    man = _labels_and_splits_from_manifest(args.arch_dir, args.dataset_version)
+    man_split = {k: v[0] for k, v in man.items()} if man else None
+    man_label = {k: v[1] for k, v in man.items()} if man else {}
     if man_split:
+        # Katalog na dysku jest NADZBIOREM manifestu i od v2.0.0 to jest normalne:
+        # zbiór świadomie odrzuca negatywy skażone szkłem (issue #34), a pliki
+        # zostają na dysku. Manifest jest źródłem prawdy o SKŁADZIE, więc pliki
+        # spoza niego pomijamy — ale głośno, żeby cicha zmiana składu nie przeszła.
+        spoza = [f for f in glass + neg if os.path.abspath(f) not in man_split]
+        if spoza:
+            spoza_set = set(spoza)
+            glass = [f for f in glass if f not in spoza_set]
+            neg = [f for f in neg if f not in spoza_set]
+            print(f"[pochodzenie] {len(spoza)} plików z katalogów nie ma w manifeście "
+                  f"{args.dataset_version} — pomijam (np. {os.path.basename(spoza[0])}); "
+                  f"zostaje glass={len(glass)}, neg={len(neg)}", flush=True)
+            if not glass or not neg:
+                sys.exit("[BŁĄD] po odfiltrowaniu do manifestu została pusta klasa")
+
+        # Etykieta z manifestu jest wiążąca. Rozjazd z katalogiem oznacza, że
+        # manifest jest sprzed naprawy #34 albo artefakt budowany jest z innych
+        # katalogów niż deklaruje — w obu wypadkach lepiej stanąć niż policzyć.
+        mismatched = [f for f in glass if man_label[os.path.abspath(f)] != "positive"] \
+                   + [f for f in neg if man_label[os.path.abspath(f)] != "negative"]
+        if mismatched:
+            sys.exit(f"[BŁĄD] {len(mismatched)} plików ma w manifeście "
+                     f"{args.dataset_version} etykietę inną niż wynikałoby z katalogu "
+                     f"(np. {os.path.basename(mismatched[0])}). Przebuduj wersję zbioru.")
+
+        # --limit dopiero TERAZ: przed filtrem obcinałby listę, z której zaraz
+        # zniknie 73% negatywów, i zostawiałby garść plików na klasę.
+        if args.limit:
+            glass, neg = glass[:args.limit], neg[:args.limit]
+            print(f"[dane] --limit {args.limit}: glass={len(glass)}, neg={len(neg)}",
+                  flush=True)
+
         all_val = {f for f in glass + neg if man_split.get(os.path.abspath(f)) == "val"}
         all_test = {f for f in glass + neg if man_split.get(os.path.abspath(f)) == "test"}
-        brak = [f for f in glass + neg if os.path.abspath(f) not in man_split]
-        if brak:
-            sys.exit(f"[BŁĄD] {len(brak)} plików nie ma w manifeście {args.dataset_version} "
-                     f"(np. {os.path.basename(brak[0])}) — artefakt nie byłby pochodną tej wersji")
     else:
+        if args.limit:
+            glass, neg = glass[:args.limit], neg[:args.limit]
         # jeden podział miksów, potem rozbity z powrotem na klasy — reszta main()
         # dostaje dokładnie te same cztery zbiory co wcześniej
         all_val, all_test = _split_groups(glass + neg, args.val_frac, args.test_frac, rng)
@@ -336,7 +367,7 @@ def main():
         if m == 0:
             continue
         vset, tset = (g_val, g_test) if label == 1 else (n_val, n_test)
-        recs.append((label, split_of(f, vset, tset), hw[:m], new[:m]))
+        recs.append((label, split_of(f, vset, tset), hw[:m], new[:m], f))
         if (i + 1) % 500 == 0:
             print(f"[enc] {i+1}/{len(stream)} plików ({time.time()-t0:.0f}s)", flush=True)
     print(f"[enc] gotowe: {len(recs)} plików w {time.time()-t0:.0f}s", flush=True)
@@ -367,7 +398,9 @@ def main():
     split_data = {s: ([], [], [], []) for s in ("train", "val", "test")}  # wins,labs,fidx,filelab
     fire_stat = {0: np.zeros(len(ALL_NAMES)), 1: np.zeros(len(ALL_NAMES))}
     fire_frames = {0: 0, 1: 0}
-    for label, split, hw, new in recs:
+    files_by_split = {s: [] for s in ("train", "val", "test")}
+    for label, split, hw, new, srcfile in recs:
+        files_by_split[split].append((srcfile, label))
         new_sp = np.zeros_like(new, dtype=np.uint8)
         for c in range(len(NEW_NAMES)):
             new_sp[:, c] = _apply_threshold(new[:, c], thrs[c], dirs[c])
@@ -398,6 +431,15 @@ def main():
                    "provenance": prov},
                   open(d / "channels.json", "w", encoding="utf-8"),
                   ensure_ascii=False, indent=2)
+        
+        repo = os.path.abspath(os.path.join(args.arch_dir, ".."))
+        with open(d / "files.csv", "w", newline="", encoding="utf-8") as fh:
+            w = csv.writer(fh)
+            w.writerow(["filepath", "label"])
+            for srcfile, lbl in files_by_split[split]:
+                rel = os.path.relpath(os.path.abspath(srcfile), repo).replace(os.sep, "/")
+                w.writerow([rel, man_label.get(os.path.abspath(srcfile),
+                                               "positive" if lbl else "negative")])
         print(f"[ok] {split}: {len(lab)} okien / {len(filelab)} klipów, "
               f"pozytywnych {int(lab.sum())} ({100*lab.mean():.1f}%) -> {cache}")
 

@@ -14,12 +14,15 @@ Kontrole krytyczne (BŁĄD):
     K5  duplikaty treści (ta sama sha256) rozrzucone po różnych splitach
     K6  błędne audio — nieodczytywalne albo poza dozwolonym zakresem
     K7  za mało GRUP pozytywnych w teście
+    K8  podklasa VOICe niezgodna z katalogiem ekstrakcji
+    K9  artefakt pochodny ma inną etykietę niż manifest, na który się powołuje
 
 Kontrole ostrzegawcze (OSTRZEŻENIE, nie blokują):
     O1  duplikaty treści wewnątrz jednego splitu
     O2  niezbalansowanie klas poza widełkami
     O3  brak któregoś `kind` w którymś splicie
     O4  nagrania na licencji niekomercyjnej
+    O5  artefakt deklaruje tę wersję, ale nie ma files.csv (niesprawdzalny)
 
 Użycie:
     python snn_pipeline/validate_dataset.py --version v1.0.0
@@ -30,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -158,6 +162,62 @@ def main() -> None:
     else:
         r.ok("K7", f"grupy pozytywne: train={len(pos_groups['train'])} "
                    f"val={len(pos_groups['val'])} test={n_test}")
+
+    # k8 etykieta vs katalog
+
+    FOLDER_SUBCLASS = {"glass": {"glassbreak"},
+                       "hard_negative": {"gunshot", "babycry"}}
+    bad_folder = []
+    for row in rows:
+        if row["source"] != "voice":
+            continue
+        parts = Path(row["filepath"]).parts
+        folder = next((p for p in parts if p in FOLDER_SUBCLASS), None)
+        if folder and row["subclass"] not in FOLDER_SUBCLASS[folder]:
+            bad_folder.append(f"{row['filepath']} -> {row['subclass']}")
+    if bad_folder:
+        r.error("K8", f"{len(bad_folder)} klipów VOICe ma podklasę niezgodną "
+                      f"z katalogiem ekstrakcji (np. {bad_folder[0]})")
+    else:
+        r.ok("K8", "podklasa VOICe zgodna z katalogiem ekstrakcji")
+
+    # K9 artefakty pochodne vs ten manifest
+    by_path = {row["filepath"]: row["label"] for row in rows}
+    drift, checked, artifacts = [], 0, 0
+    for files_csv in sorted(repo_root.glob("*/**/files.csv")):
+        chan = files_csv.with_name("channels.json")
+        if not chan.exists():
+            continue
+        prov = json.loads(chan.read_text(encoding="utf-8")).get("provenance", {})
+        if prov.get("dataset_version") != args.version:
+            continue
+        artifacts += 1
+        with files_csv.open(encoding="utf-8") as fh:
+            for row in csv.DictReader(fh):
+                man = by_path.get(row["filepath"])
+                if man is None:
+                    continue
+                checked += 1
+                if man != row["label"]:
+                    drift.append(f"{files_csv.parent.name}:{row['filepath']}")
+    if drift:
+        r.error("K9", f"{len(drift)} plików ma w artefakcie inną etykietę niż "
+                      f"w manifeście {args.version} (np. {drift[0]})")
+    else:
+        r.ok("K9", f"artefakty powołujące się na tę wersję mają zgodne etykiety "
+                   f"({checked} plików w {artifacts} artefaktach)")
+
+    
+    unverifiable = []
+    for chan in sorted(repo_root.glob("*/**/channels.json")):
+        prov = json.loads(chan.read_text(encoding="utf-8")).get("provenance", {})
+        if prov.get("dataset_version") == args.version and \
+                not chan.with_name("files.csv").exists():
+            unverifiable.append(str(chan.relative_to(repo_root)))
+    if unverifiable:
+        r.warn("O5", f"{len(unverifiable)} artefaktów deklaruje {args.version}, "
+                     f"ale nie ma files.csv — nie da się sprawdzić ich etykiet "
+                     f"(np. {unverifiable[0]}); przebuduj je")
 
     # ---------------------------------------------------------------- K4/K5/K6
     if args.quick:

@@ -752,12 +752,17 @@ def train(
 
 def parse_args() -> argparse.Namespace:
     repo_root = Path(__file__).resolve().parents[1]
-    default_manifest = repo_root / "dataset" / "combined" / "manifest.csv"
+    # dataset/combined/manifest.csv jest NIEAKTUALNY (5226 wierszy, bez VOICe,
+    # etykiety sprzed naprawy #34). Domyślnie bierzemy najnowszą zatwierdzoną
+    # wersję zbioru; patrz docs/DATASET_CONTRACT.md.
+    _versions = sorted((repo_root / "dataset" / "versions").glob("v*/manifest.csv"))
+    default_manifest = _versions[-1] if _versions else None
 
     parser = argparse.ArgumentParser(description="Train a 3-N-1 LIF SNN for glass-break detection")
     parser.add_argument("--positive-dir", default="positive/positive", help="Root directory for positive WAV files")
     parser.add_argument("--negative-dir", default="negative/negative", help="Root directory for negative WAV files")
-    parser.add_argument("--manifest", default=str(default_manifest), help="Path to a combined dataset manifest CSV produced by build_combined_dataset.py")
+    parser.add_argument("--manifest", default=str(default_manifest) if default_manifest else None,
+                        help="Path to a versioned dataset manifest CSV (dataset/versions/vX.Y.Z/manifest.csv)")
     parser.add_argument("--repo-root", default=str(repo_root), help="Repository root used to resolve relative paths from the manifest")
     parser.add_argument("--manifest-split", choices=["train", "val", "test", "all"], default="train",
                          help="Which split from the manifest to use for training")

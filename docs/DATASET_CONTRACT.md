@@ -217,6 +217,8 @@ Krytyczne — kończą się kodem błędu:
 | `K5` | identyczne pliki (ta sama `sha256`) rozrzucone po różnych splitach |
 | `K6` | audio nieodczytywalne albo poza dozwolonym zakresem |
 | `K7` | za mało **grup** pozytywnych w teście (domyślnie minimum 12) |
+| `K8` | podklasa VOICe niezgodna z katalogiem ekstrakcji |
+| `K9` | artefakt pochodny ma inną etykietę niż manifest, na który się powołuje |
 
 Ostrzeżenia — nie blokują:
 
@@ -226,6 +228,15 @@ Ostrzeżenia — nie blokują:
 | `O2` | udział pozytywów poza widełkami 1–60% |
 | `O3` | brak któregoś `kind` w którymś splicie |
 | `O4` | nagrania na licencji niekomercyjnej |
+| `O5` | artefakt deklaruje tę wersję, ale nie ma `files.csv` — niesprawdzalny |
+
+`K8` i `K9` istnieją, bo dokładnie te dwa błędy przeżyły w repo miesiące. `K8` łapie
+sytuację, w której budowa zbioru wyprowadza etykietę od nowa zamiast wziąć ją
+z katalogu ekstrakcji (issue #34: 1412 klipów szkła jako tło). `K9` łapie rozjazd
+między manifestem a artefaktem, który się na niego powołuje (zmierzone na v1.0.0:
+1653 pliki różniły się etykietą między manifestem a `spikes_ext`). `O5` mówi, że
+artefakt w ogóle nie da się sprawdzić, bo nie zapisał ewidencji plików — wtedy `K9`
+przechodzi pusto i cisza wygląda jak zgodność.
 
 `K7` istnieje, bo zbiór może przejść kontrolę przecieku i mimo to mieć w teście
 kilkanaście niezależnych nagrań szkła. Metryka policzona na takiej próbie ma
@@ -257,3 +268,22 @@ nadający się do produktu buduje się jednym filtrem
   nagraniem docelowego pomieszczenia.
 - Audio nie jest transkodowane; parametry są tylko mierzone i walidowane.
 - ESC-50 wnosi 40 nagrań szkła na licencji niekomercyjnej.
+
+---
+
+## Wycofane: `dataset/combined/manifest.csv`
+
+Plik przemianowany na `manifest.DEPRECATED.csv`. Nie używać.
+
+- 5226 wierszy, **bez ani jednego pliku VOICe**; 149 pozytywów, z czego 16 w teście.
+  Jeden klip to 6 punktów procentowych recall.
+- Etykiety sprzed naprawy #34.
+- Brak kolumny `kind`, więc nie da się rozbić fałszywych alarmów na tło stacjonarne
+  / głośne zdarzenia / mowę / zwierzęta.
+- Nie jest wersjonowany — brak sumy kontrolnej i commitu, więc „wytrenowane na
+  combined/manifest.csv" nie znaczy nic konkretnego.
+
+`DECYZJE_SESJI.md` §C1 opisuje **inny** plik pod tą samą ścieżką (13.5k plików).
+Tamten nie istnieje — został zregenerowany do obecnych 5226 wierszy. Artefakt
+`spikes_manifest7`, z którego pochodzi `hw7_config.json`, powstał z tej
+nieistniejącej wersji i nie da się go odtworzyć (issue #36).

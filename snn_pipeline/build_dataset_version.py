@@ -57,6 +57,14 @@ from dataset_contract import (
 VOICE_INTERVAL_RE = re.compile(r"_(synthetic_\d+)_(\d+\.\d+)-(\d+\.\d+)\.wav$")
 
 
+FOLDER_SUBCLASSES: Dict[str, tuple] = {
+    "glass": ("glassbreak",),
+    "hard_negative": ("gunshot", "babycry"),
+}
+
+VOICE_EXTRACT_PAD_S = 0.30
+
+
 # =============================================================================
 # ZBIERANIE REKORDÓW
 # =============================================================================
@@ -152,9 +160,19 @@ def collect_voice(repo_root: Path) -> List[dict]:
     """Wycinki z VOICe, pocięte wcześniej przez voice_extract.py.
 
     Nie tniemy ich ponownie: `voice_extracted/` powstało z `dataset/clean` i
-    jest w repo. Podklasę (gunshot vs babycry) odtwarzamy z adnotacji — nazwa
-    pliku niesie miks i dokładny przedział czasu, więc trafiamy w konkretne
-    zdarzenie, zamiast wrzucać wszystko do jednego worka „hard_negative".
+    jest w repo.
+
+    KLASA pochodzi z katalogu ekstrakcji i nie podlega negocjacji. Adnotacje
+    rozstrzygają wyłącznie PODKLASĘ w obrębie katalogu (gunshot vs babycry),
+    żeby nie wrzucać wszystkiego do jednego worka „hard_negative".
+
+    Strażnik kontaminacji działa ASYMETRYCZNIE, tak jak w
+    build_combined_dataset.py: odrzucamy negatyw, w którego oknie jest szkło
+    (etykieta byłaby fałszywa i uczyłaby sieć tłumienia na szkle), ale
+    zachowujemy pozytyw, w którego oknie jest wystrzał — on nadal ZAWIERA
+    szkło, jest tylko trudniejszy. VOICe to miksy polifoniczne: przy pad 0.30 s
+    3961 z 4444 zdarzeń glassbreak nachodzi na inne zdarzenie, więc symetryczny
+    strażnik zostawiłby 483 pozytywy zamiast 4444.
     """
     base = repo_root / "architecture_14_neurons_patryk_09_07" / "voice_extracted"
     if not base.exists():
@@ -164,33 +182,49 @@ def collect_voice(repo_root: Path) -> List[dict]:
     if not ann:
         print("[WARN] brak dataset/clean/annotation — podklasy VOICe będą przybliżone.")
 
-    out, resolved, guessed = [], 0, 0
-    for folder, default_label in (("glass", "glassbreak"), ("hard_negative", "gunshot")):
+    out, resolved, guessed, dropped = [], 0, 0, 0
+    for folder, allowed in FOLDER_SUBCLASSES.items():
         d = base / folder
         if not d.exists():
             continue
         for wav in sorted(d.glob("*.wav")):
-            label = default_label
+            subclass = allowed[0]
             m = VOICE_INTERVAL_RE.search(wav.name)
             if m and m.group(1) in ann:
                 mix, s, e = m.group(1), float(m.group(2)), float(m.group(3))
-                best, best_ov = None, 0.0
-                for a_s, a_e, a_lab in ann[mix]:
-                    ov = min(e, a_e) - max(s, a_s)
-                    if ov > best_ov:
-                        best, best_ov = a_lab, ov
-                if best:
-                    label, resolved = best, resolved + 1
+                if folder == "hard_negative":
+                    foreign = [(a_s, a_e) for a_s, a_e, a_lab in ann[mix]
+                               if a_lab not in allowed]
+                    ps, pe = s - VOICE_EXTRACT_PAD_S, e + VOICE_EXTRACT_PAD_S
+                    if any(min(pe, a_e) > max(ps, a_s) for a_s, a_e in foreign):
+                        dropped += 1
+                        continue
+
+                if len(allowed) > 1:
+                    best, best_ov = None, 0.0
+                    for a_s, a_e, a_lab in ann[mix]:
+                        if a_lab not in allowed:   # nigdy nie wychodzimy poza katalog
+                            continue
+                        ov = min(e, a_e) - max(s, a_s)
+                        if ov > best_ov:
+                            best, best_ov = a_lab, ov
+                    if best:
+                        subclass, resolved = best, resolved + 1
+                    else:
+                        guessed += 1
                 else:
-                    guessed += 1
+                    resolved += 1        # glass/ nie wymaga rozstrzygania
             else:
                 guessed += 1
-            rec = _base_record(repo_root, wav, "voice", label,
-                               VOICE_KIND.get(label, "loud_event"))
+
+            rec = _base_record(repo_root, wav, "voice", subclass,
+                               VOICE_KIND[subclass])
             if rec:
                 out.append(rec)
+
     print(f"[INFO] VOICe: {len(out)} wycinków "
-          f"(podklasa z adnotacji: {resolved}, przybliżona: {guessed})")
+          f"(podklasa z adnotacji: {resolved}, przybliżona: {guessed}, "
+          f"odrzucone jako skażone szkłem: {dropped})")
     return out
 
 
@@ -259,8 +293,42 @@ def unify_groups_by_content(records: List[dict]) -> int:
     return merged
 
 
+def _voice_official_split(repo_root: Path) -> Dict[str, str]:
+    """Opublikowany podział VOICe: {"synthetic_001": "train", ...}.
+
+    VOICe rozprowadza własne listy miksów (69/69/69, parami rozłączne, suma 207).
+    Użycie ich czyni wyniki porównywalnymi z pracami na tym zbiorze i podnosi
+    liczbę niezależnych nagrań w teście z 32 do 69. Cena: proporcje VOICe to
+    33/33/33, nie 70/15/15 — decyzja zapisana w stats.md.
+
+    Zwraca {} jeśli list nie ma; wtedy VOICe idzie zwykłą ścieżką GroupShuffleSplit.
+    """
+    src = repo_root / "dataset" / "clean" / "source"
+    files = {
+        "train": src / "synthetic_source_training.txt",
+        "val": src / "synthetic_source_validation.txt",
+        "test": src / "synthetic_source_test.txt",
+    }
+    if not all(f.exists() for f in files.values()):
+        return {}
+    out: Dict[str, str] = {}
+    for split, f in files.items():
+        for line in f.read_text(encoding="utf-8").splitlines():
+            mix = line.strip()
+            if not mix:
+                continue
+            mix = mix[:-4] if mix.endswith(".wav") else mix
+            if mix in out:
+                print(f"[WARN] {mix} występuje w dwóch listach VOICe "
+                      f"({out[mix]} i {split}) — biorę pierwszą")
+                continue
+            out[mix] = split
+    print(f"[INFO] VOICe: oficjalny podział z dataset/clean/source ({len(out)} miksów)")
+    return out
+
+
 def assign_splits(records: List[dict], val_frac: float, test_frac: float,
-                  seed: int) -> None:
+                  seed: int, repo_root: Path) -> None:
     """Podział po GRUPACH, osobno w obrębie każdego źródła.
 
     Osobno per źródło, żeby proporcje 70/15/15 trzymały się w każdym z nich —
@@ -277,6 +345,26 @@ def assign_splits(records: List[dict], val_frac: float, test_frac: float,
     by_source: Dict[str, List[dict]] = defaultdict(list)
     for r in records:
         by_source[group_source[r["group_id"]]].append(r)
+
+
+    official = _voice_official_split(repo_root)
+    if official:
+        voice = by_source.pop("voice", [])
+        unmatched = Counter()
+        for r in voice:
+            mix = r["group_id"].removeprefix("voice_")
+            split = official.get(mix)
+            if split is None:
+                unmatched[r["group_id"]] += 1
+                split = "train"
+            r["split"] = split
+        counts = Counter(r["split"] for r in voice)
+        print(f"[INFO] VOICe: podział oficjalny — train={counts['train']} "
+              f"val={counts['val']} test={counts['test']} plików")
+        if unmatched:
+            print(f"[WARN] {sum(unmatched.values())} plików VOICe w "
+                  f"{len(unmatched)} grupach spoza oficjalnych list -> train "
+                  f"(np. {next(iter(unmatched))})")
 
     for source, recs in sorted(by_source.items()):
         groups = [r["group_id"] for r in recs]
@@ -376,10 +464,41 @@ def build_stats(records: List[dict], version: str, seed: int) -> str:
              f"p95 {d[int(len(d)*0.95)]:.2f}, max {d[-1]:.2f}")
     L.append("")
 
+    L.append("## Zmiany względem v1.0.0")
+    L.append("")
+    L.append("**Naprawiony błąd etykietowania VOICe (issue #34).** W v1.0.0 `collect_voice` "
+             "wyprowadzało etykietę regułą maksymalnego pokrycia po WSZYSTKICH adnotacjach "
+             "miksu i ignorowało katalog ekstrakcji. Interwał w nazwie pliku JEST interwałem "
+             "jednej adnotacji, więc każde dłuższe zdarzenie, które go zawiera, remisowało "
+             "lub wygrywało. Skutek: 975 babycry + 437 gunshot z katalogu `glass/` miało "
+             "etykietę `negative` (1412 = 31.8% wyciętego szkła), a 241 klipów "
+             "z `hard_negative/` etykietę `positive`. Teraz polaryzacja klasy pochodzi "
+             "z katalogu ekstrakcji, a reguła pokrycia rozstrzyga wyłącznie gunshot vs babycry.")
+    L.append("")
+    L.append("**Polifonia.** VOICe to miksy nakładających się zdarzeń: przy pad 0.30 s "
+             "3961 z 4444 zdarzeń glassbreak nachodzi na gunshot/babycry, a 3261 z 4444 "
+             "wycinków hard_negative nachodzi na glassbreak. Przyjęto strażnika "
+             "**asymetrycznego** (jak w `build_combined_dataset.py`, zgubionego przy "
+             "przepisywaniu): odrzucamy skażony negatyw, bo jego etykieta byłaby fałszywa "
+             "i uczyłaby sieć tłumienia na szkle; zachowujemy skażony pozytyw, bo on nadal "
+             "ZAWIERA szkło — jest trudniejszy, nie błędny. Symetryczny strażnik zostawiłby "
+             "483 pozytywy zamiast 4444. Twardych negatywów VOICe: 1183 zamiast 4444.")
+    L.append("")
+    L.append("**Podział VOICe** wzięty z opublikowanych list `dataset/clean/source/*.txt` "
+             "(69/69/69 miksów, parami rozłączne). Podnosi liczbę niezależnych nagrań "
+             "pozytywnych w teście z 59 do 96, kosztem proporcji: VOICe dzieli się 33/33/33, "
+             "a pozostałe źródła 70/15/15, więc udział pozytywów w val/test jest wyższy "
+             "niż w train. Metryką wdrożeniową jest FA/h liczone na godzinach tła, "
+             "nie odsetek klipów, więc ta nierównowaga nie zniekształca celu.")
+    L.append("")
+
     L.append("## Znane ograniczenia")
     L.append("")
     L.append("- Klasa pozytywna jest zdominowana przez wycinki VOICe pochodzące z 207 miksów; "
              "liczba **niezależnych** nagrań szkła jest o rząd wielkości mniejsza niż liczba plików.")
+    L.append("- Udział pozytywów różni się między splitami (train ~40%, val/test ~46-47%) "
+             "przez różne proporcje podziału VOICe i pozostałych źródeł. Progi kalibrowane "
+             "na val trzeba przenosić na deployment ostrożnie.")
     L.append("- Tło stacjonarne pochodzi z ciągłych klas DataSEC i ESC-50, nie z nagrań "
              "z docelowego pomieszczenia. Fałszywe alarmy *w ciszy* są więc mierzone na "
              "zastępniku, nie na realnym tle instalacji.")
@@ -429,7 +548,8 @@ def main() -> None:
         sys.exit("[BŁĄD] nie zebrano ani jednego nagrania — sprawdź ścieżki źródeł.")
 
     unify_groups_by_content(records)
-    assign_splits(records, args.val_frac, args.test_frac, args.seed)
+    assign_splits(records, args.val_frac, args.test_frac, args.seed, repo_root)
+    voice_official = bool(_voice_official_split(repo_root))
     records.sort(key=lambda r: (r["source"], r["filepath"]))
 
     stats = build_stats(records, args.version, args.seed)
@@ -452,7 +572,13 @@ def main() -> None:
         "created_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "git_commit": git_commit(repo_root),
         "split": {"val_frac": args.val_frac, "test_frac": args.test_frac,
-                  "seed": args.seed, "grouped_by": "group_id, osobno per source"},
+                  "seed": args.seed, "grouped_by": "group_id, osobno per source",
+                  # VOICe nie podlega losowaniu, jeśli są opublikowane listy —
+                  # bez tego wpisu metadane kłamią o proporcjach tego źródła.
+                  "voice_official_split": voice_official,
+                  "voice_split_note": "VOICe: 69/69/69 z dataset/clean/source "
+                                      "(33/33/33), pozostałe źródła wg val_frac/test_frac"
+                                      if voice_official else "brak list — VOICe losowane"},
         "counts": {
             "records": len(records),
             "groups": len({r["group_id"] for r in records}),

@@ -167,7 +167,18 @@ dataset/versions/vX.Y.Z/manifest.csv        ZBIÓR GŁÓWNY (audio + etykiety + 
             ▼
 ga_neuron_search/spikes_ext/                ARTEFAKT SPIKE'OWY (14 kanałów)
 architecture_14_neurons_patryk_09_07/
-        spikes_manifest7/                   ARTEFAKT SPIKE'OWY (7 kanałów HW)
+        spikes_v2/                          ARTEFAKT SPIKE'OWY (7 kanałów HW)
+        spikes_manifest7/                   ↑ POPRZEDNIK, unieważniony (issue #36)
+```
+
+Artefakty spike'owe **nie są śledzone w gicie** — są w całości odtwarzalne
+z audio, a `spikes_manifest/` i `spikes_manifest7/` (13.5k plików każdy)
+odpowiadają za większość z 1,2 GB w `.git`. Odtworzenie:
+
+```bash
+python architecture_14_neurons_patryk_09_07/encoder_twin.py build-manifest \
+    --manifest dataset/versions/v2.0.0/manifest.csv --root . \
+    --out architecture_14_neurons_patryk_09_07/spikes_v2 --warmup-seconds 30
 ```
 
 Artefakt spike'owy jest funkcją **trzech** rzeczy: audio, enkodera i banku cech.
@@ -191,6 +202,30 @@ Dlatego każdy artefakt niesie w `channels.json` blok `provenance`:
 Zamiast ręcznie wpisywanego numeru wersji enkodera bierzemy **sumę kontrolną
 plików, które realnie decydują o wyniku**. Ręczny numer rozjeżdża się po dwóch
 tygodniach; suma kontrolna nie.
+
+### Obowiązki buildera artefaktu
+
+Każdy builder artefaktu spike'owego musi:
+
+1. **Przerwać budowę, jeśli jakiś `group_id` jest w więcej niż jednym splicie.**
+   Nie ostrzec, przerwać. Brak tej asercji kosztował trzy kampanie treningowe:
+   `spikes_manifest7` ma 194 z 194 miksów VOICe obecnych w teście również
+   w treningu, więc każda metryka z niego jest liczona na przecieku.
+2. **Przeplatać klasy w strumieniu kodowania.** Enkoder utrzymuje jeden ciągły
+   stan (floor/MAD) przez cały zbiór; gdy negatywy idą przed pozytywami, stan
+   koreluje z etykietą. Sprawdzian: średnia pozycja obu klas w strumieniu ~0.5.
+3. **Rozgrzewać floor wyłącznie na tle stacjonarnym** (`kind == stationary`).
+   Krótkie zdarzenia (wystrzały, dzwony) ustawiają floor na złym poziomie.
+4. **Zapisać obok `channels.json` plik `files.csv`** z kolumnami
+   `filepath,label,kind,source,group_id,csv`. Bez niego walidator nie ma jak
+   sprawdzić, czy artefakt nie rozjechał się z manifestem (kontrola K9), i
+   zgłasza ostrzeżenie O5.
+
+Pliki `files.csv` i `channels.json` leżą w tych samych katalogach co dane, więc
+konsumenci globujący `**/*.csv` muszą odfiltrować `files.csv` (robią to
+`snn_hw_pipeline.SpikeClips` i `eval_stream.load_clips`).
+
+Regresja na te cztery punkty: `snn_pipeline/tests/test_spike_artifact.py`.
 
 ### Status `spikes_ext`
 
@@ -286,4 +321,6 @@ Plik przemianowany na `manifest.DEPRECATED.csv`. Nie używać.
 `DECYZJE_SESJI.md` §C1 opisuje **inny** plik pod tą samą ścieżką (13.5k plików).
 Tamten nie istnieje — został zregenerowany do obecnych 5226 wierszy. Artefakt
 `spikes_manifest7`, z którego pochodzi `hw7_config.json`, powstał z tej
-nieistniejącej wersji i nie da się go odtworzyć (issue #36).
+nieistniejącej wersji i nie da się go odtworzyć (issue #36). Zastąpił go
+`spikes_v2` zbudowany z `dataset/versions/v2.0.0`. Żadnej liczby ze starego
+artefaktu nie wolno cytować bez przeliczenia na nowym.

@@ -33,3 +33,8 @@ architecture_14_neurons_patryk_09_07/spikes_csv
 
 # pozostałości po równoległym zapisie cache
 **/_cache_*.npz.tmp*
+
+# Artefakty spikowe: w calosci odtwarzalne z audio przez encoder_twin.py build-manifest.
+# spikes_manifest/ i spikes_manifest7/ sa jeszcze sledzone historycznie (1,2 GB w .git),
+# nowe artefakty juz nie trafiaja do repo — pochodzenie zapisuje channels.json.
+architecture_14_neurons_patryk_09_07/spikes_v*/

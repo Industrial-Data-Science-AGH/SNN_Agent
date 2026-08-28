@@ -24,7 +24,9 @@ REFRAC_FRAMES = 500   # po alarmie system i tak budzi reaktor — 5 s martwej st
 
 
 def load_clips(root):
-    files = sorted(glob.glob(os.path.join(root, "**", "*.csv"), recursive=True))
+    files = [f for f in sorted(glob.glob(os.path.join(root, "**", "*.csv"),
+                                         recursive=True))
+             if os.path.basename(f) != "files.csv"]   # files.csv to metadane, nie ramki
     if not files:
         sys.exit(f"brak CSV w {root}")
     clips = []

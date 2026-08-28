@@ -54,9 +54,13 @@ Użycie:
 from __future__ import annotations
 
 import argparse
+import csv
 import glob
+import hashlib
+import json
 import os
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -356,21 +360,103 @@ def build_dataset(glass_dirs, negative_dirs, out_dir: str,
           f"(+ {n_warmup_used} zużytych na warmup) -> CSV w {out_dir}")
 
 
+def _sha256_file(path: str) -> Optional[str]:
+    if not os.path.exists(path):
+        return None
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def _assert_groups_disjoint(rows: list) -> None:
+    """Przerywa budowe, jesli jakas grupa zrodlowa jest w wiecej niz jednym splicie.
+
+    To jest ten test, ktorego brak kosztowal trzy kampanie: w spikes_manifest7
+    194 z 194 miksow VOICe obecnych w tescie byly rowniez w treningu, wiec kazda
+    raportowana metryka byla liczona na przecieku. Lepiej nie zbudowac artefaktu
+    niz zbudowac taki, ktorego wyniku nie da sie uzyc.
+    """
+    if not rows or "group_id" not in rows[0]:
+        raise SystemExit(
+            "[BLAD] manifest nie ma kolumny group_id, nie da sie sprawdzic "
+            "rozlacznosci splitow. Uzyj dataset/versions/<wersja>/manifest.csv")
+    splits_of: dict = {}
+    for r in rows:
+        splits_of.setdefault(r["group_id"], set()).add(r["split"])
+    bad = {g: s for g, s in splits_of.items() if len(s) > 1}
+    if bad:
+        przyklad = ", ".join(f"{g}: {sorted(bad[g])}" for g in sorted(bad)[:3])
+        raise SystemExit(
+            f"[BLAD] przeciek miedzy splitami: {len(bad)} grup zrodlowych wystepuje "
+            f"w wiecej niz jednym splicie (np. {przyklad}). Artefakt nie powstal.")
+    print(f"[ok] rozlacznosc grup: {len(splits_of)} grup, kazda w jednym splicie")
+
+
+def _interleave_by_class(split_rows: list) -> list:
+    """Przeplata pozytywy z negatywami zamiast sortowac po etykiecie.
+
+    Enkoder utrzymuje JEDEN ciagly stan (floor/MAD) przez caly zbior. Gdy
+    wszystkie negatywy ida przed wszystkimi pozytywami, stan enkodera jest
+    skorelowany z etykieta i siec moze uczyc sie pozycji w strumieniu zamiast
+    dzwieku. Rozkladamy obie klasy rownomiernie: element o randze i w klasie
+    o licznosci n dostaje pozycje (i + 0.5) / n.
+    """
+    pos = sorted((r for r in split_rows if r["label"] == "positive"),
+                 key=lambda r: r["abspath"])
+    neg = sorted((r for r in split_rows if r["label"] != "positive"),
+                 key=lambda r: r["abspath"])
+    if not pos or not neg:
+        return neg + pos
+    keyed = [((i + 0.5) / len(pos), 1, r) for i, r in enumerate(pos)] + \
+            [((i + 0.5) / len(neg), 0, r) for i, r in enumerate(neg)]
+    keyed.sort(key=lambda kr: (kr[0], kr[1]))
+    return [r for _, _, r in keyed]
+
+
+def _stream_balance(ordered: list) -> str:
+    """Srednia pozycja w strumieniu per klasa, obie powinny wyjsc ~0.500."""
+    n = len(ordered)
+    if n < 2:
+        return "n/a"
+    poz, neg = [], []
+    for i, r in enumerate(ordered):
+        (poz if r["label"] == "positive" else neg).append(i / (n - 1))
+    fmt = lambda v: f"{sum(v) / len(v):.3f}" if v else "n/a"
+    return f"pozytywy {fmt(poz)}, negatywy {fmt(neg)}"
+
+
+def _infer_version(manifest_path: str) -> Optional[str]:
+    """v2.0.0 z dataset/versions/v2.0.0/manifest.csv."""
+    parent = Path(manifest_path).resolve().parent
+    return parent.name if parent.name.startswith("v") else None
+
+
 def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
-                   warmup_seconds: float = 30.0) -> None:
-    """Buduje CSV-y wg manifestu (filepath,label,source,subclass,split) z sesji
-    rozszerzania datasetu. Zachowuje podział train/val/test z manifestu jako
-    podkatalogi wyjścia — trener dostaje wtedy --data out/train --val-data out/val,
-    czyli split po plikach zrobiony raz, wspólny dla wszystkich eksperymentów.
+                   warmup_seconds: float = 30.0,
+                   dataset_version: Optional[str] = None) -> None:
+    """Buduje CSV-y wg wersjonowanego manifestu (dataset/versions/<ver>/manifest.csv).
 
-    Stan enkodera: JEDEN ciągły przez cały zbiór (jak w build_dataset), rozgrzany
-    na stacjonarnym tle (source=notebooks, label=negative, split=train) — klipy
-    zdarzeniowe (dzwony, syreny, gunshot) nie nadają się na warmup floora."""
-    import csv as _csv
+    Zachowuje podział train/val/test z manifestu jako podkatalogi wyjścia, więc
+    trener dostaje --data out/train --val-data out/val, czyli split zrobiony raz,
+    wspólny dla wszystkich eksperymentów.
 
+    Trzy zabezpieczenia, których wcześniej nie było:
+      1. rozłączność `group_id` między splitami sprawdzana TWARDO przed kodowaniem
+         (bez tego powstał spikes_manifest7 z przeciekiem 194/194 miksów VOICe),
+      2. pozytywy przeplatane z negatywami, żeby ciągły stan enkodera nie był
+         skorelowany z etykietą,
+      3. warmup floora wyłącznie na tle stacjonarnym (`kind == stationary`),
+         bo krótkie zdarzenia (gunshot, dzwony) rozgrzewają floor do złego poziomu.
+
+    Do każdego splitu trafia `channels.json` z pochodzeniem i `files.csv` z listą
+    plików źródłowych i ich etykietami, żeby `validate_dataset.py` (K9) mógł
+    sprawdzić, czy artefakt nie rozjechał się z manifestem, na który się powołuje.
+    """
     rows = []
     with open(manifest_path, newline="", encoding="utf-8") as fh:
-        for r in _csv.DictReader(fh):
+        for r in csv.DictReader(fh):
             r["abspath"] = os.path.join(root, r["filepath"])
             rows.append(r)
     print(f"[manifest] {len(rows)} plików", flush=True)
@@ -381,10 +467,29 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
               f"{missing[0]['abspath']} — pomijam je")
         rows = [r for r in rows if os.path.exists(r["abspath"])]
 
+    _assert_groups_disjoint(rows)
+
+    version = dataset_version or _infer_version(manifest_path)
+    prov = {
+        "dataset_version": version,
+        "manifest_path": os.path.relpath(os.path.abspath(manifest_path),
+                                         os.path.abspath(root)).replace(os.sep, "/"),
+        "manifest_sha256": _sha256_file(manifest_path),
+        "encoder_file": "encoder_twin.py",
+        "encoder_sha256": _sha256_file(os.path.abspath(__file__)),
+        "warmup_seconds": warmup_seconds,
+        "stream_order": "pozytywy przeplatane z negatywami, stan enkodera ciągły",
+        "built_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    print(f"[pochodzenie] audio={version}  manifest={prov['manifest_sha256'][:12]}  "
+          f"enkoder={(prov['encoder_sha256'] or '')[:12]}", flush=True)
+
+    # Warmup floora tylko na tle stacjonarnym: krótkie zdarzenia nie są ciszą.
     warmup_files = sorted(r["abspath"] for r in rows
                           if r["label"] == "negative" and r["split"] == "train"
-                          and r["source"] == "notebooks")
+                          and r.get("kind") == "stationary")
     if not warmup_files:
+        print("[!] brak negatywów kind=stationary w train — warmup na dowolnym tle")
         warmup_files = sorted(r["abspath"] for r in rows
                               if r["label"] == "negative" and r["split"] == "train")
     state, n_used = _warmup_state(warmup_files, warmup_seconds)
@@ -392,12 +497,12 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
 
     out = Path(out_dir)
     counts: dict = {}
+    written: dict = {"train": [], "val": [], "test": []}
     for split in ("train", "val", "test"):
         (out / split).mkdir(parents=True, exist_ok=True)
-        # negatywy przed pozytywami — enkoder widzi głównie tło, z rzadka zdarzenie,
-        # jak w ciągłej pracy urządzenia
-        split_rows = sorted((r for r in rows if r["split"] == split),
-                            key=lambda r: (r["label"] != "negative", r["abspath"]))
+        split_rows = _interleave_by_class([r for r in rows if r["split"] == split])
+        print(f"[{split}] średnia pozycja w strumieniu: {_stream_balance(split_rows)}",
+              flush=True)
         for r in split_rows:
             if r["abspath"] in used_for_warmup:
                 continue
@@ -410,16 +515,27 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
             key = (split, label)
             counts[key] = counts.get(key, 0)
             stem = Path(r["abspath"]).stem[:40]
-            out_path = out / split / f"{tag}_{counts[key]:05d}_{stem}.csv"
-            with open(out_path, "w", encoding="utf-8") as fh:
+            name = f"{tag}_{counts[key]:05d}_{stem}.csv"
+            with open(out / split / name, "w", encoding="utf-8") as fh:
                 fh.write("frame," + ",".join(f"s{c}" for c in range(N_CH)) + ",label\n")
                 for frame_idx, row_bits in enumerate(spikes):
                     fh.write(f"{frame_idx},"
                              + ",".join(str(int(v)) for v in row_bits) + f",{label}\n")
             counts[key] += 1
+            written[split].append((r, name))
             done = sum(counts.values())
             if done % 500 == 0:
                 print(f"[postęp] {done} plików zakodowanych", flush=True)
+
+        with open(out / split / "channels.json", "w", encoding="utf-8") as fh:
+            json.dump({"channels": CHANNELS, "n_hw": N_CH, "provenance": prov},
+                      fh, ensure_ascii=False, indent=2)
+        with open(out / split / "files.csv", "w", newline="", encoding="utf-8") as fh:
+            w = csv.writer(fh)
+            w.writerow(["filepath", "label", "kind", "source", "group_id", "csv"])
+            for r, name in written[split]:
+                w.writerow([r["filepath"], r["label"], r.get("kind", ""),
+                            r.get("source", ""), r.get("group_id", ""), name])
 
     for split in ("train", "val", "test"):
         print(f"[ok] {split}: glass {counts.get((split, 1), 0)}, "
@@ -474,8 +590,12 @@ def main() -> None:
                    help="katalog, względem którego rozwiązywane są ścieżki z manifestu")
     m.add_argument("--out", default="./spikes_manifest")
     m.add_argument("--warmup-seconds", type=float, default=30.0)
+    m.add_argument("--dataset-version", default=None,
+                   help="etykieta wersji do channels.json; domyślnie z nazwy "
+                        "katalogu manifestu (dataset/versions/vX.Y.Z/manifest.csv)")
     m.set_defaults(func=lambda a: build_manifest(a.manifest, a.out, root=a.root,
-                                                 warmup_seconds=a.warmup_seconds))
+                                                 warmup_seconds=a.warmup_seconds,
+                                                 dataset_version=a.dataset_version))
 
     p = sub.add_parser("preview", help="Podgląd spike-rate jednego pliku (debug)")
     p.add_argument("wav")

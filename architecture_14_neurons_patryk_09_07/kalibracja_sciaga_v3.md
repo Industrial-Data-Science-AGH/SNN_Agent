@@ -116,11 +116,11 @@ Bez zmian względem `kalibracja_sciaga.md` sekcje 1/3/5 (kolejność H→G→D, 
 python encoder_twin.py build-manifest --manifest ../dataset/versions/v2.0.0/manifest.csv \
     --root .. --out spikes_v2
 # trening (zwycięzca: seed 2, pos_weight 1.0):
-python snn_hw_pipeline.py train --data spikes_manifest7/train \
-    --val-data spikes_manifest7/val --test-data spikes_manifest7/test \
+python snn_hw_pipeline.py train --data spikes_v2/train \
+    --val-data spikes_v2/val --test-data spikes_v2/test \
     --epochs 100 --patience 15 --hat-frac 0.5 --seed 2 --pos-weight 1.0 \
     --out hw7_config.json --ckpt best7.pt
-python eval_stream.py --ckpt best7.pt --data spikes_manifest7/test   # metryki klipowe
+python eval_stream.py --ckpt best7.pt --data spikes_v2/test   # metryki klipowe
 ```
 Checkpoint zwycięzcy: `best7.pt` (=hw7_s2.pt). Pozostałe seedy: `hw7_s1/s3.*`.
 ```

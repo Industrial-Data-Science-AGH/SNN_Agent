@@ -70,9 +70,9 @@ Porównanie między N robi `run_search.py`.
 genome.py            reprezentacja, walidacja, repair, mutacje, krzyżowanie (bez torcha)
 ga.py                silnik GA (jeden run = jedno N; ewaluacja hurtem przez fitness.batch)
 net.py               GenomeNet z genomu na LuiLayer + loss/eval (torch)
-fitness.py           synth_fitness + RealFitness + ParallelFitness (proxy-trening, pula procesów)
+fitness.py           synth_fitness + RealFitness + ParallelFitness (proxy-trening, pula procesów, , obsługa 3-way split)
 run_search.py        CLI: sweep po N, tabela F1 vs liczba neuronów, zapis JSON/CSV
-winner.py            train_full (HAT→QAT) + export_genome_config + tune_k
+winner.py            train_full (HAT→QAT na 5 seedach, ocena na TEST) + export_genome_config + tune_k
 validate_hw_config.py  round-trip: odtwórz sieć z hw_config_*.json i sprawdź metryki
 test_genome.py       testy niezmienników i zbieżności GA (bez torcha)
 ```
@@ -145,6 +145,8 @@ python run_search.py --neurons 4 6 8 10 --mode real ... --workers 18 --out wynik
 - **TODO opcjonalnie**: front Pareto zamiast osobnych runów per N, eksport
   wygranej topologii wprost do `hw_config.json`, walidacja `compare` na prawdziwych
   płytkach (nagrania tej konfiguracji).
+  - **Wdrożono rygorystyczną ewaluację (Train/Val/Test):** Wyeliminowano *data leakage*. Algorytm używa zbioru `val` do sterowania przeszukiwaniem i early-stoppingiem, ale końcowy wynik to **mediana z 5 niezależnych seedów** oceniona na całkowicie odizolowanym zbiorze `test`.
+- **Zrobione (2026-08-28):** Naprawiono zabijanie gradientu w `net.py` (usunięto `clamp(max=5.0)` dla próbek), spięto pipeline z 3 splitami, wprowadzono rygorystyczny format raportowania.
 
 ## Środowisko (Windows)
 
@@ -165,6 +167,7 @@ run_real_sweep.bat                     :: realny sweep z proxy-treningiem (torch
   --arch-dir ..\architecture_14_neurons_patryk_09_07 ^
   --data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\train ^
   --val-data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\val ^
+  --test-data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\test ^
   --limit 120 --epochs 4 --pop 24 --gens 15 --out wyniki_real
 ```
 
@@ -189,6 +192,7 @@ run.bat run_search.py --neurons 4 6 8 10 --mode real ^
   --arch-dir ..\architecture_14_neurons_patryk_09_07 ^
   --data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\train ^
   --val-data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\val ^
+  --test-data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\test ^
   --epochs 4 --pop 24 --gens 15 ^
   --train-winner --winner-epochs 60 --out wyniki_real
 ```
@@ -234,6 +238,7 @@ python validate_hw_config.py \
     --arch-dir ../architecture_14_neurons_patryk_09_07 \
     --data  ../architecture_14_neurons_patryk_09_07/spikes_manifest7/train \
     --val-data ../architecture_14_neurons_patryk_09_07/spikes_manifest7/val \
+    --test-data ../architecture_14_neurons_patryk_09_07/spikes_manifest7/test \
     --k 6 --tol 0.02
 ```
 
@@ -272,13 +277,14 @@ Realny sweep + strojenie zwycięzcy (jedna linia; w PowerShell łamanie wiersza 
   --arch-dir ..\architecture_14_neurons_patryk_09_07 `
   --data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\train `
   --val-data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\val `
+  --test-data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\test `
   --epochs 4 --pop 24 --gens 15 --train-winner --winner-epochs 60 --out wyniki_real
 ```
 
 Albo wszystko w jednej linii bez znaków łamania:
 
 ```powershell
-..\.venv\Scripts\python.exe run_search.py --neurons 4 6 8 10 --mode real --arch-dir ..\architecture_14_neurons_patryk_09_07 --data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\train --val-data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\val --epochs 4 --pop 24 --gens 15 --train-winner --winner-epochs 60 --out wyniki_real
+..\.venv\Scripts\python.exe run_search.py --neurons 4 6 8 10 --mode real --arch-dir ..\architecture_14_neurons_patryk_09_07 --data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\train --val-data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\val --test-data ..\architecture_14_neurons_patryk_09_07\spikes_manifest7\test --epochs 4 --pop 24 --gens 15 --train-winner --winner-epochs 60 --out wyniki_real
 ```
 
 Jeśli `Activate.ps1` zablokuje polityka wykonywania, na bieżącą sesję:

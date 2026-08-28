@@ -104,7 +104,7 @@ def main():
             ap.error("--mode real wymaga --data")
         from fitness import ParallelFitness, RealFitness
         rf_kwargs = dict(arch_dir=args.arch_dir, data=args.data,
-                         val_data=args.val_data, limit=args.limit,
+                         val_data=args.val_data, test_data=args.test_data, limit=args.limit,
                          epochs=args.epochs, num_samples=args.num_samples,
                          k=args.k, metric=args.metric, fitness_seeds=args.fitness_seeds,
                          pos_weight=args.pos_weight,

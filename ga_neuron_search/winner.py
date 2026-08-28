@@ -117,7 +117,7 @@ def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
     best_model, best_state, median_m = all_runs[median_idx]
 
     if ckpt:
-        torch.save({"model": model.state_dict(), "metrics": best_m,
+        torch.save({"model":best_model, "metrics": median_m,
                     "topology": genome.to_dict()}, ckpt)
         
     log("\n" + "=" * 65)
@@ -126,7 +126,7 @@ def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
     log(f"-> clip-F1: {median_m['clip_f1']:.3f} | AP: {median_m['ap']:.3f} | rec: {median_m['clip_recall']:.3f} | prec: {median_m['clip_precision']:.3f} | FA: {median_m['clip_fa_rate']:.3f}")
     log("=" * 65 + "\n")
 
-    return model, best_m
+    return best_model, median_m
 
 
 # ============================================================ strojenie dekodera

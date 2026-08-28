@@ -160,11 +160,16 @@ class RealFitness:
         print(f"[val] {len(self.va_lab)} okien / {len(np.unique(self.va_fidx))} klipów "
               f"(dekoder k={k}, metryka={metric}, seedy={fitness_seeds}, "
               f"kanały={self.n_channels})", flush=True)
-                
-    def eval_events(self, model, k: Optional[int] = None):
+                    
+    def eval_events(self, model, k: Optional[int] = None, split: str = "val"):
         import net
-        return net.genome_eval_events(model, self.va_win, self.va_lab,
-                                      self.va_fidx, self.device, k or self.k)
+        if split == "test":
+            assert self.te_win is not None, "Brak test_data! Dodaj --test-data do argumentów CLI."
+            win, lab, fidx = self.te_win, self.te_lab, self.te_fidx
+        else:
+            win, lab, fidx = self.va_win, self.va_lab, self.va_fidx
+
+        return net.genome_eval_events(model, win, lab, fidx, self.device, k or self.k)
 
     def stream_recall(self, model, g):
         """Recall @ budżet FA/h na splicie val (pełne klipy, kind/group z files.csv).
@@ -228,7 +233,7 @@ class RealFitness:
             if ep == 0:
                 loss0 = mean
             lossN = mean
-        metrics = self.eval_events(model)
+        metrics = self.eval_events(model, split="val")
         if return_model:
             return metrics, loss0, lossN, model
         return metrics, loss0, lossN

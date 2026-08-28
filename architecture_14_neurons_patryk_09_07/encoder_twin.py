@@ -54,10 +54,14 @@ Użycie:
 from __future__ import annotations
 
 import argparse
+import csv
 import glob
+import json
+import hashlib
 import json
 import os
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -90,27 +94,7 @@ THR_Z = np.array([4.0, 3.5, 3.0, 2.5, 3.5, np.nan, np.nan])
 # progi bezwzględne (nan = kanał używa z-score). hf_lo czuły, hf_hi specyficzny.
 ABS_THR = np.array([np.nan, np.nan, np.nan, np.nan, np.nan, 0.28, 0.35])
 
-A_UP, A_DN, A_MAD = 0.0015, 0.0300, 0.0100
-EPS = 1e-6   # ogólny epsilon (dzielenia poza z-score: hf_ratio, cv, spike_thr, bramka HF)
-
-# EPS PER KANAŁ dla mianownika z-score w _update_floor — każdy kanał ma inną
-# jednostkę, więc jeden wspólny EPS=1e-6 kolapsuje przy cyfrowej ciszy (mad->0,
-# mianownik->EPS, dowolne drgnięcie = spike). Wartości to przybliżona
-# rozdzielczość kwantyzacji KAŻDEGO kanału, żeby EPS odpowiadał "1 LSB ADC":
-#   peak      : 1 LSB kodu ADC wprost                    -> 1.0
-#   peak_cnt  : rozdzielczość to 1 próbka/ramkę (int)     -> 1.0
-#   cv, zcr   : ułamek jednej próbki na HOP_SAMPLES próbek statystyki ramki -> 1/HOP_SAMPLES
-#   flux      : rozdzielczość log1p(rms) przy najmniejszej mierzalnej zmianie
-#               rms (rząd 1 LSB / sqrt(HOP_SAMPLES), tłumione przez log1p)
-EPS_FLOOR = np.array([
-    1.0,                                   # peak
-    1.0,                                   # peak_cnt
-    1.0 / HOP_SAMPLES,                     # cv
-    1.0 / HOP_SAMPLES,                     # zcr
-    1.0 / (1.0 + HOP_SAMPLES ** 0.5),       # flux
-    1.0, 1.0,                        # hf_lo/hf_hi: próg bezwzględny, nieużywane tu bo kanał na progu bezwzględnym
-])
-
+A_UP, A_DN, A_MAD, EPS = 0.0015, 0.0300, 0.0100, 1e-6
 REFRAC_FRAMES = 1
 PRIME_FRAMES = 50        # ~0.5 s przy 100 Hz ramek
 
@@ -167,28 +151,7 @@ def compute_global_gain(paths, percentile: float = GAIN_PERCENTILE,
     if method not in ("all-files", "per-file"):
         raise ValueError(f"nieznana metoda gain: {method!r} (all-files/per-file)")
 
-    if method == "all-files":
-        chunks = []
-        for p in paths:
-            y, _ = librosa.load(p, sr=fs_hz, mono=True)
-            if len(y):
-                chunks.append(np.abs(y))
-        if not chunks:
-            return 1.0
-        all_abs = np.concatenate(chunks)
-        ref = float(np.percentile(all_abs, percentile))
-    else:
-        peaks = []
-        for p in paths:
-            y, _ = librosa.load(p, sr=fs_hz, mono=True)
-            if len(y):
-                peaks.append(np.percentile(np.abs(y), percentile))
-        ref = float(np.percentile(peaks, percentile)) if peaks else 1.0
-    return 1.0 / max(ref, 1e-9)
-
-
-def wav_to_adc_codes(path: str, gain: float, fs_hz: int = FS_HZ,
-                     aug_gain_db: float = 0.0, rng=None) -> np.ndarray:
+def wav_to_adc_codes(path: str, fs_hz: int = FS_HZ) -> np.ndarray:
     """Wczytuje audio i odtwarza to, co widziałby ADC Arduino: resample do FS_HZ
     + rekwantyzacja do 10-bit kodów wyśrodkowanych na ADC_BIAS.
 
@@ -483,16 +446,87 @@ def _load_or_compute_gain(train_paths, out_dir: str, percentile: float,
     return gain
 
 
+def _sha256_file(path: str) -> Optional[str]:
+    if not os.path.exists(path):
+        return None
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
+def _assert_groups_disjoint(rows: list) -> None:
+    """Przerywa budowe, jesli jakas grupa zrodlowa jest w wiecej niz jednym splicie.
+
+    To jest ten test, ktorego brak kosztowal trzy kampanie: w spikes_manifest7
+    194 z 194 miksow VOICe obecnych w tescie byly rowniez w treningu, wiec kazda
+    raportowana metryka byla liczona na przecieku. Lepiej nie zbudowac artefaktu
+    niz zbudowac taki, ktorego wyniku nie da sie uzyc.
+    """
+    if not rows or "group_id" not in rows[0]:
+        raise SystemExit(
+            "[BLAD] manifest nie ma kolumny group_id, nie da sie sprawdzic "
+            "rozlacznosci splitow. Uzyj dataset/versions/<wersja>/manifest.csv")
+    splits_of: dict = {}
+    for r in rows:
+        splits_of.setdefault(r["group_id"], set()).add(r["split"])
+    bad = {g: s for g, s in splits_of.items() if len(s) > 1}
+    if bad:
+        przyklad = ", ".join(f"{g}: {sorted(bad[g])}" for g in sorted(bad)[:3])
+        raise SystemExit(
+            f"[BLAD] przeciek miedzy splitami: {len(bad)} grup zrodlowych wystepuje "
+            f"w wiecej niz jednym splicie (np. {przyklad}). Artefakt nie powstal.")
+    print(f"[ok] rozlacznosc grup: {len(splits_of)} grup, kazda w jednym splicie")
+
+
+def _interleave_by_class(split_rows: list) -> list:
+    """Przeplata pozytywy z negatywami zamiast sortowac po etykiecie.
+
+    Enkoder utrzymuje JEDEN ciagly stan (floor/MAD) przez caly zbior. Gdy
+    wszystkie negatywy ida przed wszystkimi pozytywami, stan enkodera jest
+    skorelowany z etykieta i siec moze uczyc sie pozycji w strumieniu zamiast
+    dzwieku. Rozkladamy obie klasy rownomiernie: element o randze i w klasie
+    o licznosci n dostaje pozycje (i + 0.5) / n.
+    """
+    pos = sorted((r for r in split_rows if r["label"] == "positive"),
+                 key=lambda r: r["abspath"])
+    neg = sorted((r for r in split_rows if r["label"] != "positive"),
+                 key=lambda r: r["abspath"])
+    if not pos or not neg:
+        return neg + pos
+    keyed = [((i + 0.5) / len(pos), 1, r) for i, r in enumerate(pos)] + \
+            [((i + 0.5) / len(neg), 0, r) for i, r in enumerate(neg)]
+    keyed.sort(key=lambda kr: (kr[0], kr[1]))
+    return [r for _, _, r in keyed]
+
+
+def _stream_balance(ordered: list) -> str:
+    """Srednia pozycja w strumieniu per klasa, obie powinny wyjsc ~0.500."""
+    n = len(ordered)
+    if n < 2:
+        return "n/a"
+    poz, neg = [], []
+    for i, r in enumerate(ordered):
+        (poz if r["label"] == "positive" else neg).append(i / (n - 1))
+    fmt = lambda v: f"{sum(v) / len(v):.3f}" if v else "n/a"
+    return f"pozytywy {fmt(poz)}, negatywy {fmt(neg)}"
+
+
+def _infer_version(manifest_path: str) -> Optional[str]:
+    """v2.0.0 z dataset/versions/v2.0.0/manifest.csv."""
+    parent = Path(manifest_path).resolve().parent
+    return parent.name if parent.name.startswith("v") else None
+
+
 def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
                    warmup_seconds: float = 30.0, seed: int = 0,
                    aug_gain_db: float = 12.0,
                    gain_percentile: float = GAIN_PERCENTILE,
                    gain_method: str = GAIN_METHOD,
                    gain_file: Optional[str] = None) -> None:
-    """Buduje CSV-y wg manifestu (filepath,label,source,subclass,split) z sesji
-    rozszerzania datasetu. Zachowuje podział train/val/test z manifestu jako
-    podkatalogi wyjścia — trener dostaje wtedy --data out/train --val-data out/val,
-    czyli split po plikach zrobiony raz, wspólny dla wszystkich eksperymentów.
+
+    """Buduje CSV-y wg wersjonowanego manifestu (dataset/versions/<ver>/manifest.csv).
 
     Stan enkodera per split: WSPÓLNY rozgrzany stan bazowy (na tle treningowym)
     jest KOPIOWANY niezależnie dla train/val/test — więc kodowanie pliku w val
@@ -507,13 +541,26 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
     Globalne wzmocnienie (gain) liczone RAZ na negatywach+pozytywach splitu
     train i zamrożone: używane identycznie dla train/val/test. Augmentacja
     losowym wzmocnieniem (domyślnie ±12 dB) stosowana TYLKO na splicie train.
-    """
-    import csv as _csv
-    import copy, random
 
+    Zachowuje podział train/val/test z manifestu jako podkatalogi wyjścia, więc
+    trener dostaje --data out/train --val-data out/val, czyli split zrobiony raz,
+    wspólny dla wszystkich eksperymentów.
+
+    Trzy zabezpieczenia, których wcześniej nie było:
+      1. rozłączność `group_id` między splitami sprawdzana TWARDO przed kodowaniem
+         (bez tego powstał spikes_manifest7 z przeciekiem 194/194 miksów VOICe),
+      2. pozytywy przeplatane z negatywami, żeby ciągły stan enkodera nie był
+         skorelowany z etykietą,
+      3. warmup floora wyłącznie na tle stacjonarnym (`kind == stationary`),
+         bo krótkie zdarzenia (gunshot, dzwony) rozgrzewają floor do złego poziomu.
+
+    Do każdego splitu trafia `channels.json` z pochodzeniem i `files.csv` z listą
+    plików źródłowych i ich etykietami, żeby `validate_dataset.py` (K9) mógł
+    sprawdzić, czy artefakt nie rozjechał się z manifestem, na który się powołuje.
+    """
     rows = []
     with open(manifest_path, newline="", encoding="utf-8") as fh:
-        for r in _csv.DictReader(fh):
+        for r in csv.DictReader(fh):
             r["abspath"] = os.path.join(root, r["filepath"])
             rows.append(r)
     print(f"[manifest] {len(rows)} plików", flush=True)
@@ -529,10 +576,29 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
     gain = _load_or_compute_gain(train_paths, out_dir, gain_percentile,
                                  gain_method, gain_file=gain_file)
 
+    _assert_groups_disjoint(rows)
+
+    version = dataset_version or _infer_version(manifest_path)
+    prov = {
+        "dataset_version": version,
+        "manifest_path": os.path.relpath(os.path.abspath(manifest_path),
+                                         os.path.abspath(root)).replace(os.sep, "/"),
+        "manifest_sha256": _sha256_file(manifest_path),
+        "encoder_file": "encoder_twin.py",
+        "encoder_sha256": _sha256_file(os.path.abspath(__file__)),
+        "warmup_seconds": warmup_seconds,
+        "stream_order": "pozytywy przeplatane z negatywami, stan enkodera ciągły",
+        "built_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    print(f"[pochodzenie] audio={version}  manifest={prov['manifest_sha256'][:12]}  "
+          f"enkoder={(prov['encoder_sha256'] or '')[:12]}", flush=True)
+
+    # Warmup floora tylko na tle stacjonarnym: krótkie zdarzenia nie są ciszą.
     warmup_files = sorted(r["abspath"] for r in rows
                           if r["label"] == "negative" and r["split"] == "train"
-                          and r["source"] == "notebooks")
+                          and r.get("kind") == "stationary")
     if not warmup_files:
+        print("[!] brak negatywów kind=stationary w train — warmup na dowolnym tle")
         warmup_files = sorted(r["abspath"] for r in rows
                               if r["label"] == "negative" and r["split"] == "train")
     base_state, n_used = _warmup_state(warmup_files, warmup_seconds, gain=gain)
@@ -541,6 +607,7 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
     out = Path(out_dir)
     counts: dict = {}
     rng = random.Random(seed)
+    written: dict = {"train": [], "val": [], "test": []}
     for split in ("train", "val", "test"):
         (out / split).mkdir(parents=True, exist_ok=True)
         split_rows = [r for r in rows if r["split"] == split
@@ -550,6 +617,9 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
         split_state = copy.deepcopy(base_state)  # niezależny stan per split
         split_aug = aug_gain_db if split == "train" else 0.0
         split_rng = np.random.default_rng(seed * 10 + SPLIT_OFFSET[split])
+        split_rows = _interleave_by_class([r for r in rows if r["split"] == split])
+        print(f"[{split}] średnia pozycja w strumieniu: {_stream_balance(split_rows)}",
+              flush=True)
         for r in split_rows:
             label = 1 if r["label"] == "positive" else 0
             spikes = encode_file(r["abspath"], gain=gain, state=split_state,
@@ -561,16 +631,27 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
             key = (split, label)
             counts[key] = counts.get(key, 0)
             stem = Path(r["abspath"]).stem[:40]
-            out_path = out / split / f"{tag}_{counts[key]:05d}_{stem}.csv"
-            with open(out_path, "w", encoding="utf-8") as fh:
+            name = f"{tag}_{counts[key]:05d}_{stem}.csv"
+            with open(out / split / name, "w", encoding="utf-8") as fh:
                 fh.write("frame," + ",".join(f"s{c}" for c in range(N_CH)) + ",label\n")
                 for frame_idx, row_bits in enumerate(spikes):
                     fh.write(f"{frame_idx},"
                              + ",".join(str(int(v)) for v in row_bits) + f",{label}\n")
             counts[key] += 1
+            written[split].append((r, name))
             done = sum(counts.values())
             if done % 500 == 0:
                 print(f"[postęp] {done} plików zakodowanych", flush=True)
+
+        with open(out / split / "channels.json", "w", encoding="utf-8") as fh:
+            json.dump({"channels": CHANNELS, "n_hw": N_CH, "provenance": prov},
+                      fh, ensure_ascii=False, indent=2)
+        with open(out / split / "files.csv", "w", newline="", encoding="utf-8") as fh:
+            w = csv.writer(fh)
+            w.writerow(["filepath", "label", "kind", "source", "group_id", "csv"])
+            for r, name in written[split]:
+                w.writerow([r["filepath"], r["label"], r.get("kind", ""),
+                            r.get("source", ""), r.get("group_id", ""), name])
 
     for split in ("train", "val", "test"):
         print(f"[ok] {split}: glass {counts.get((split, 1), 0)}, "
@@ -648,6 +729,9 @@ def main() -> None:
                    help="ścieżka do global_gain.json (domyślnie <out>/global_gain.json); "
                         "jeśli istnieje i pasuje percentile/method/n_files, wczytywany "
                         "zamiast liczony od nowa")
+    m.add_argument("--dataset-version", default=None,
+                   help="etykieta wersji do channels.json; domyślnie z nazwy "
+                        "katalogu manifestu (dataset/versions/vX.Y.Z/manifest.csv)")
     m.set_defaults(func=lambda a: build_manifest(a.manifest, a.out, root=a.root,
                                                  warmup_seconds=a.warmup_seconds,
                                                  seed=a.seed, aug_gain_db=a.aug_gain_db,

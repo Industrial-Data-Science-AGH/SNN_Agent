@@ -451,12 +451,14 @@ w `lu.i-neuron-pcb/` albo BOM Lu.i — sprawdź przed zamówieniem.
 
 ## Dodatek A — Reprodukcja (trening od zera; NIE potrzebne do budowy)
 
-> **UWAGA (issue #34/#36):** poniższa procedura odtwarza artefakt `spikes_manifest7`,
-> który jest NIEAKTUALNY z dwóch niezależnych powodów: powstał ze zbioru
-> z odwróconymi etykietami VOICe (1412 klipów szkła oznaczonych jako tło) oraz
-> zawiera 40 nagrań ESC-50 klasy 38 = `clock_tick` w klasie pozytywnej. Wszystkie
-> liczby w §15 i w `hw7_config.json` z niego pochodzą. Używaj zatwierdzonej wersji
-> zbioru z `dataset/versions/`, nie `dataset/combined/manifest.csv`.
+> **UWAGA (issue #34/#36):** `spikes_manifest7` jest NIEAKTUALNY z trzech
+> niezależnych powodów: powstał ze zbioru z odwróconymi etykietami VOICe
+> (1412 klipów szkła oznaczonych jako tło), zawiera 40 nagrań ESC-50 klasy
+> 38 = `clock_tick` w klasie pozytywnej, i ma przeciek między splitami
+> (194 z 194 miksów VOICe obecnych w teście są też w treningu). Wszystkie liczby
+> w §15 i w `hw7_config.json` z niego pochodzą i są nieważne. Poniższa procedura
+> buduje `spikes_v2` z zatwierdzonej wersji zbioru; wyniki z niego NIE są
+> porównywalne z §15 i trzeba je przemierzyć od zera.
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
@@ -468,12 +470,12 @@ cd "$(git rev-parse --show-toplevel)"
 # 2. trening (zwycięska konfiguracja: seed 2, pos_weight 1.0)
 cd architecture_14_neurons_patryk_09_07
 ../.venv/bin/python snn_hw_pipeline.py train \
-    --data spikes_manifest7/train --val-data spikes_manifest7/val \
-    --test-data spikes_manifest7/test --epochs 100 --patience 15 \
+    --data spikes_v2/train --val-data spikes_v2/val \
+    --test-data spikes_v2/test --epochs 100 --patience 15 \
     --hat-frac 0.5 --seed 2 --pos-weight 1.0 --out hw7_config.json --ckpt best7.pt
 
 # 3. metryki klipowe
-../.venv/bin/python eval_stream.py --ckpt best7.pt --data spikes_manifest7/test
+../.venv/bin/python eval_stream.py --ckpt best7.pt --data spikes_v2/test
 ```
 ⚠️ Zmiana czegokolwiek w `encoder_twin.py` wymaga przekodowania zbioru **i** retreningu —
 CSV-ki są „upieczone" z konkretną wersją enkodera.

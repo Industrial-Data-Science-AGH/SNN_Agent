@@ -273,6 +273,11 @@ class LuiNet(nn.Module):
 
 # ============================================================ dane
 
+
+# Pliki CSV w katalogu spike'ów, które NIE są danymi: files.csv to lista
+# plików źródłowych i etykiet dla walidatora (K9), nie ramki spike'ów.
+_NIE_DANE_CSV = {"files.csv"}
+
 class SpikeClips(Dataset):
     """Każdy CSV = jeden klip. Kolumny: frame,s0..s5 (+ opcjonalnie label).
     Bez kolumny label: etykieta 1, jeśli w nazwie pliku jest 'glass'/'szklo'.
@@ -283,7 +288,9 @@ class SpikeClips(Dataset):
     okna zachodzą na siebie (stride < T), więc split po oknach przecieka."""
 
     def __init__(self, root, T=200, stride=50, limit=None):
-        files = sorted(glob.glob(os.path.join(root, "**", "*.csv"), recursive=True))
+        files = [f for f in sorted(glob.glob(os.path.join(root, "**", "*.csv"),
+                                             recursive=True))
+                 if os.path.basename(f) not in _NIE_DANE_CSV]
         if not files:
             sys.exit(f"brak CSV w {root}")
         if limit:

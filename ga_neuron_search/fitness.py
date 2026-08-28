@@ -144,6 +144,13 @@ class RealFitness:
             vw, vl, vf = vw[sub], vl[sub], vf[sub]
         self.va_win, self.va_lab, self.va_fidx = vw, vl.astype(np.float32), vf
 
+        if test_data:
+            te = load_clips(test_data, T, stride, None, SpikeClips)
+            self.te_win, self.te_lab, self.te_fidx = te.win, te.lab.astype(np.float32), te.fidx
+            print(f"[test] {len(self.te_lab)} okien (dla raportu winner.py)", flush=True)
+        else:
+            self.te_win, self.te_lab, self.te_fidx = None, None, None
+
         # liczba kanałów encodera bierze się z danych (nie zaszyta na 7) — GA
         # selekcjonuje spośród nich. Nazwy: najpierw sidecar channels.json obok
         # danych (rozszerzone zbiory 14-kanałowe), potem pipeline, na końcu ch{i}.
@@ -153,7 +160,7 @@ class RealFitness:
         print(f"[val] {len(self.va_lab)} okien / {len(np.unique(self.va_fidx))} klipów "
               f"(dekoder k={k}, metryka={metric}, seedy={fitness_seeds}, "
               f"kanały={self.n_channels})", flush=True)
-
+                
     def eval_events(self, model, k: Optional[int] = None):
         import net
         return net.genome_eval_events(model, self.va_win, self.va_lab,

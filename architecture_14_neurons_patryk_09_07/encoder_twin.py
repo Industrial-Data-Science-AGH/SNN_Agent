@@ -64,6 +64,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple
+import csv as _csv
+import copy, random
 
 import librosa
 import numpy as np
@@ -94,7 +96,27 @@ THR_Z = np.array([4.0, 3.5, 3.0, 2.5, 3.5, np.nan, np.nan])
 # progi bezwzględne (nan = kanał używa z-score). hf_lo czuły, hf_hi specyficzny.
 ABS_THR = np.array([np.nan, np.nan, np.nan, np.nan, np.nan, 0.28, 0.35])
 
-A_UP, A_DN, A_MAD, EPS = 0.0015, 0.0300, 0.0100, 1e-6
+A_UP, A_DN, A_MAD = 0.0015, 0.0300, 0.0100
+EPS = 1e-6   # ogólny epsilon (dzielenia poza z-score: hf_ratio, cv, spike_thr, bramka HF)
+
+# EPS PER KANAŁ dla mianownika z-score w _update_floor — każdy kanał ma inną
+# jednostkę, więc jeden wspólny EPS=1e-6 kolapsuje przy cyfrowej ciszy (mad->0,
+# mianownik->EPS, dowolne drgnięcie = spike). Wartości to przybliżona
+# rozdzielczość kwantyzacji KAŻDEGO kanału, żeby EPS odpowiadał "1 LSB ADC":
+#   peak      : 1 LSB kodu ADC wprost                    -> 1.0
+#   peak_cnt  : rozdzielczość to 1 próbka/ramkę (int)     -> 1.0
+#   cv, zcr   : ułamek jednej próbki na HOP_SAMPLES próbek statystyki ramki -> 1/HOP_SAMPLES
+#   flux      : rozdzielczość log1p(rms) przy najmniejszej mierzalnej zmianie
+#               rms (rząd 1 LSB / sqrt(HOP_SAMPLES), tłumione przez log1p)
+EPS_FLOOR = np.array([
+    1.0,                                   # peak
+    1.0,                                   # peak_cnt
+    1.0 / HOP_SAMPLES,                     # cv
+    1.0 / HOP_SAMPLES,                     # zcr
+    1.0 / (1.0 + HOP_SAMPLES ** 0.5),       # flux
+    np.nan, np.nan,                        # hf_lo/hf_hi: próg bezwzględny, nieużywane tu
+])
+
 REFRAC_FRAMES = 1
 PRIME_FRAMES = 50        # ~0.5 s przy 100 Hz ramek
 
@@ -150,8 +172,27 @@ def compute_global_gain(paths, percentile: float = GAIN_PERCENTILE,
     (mediana = 50, albo ~95), NIE 99.9."""
     if method not in ("all-files", "per-file"):
         raise ValueError(f"nieznana metoda gain: {method!r} (all-files/per-file)")
+GAIN_PERCENTILE = 99.9   # percentyl amplitudy trafiający w pełną skalę ADC
 
-def wav_to_adc_codes(path: str, fs_hz: int = FS_HZ) -> np.ndarray:
+
+def compute_global_gain(paths, percentile: float = GAIN_PERCENTILE,
+                        fs_hz: int = FS_HZ) -> float:
+    """Liczy JEDNO globalne wzmocnienie z listy plików (percentyl amplitudy
+    -> pełna skala ADC). WYWOŁYWAĆ WYŁĄCZNIE na zbiorze TRENINGOWYM i zamrozić
+    wynik (np. zapisać do JSON obok datasetu) — patrz build_manifest().
+    Zastępuje dawną normalizację `y = y / peak` per plik, która chowała
+    poziom bezwzględny (przesłankę niedostępną na płytce: sprzęt nie ma AGC)."""
+    peaks = []
+    for p in paths:
+        y, _ = librosa.load(p, sr=fs_hz, mono=True)
+        if len(y):
+            peaks.append(np.percentile(np.abs(y), percentile))
+    ref = float(np.percentile(peaks, percentile)) if peaks else 1.0
+    return 1.0 / max(ref, 1e-9)
+
+
+def wav_to_adc_codes(path: str, gain: float, fs_hz: int = FS_HZ,
+                     aug_gain_db: float = 0.0, rng=None) -> np.ndarray:
     """Wczytuje audio i odtwarza to, co widziałby ADC Arduino: resample do FS_HZ
     + rekwantyzacja do 10-bit kodów wyśrodkowanych na ADC_BIAS.
 
@@ -732,12 +773,16 @@ def main() -> None:
     m.add_argument("--dataset-version", default=None,
                    help="etykieta wersji do channels.json; domyślnie z nazwy "
                         "katalogu manifestu (dataset/versions/vX.Y.Z/manifest.csv)")
+    m.add_argument("--seed", type=int, default=0)
+    m.add_argument("--aug-gain-db", type=float, default=12.0)
     m.set_defaults(func=lambda a: build_manifest(a.manifest, a.out, root=a.root,
                                                  warmup_seconds=a.warmup_seconds,
                                                  seed=a.seed, aug_gain_db=a.aug_gain_db,
                                                  gain_percentile=a.gain_percentile,
                                                  gain_method=a.gain_method,
-                                                 gain_file=a.gain_file))
+                                                 gain_file=a.gain_file,
+                                                 dataset_version=a.dataset_version,
+                                                ))
 
     p = sub.add_parser("preview", help="Podgląd spike-rate jednego pliku (debug)")
     p.add_argument("wav")

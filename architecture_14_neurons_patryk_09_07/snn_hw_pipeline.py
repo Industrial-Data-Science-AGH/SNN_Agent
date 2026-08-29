@@ -931,6 +931,23 @@ def main():
                         "lub f1 (ramkowe, stare)")
     t.add_argument("--stream-budget", type=float, default=6.0,
                    help="budzet FA/h dla select-metric=recall_fa (domyslnie 6/h)")
+    t.add_argument("--num-samples", type=int, default=10000)
+    t.add_argument("--val-cap", type=int, default=2000)
+    t.add_argument("--pos-weight", type=float, default=1.0,
+                   help="UWAGA: make_sampler() już balansuje klasy 50/50 w epoce "
+                        "(WeightedRandomSampler) — dodatkowy pos_weight>1 w BCE "
+                        "podwójnie waży klasę pozytywną. Zmierzone przy pos_weight=3.0: "
+                        "precyzja 0.22-0.26 @ recall 0.85-0.89 przez cały trening "
+                        "(sieć zgłasza wszystko). Zwycięskie biegi: pos_weight=1.0.")
+    t.add_argument("--margin-w", type=float, default=0.5)
+    t.add_argument("--spk-w", type=float, default=0.0)
+    t.add_argument("--no-quant", action="store_true", help="wyłącz fazę QAT")
+    t.add_argument("--hat-frac", type=float, default=0.5)
+    t.add_argument("--patience", type=int, default=20)
+    t.add_argument("--aug", action="store_true", help="augmentacja: gubienie spików, jitter")
+    t.add_argument("--wide", action="store_true", help="wariant SZEROKI: 8 płytek H")
+    t.add_argument("--log", default="train.log")
+    t.add_argument("--ckpt", default="best.pt")
     t.set_defaults(func=train)
 
     c = sub.add_parser("compare")
@@ -940,10 +957,8 @@ def main():
     c.set_defaults(func=compare)
 
     args = ap.parse_args()
-    seed = getattr(args, "seed", 0)
-    torch.manual_seed(seed); np.random.seed(seed)
-    args.func(args)
-
+    if hasattr(args, "func"):
+        args.func(args)
 
 if __name__ == "__main__":
     main()

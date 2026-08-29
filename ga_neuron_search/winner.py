@@ -5,8 +5,8 @@ winner.py — pełny trening zwycięskiej topologii i eksport nastaw płytek Lu.
   * train_full(rf, genome, ...) — pełny harmonogram HAT->QAT (jak
     snn_hw_pipeline.train), checkpoint po ocenie ZDARZENIOWEJ (clip-F1).
     ZMIANA odnośnie train_full(Marcel)
-    train_full(rf, genome, ...) — ZMIENIONE: wykonuje trening na 'seeds' seedach, 
-    wybiera medianę po teście ZDARZENIOWYM na nowym zbiorze TESTOWYM.
+    train_full(rf, genome, ...) — ZMIENIONE: wykonuje trening na 'seeds' seedach
+
   * export_genome_config(model, path, ...) — uogólnienie export_config na dowolną
     liczbę warstw: per płytka trymer% + znak +/-, pasek LED (V_leak),
     tau_syn/tau_mem, pulses_to_fire do weryfikacji sim<->hw.
@@ -100,21 +100,16 @@ def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
 
         if best_state is not None:
             model.load_state_dict(best_state)
-
-        try:
-            m_test = rf.eval_events(model, split="test")
-            eval_split = "test"
-        except AssertionError:
-            m_test = rf.eval_events(model, split="val")
-            eval_split = "val"
-            log("[!] UWAGA: Brak test_data. Ewaluacja na zbiorze WALIDACYJNYM (wyciek!).")
-
-        log(f"[winner s:{seed_idx}] Wynik TEST: clip-F1={m_test['clip_f1']:.3f}")
-        all_runs.append((model, best_state, m_test))
+        
+        all_runs.append((model, best_state, best_m))
 
     all_runs.sort(key=lambda x: x[2]["clip_f1"])
     median_idx = len(all_runs) // 2
     best_model, best_state, median_m = all_runs[median_idx]
+
+    # Ewaluacja na TEŚCIE - wyłącznie dla wybranego, finałowego modelu
+    final_m = rf.eval_events(best_model, split="test")
+    eval_split = "test"
 
     if ckpt:
         torch.save({"model":best_model, "metrics": median_m,
@@ -126,7 +121,7 @@ def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
     log(f"-> clip-F1: {median_m['clip_f1']:.3f} | AP: {median_m['ap']:.3f} | rec: {median_m['clip_recall']:.3f} | prec: {median_m['clip_precision']:.3f} | FA: {median_m['clip_fa_rate']:.3f}")
     log("=" * 65 + "\n")
 
-    return best_model, median_m
+    return best_model, final_m
 
 
 # ============================================================ strojenie dekodera

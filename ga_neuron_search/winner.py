@@ -135,12 +135,10 @@ def tune_k(model, rf, k_range=(1, 2, 3, 4, 5, 6)):
     """Przebieg progu dekodera k (>= k spików D w oknie = alarm) na wytrenowanym
     modelu. Nie dotyka wag — tylko metryki na zbiorze walidacyjnym, więc tanie.
     Zwraca (najlepsze_k, jego metryki, tabela wszystkich k)."""
-    best, best_k, table = None, k_range[0], []
-
-    split_to_use = "test" if getattr(rf, 'te_win', None) is not None else "val"
+    best, best_k, table = None, k_range[0], []    
 
     for k in k_range:
-        m = rf.eval_events(model, k=k, split=split_to_use)
+        m = rf.eval_events(model, k=k, split="val")
         table.append({"k": int(k),
                       "clip_f1": m["clip_f1"], "clip_recall": m["clip_recall"],
                       "clip_precision": m["clip_precision"],

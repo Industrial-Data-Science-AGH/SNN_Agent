@@ -239,6 +239,7 @@ def _high_band(x: np.ndarray) -> np.ndarray:
 class EncoderState:
     """Stan enkodera przenoszony między ramkami — odpowiednik zmiennych
     `static`/`volatile` w encoder_v2.ino."""
+
     floor_v: np.ndarray = field(default_factory=lambda: np.zeros(N_CH))
     mad_v: np.ndarray = field(default_factory=lambda: np.zeros(N_CH))
     refrac: np.ndarray = field(default_factory=lambda: np.zeros(N_CH, dtype=int))
@@ -350,11 +351,7 @@ def encode_file(path: str, gain: float, state: Optional[EncoderState] = None,
 
         out_rows.append(bits)
 
-    return (
-        np.array(out_rows, dtype=np.uint8)
-        if out_rows
-        else np.zeros((0, N_CH), dtype=np.uint8)
-    )
+    return np.array(out_rows, dtype=np.uint8) if out_rows else np.zeros((0, N_CH), dtype=np.uint8)
 
 
 # =============================================================================
@@ -660,7 +657,7 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
 
     # Warmup floora tylko na tle stacjonarnym: krótkie zdarzenia nie są ciszą.
     warmup_files = sorted(r["abspath"] for r in rows
-                          if r["label"] == "negative" and r["split"] == "train"
+            if r["label"] == "negative" and r["split"] == "train"
                           and r.get("kind") == "stationary")
     if not warmup_files:
         print("[!] brak negatywów kind=stationary w train — warmup na dowolnym tle")
@@ -675,10 +672,13 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
     written: dict = {"train": [], "val": [], "test": []}
     for split in ("train", "val", "test"):
         (out / split).mkdir(parents=True, exist_ok=True)
-        split_rows = [r for r in rows if r["split"] == split
-                     and r["abspath"] not in used_for_warmup]
+        split_rows = [
+            r
+            for r in rows
+            if r["split"] == split and r["abspath"] not in used_for_warmup
+        ]
         rng.shuffle(split_rows)  # przeplot klas, deterministyczny (seed) —
-                                 # zamiast sortowania po etykiecie
+        # zamiast sortowania po etykiecie
         split_state = copy.deepcopy(base_state)  # niezależny stan per split
         split_aug = aug_gain_db if split == "train" else 0.0
         split_rng = np.random.default_rng(seed * 10 + SPLIT_OFFSET[split])
@@ -687,8 +687,13 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
               flush=True)
         for r in split_rows:
             label = 1 if r["label"] == "positive" else 0
-            spikes = encode_file(r["abspath"], gain=gain, state=split_state,
-                                 aug_gain_db=split_aug, rng=split_rng)
+            spikes = encode_file(
+                r["abspath"],
+                gain=gain,
+                state=split_state,
+                aug_gain_db=split_aug,
+                rng=split_rng,
+            )
             if spikes.shape[0] == 0:
                 print(f"[!] {r['abspath']}: za krótki na choćby jedną ramkę — pomijam")
                 continue
@@ -696,12 +701,15 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
             key = (split, label)
             counts[key] = counts.get(key, 0)
             stem = Path(r["abspath"]).stem[:40]
-            name = f"{tag}_{counts[key]:05d}_{stem}.csv"
-            with open(out / split / name, "w", encoding="utf-8") as fh:
+            out_path = out / split / f"{tag}_{counts[key]:05d}_{stem}.csv"
+            with open(out_path, "w", encoding="utf-8") as fh:
                 fh.write("frame," + ",".join(f"s{c}" for c in range(N_CH)) + ",label\n")
                 for frame_idx, row_bits in enumerate(spikes):
-                    fh.write(f"{frame_idx},"
-                             + ",".join(str(int(v)) for v in row_bits) + f",{label}\n")
+                    fh.write(
+                        f"{frame_idx},"
+                        + ",".join(str(int(v)) for v in row_bits)
+                        + f",{label}\n"
+                    )
             counts[key] += 1
             written[split].append((r, name))
             done = sum(counts.values())
@@ -719,8 +727,11 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
                             r.get("source", ""), r.get("group_id", ""), name])
 
     for split in ("train", "val", "test"):
-        print(f"[ok] {split}: glass {counts.get((split, 1), 0)}, "
-              f"negative {counts.get((split, 0), 0)} -> {out / split}", flush=True)
+        print(
+            f"[ok] {split}: glass {counts.get((split, 1), 0)}, "
+            f"negative {counts.get((split, 0), 0)} -> {out / split}",
+            flush=True,
+        )
 
 
 # =============================================================================
@@ -729,8 +740,13 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
 
 
 def _cmd_build(args) -> None:
-    build_dataset(args.glass, args.negative, args.out,
-                  warmup_seconds=args.warmup_seconds, warmup_dir=args.warmup_dir)
+    build_dataset(
+        args.glass,
+        args.negative,
+        args.out,
+        warmup_seconds=args.warmup_seconds,
+        warmup_dir=args.warmup_dir,
+    )
 
 
 def _cmd_preview(args) -> None:
@@ -757,30 +773,50 @@ def _cmd_preview(args) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     b = sub.add_parser("build", help="Zbuduj CSV-y ze zbioru glass/negative")
-    b.add_argument("--glass", required=True, nargs="+",
-                   help="jeden lub więcej folderów z .wav tłuczonego szkła")
-    b.add_argument("--negative", required=True, nargs="+",
-                   help="jeden lub więcej folderów z .wav tła/negatywów")
+    b.add_argument(
+        "--glass",
+        required=True,
+        nargs="+",
+        help="jeden lub więcej folderów z .wav tłuczonego szkła",
+    )
+    b.add_argument(
+        "--negative",
+        required=True,
+        nargs="+",
+        help="jeden lub więcej folderów z .wav tła/negatywów",
+    )
     b.add_argument("--out", default="./spikes_csv")
-    b.add_argument("--warmup-seconds", type=float, default=30.0,
-                   help="ile sekund realnego tła zużyć na rozgrzanie floor/MAD przed "
-                        "zapisem jakichkolwiek CSV (patrz uwaga w docstringu modułu)")
-    b.add_argument("--warmup-dir", default=None,
-                   help="folder z PRAWDZIWIE stacjonarnym tłem do rozgrzewki "
-                        "(domyślnie: pierwszy z --negative). Nie podawaj tu folderu "
-                        "z krótkimi wycinkami zdarzeń (np. hard_negative z VOICe).")
+    b.add_argument(
+        "--warmup-seconds",
+        type=float,
+        default=30.0,
+        help="ile sekund realnego tła zużyć na rozgrzanie floor/MAD przed "
+        "zapisem jakichkolwiek CSV (patrz uwaga w docstringu modułu)",
+    )
+    b.add_argument(
+        "--warmup-dir",
+        default=None,
+        help="folder z PRAWDZIWIE stacjonarnym tłem do rozgrzewki "
+        "(domyślnie: pierwszy z --negative). Nie podawaj tu folderu "
+        "z krótkimi wycinkami zdarzeń (np. hard_negative z VOICe).",
+    )
     b.set_defaults(func=_cmd_build)
 
-    m = sub.add_parser("build-manifest",
-                       help="Zbuduj CSV-y wg manifestu (filepath,label,...,split)")
+    m = sub.add_parser(
+        "build-manifest", help="Zbuduj CSV-y wg manifestu (filepath,label,...,split)"
+    )
     m.add_argument("--manifest", required=True)
-    m.add_argument("--root", default=".",
-                   help="katalog, względem którego rozwiązywane są ścieżki z manifestu")
+    m.add_argument(
+        "--root",
+        default=".",
+        help="katalog, względem którego rozwiązywane są ścieżki z manifestu",
+    )
     m.add_argument("--out", default="./spikes_manifest")
     m.add_argument("--warmup-seconds", type=float, default=30.0)
     m.add_argument("--seed", type=int, default=0)

@@ -64,21 +64,16 @@ def phase_a(args) -> dict:
     # 2. Baseline model (wagi z symulacji, bez kwantyzacji)
     print("\n[FAZA A] Ewaluacja modelu baseline (wagi z symulacji)...")
     baseline_model = GlassBreakSNN(quantize_mode="none").to(DEVICE)
-    baseline_results = evaluate_model(
-        baseline_model, loaders["test"], label="Baseline (sim_train)"
-    )
+    baseline_results = evaluate_model(baseline_model, loaders["test"], label="Baseline (sim_train)")
 
     elapsed = time.time() - t0
     print(f"\n[FAZA A] Zakończona w {elapsed:.1f}s")
 
     # Zapis checkpointu
-    torch.save(
-        {
-            "baseline_results": baseline_results,
-            "baseline_state_dict": baseline_model.state_dict(),
-        },
-        PATH_CONFIG.checkpoint_dir / "phase_a.pt",
-    )
+    torch.save({
+        "baseline_results": baseline_results,
+        "baseline_state_dict": baseline_model.state_dict(),
+    }, PATH_CONFIG.checkpoint_dir / "phase_a.pt")
 
     return {
         "datasets": datasets,
@@ -123,9 +118,7 @@ def phase_b(args, phase_a_data: dict) -> dict:
     print(f"\n{weight_table}")
 
     # Zapisz tabelę
-    with open(
-        PATH_CONFIG.output_dir / "hat_weight_table.txt", "w", encoding="utf-8"
-    ) as f:
+    with open(PATH_CONFIG.output_dir / "hat_weight_table.txt", "w", encoding="utf-8") as f:
         f.write(weight_table)
 
     # 5. Ewaluacja po HAT
@@ -134,14 +127,11 @@ def phase_b(args, phase_a_data: dict) -> dict:
     elapsed = time.time() - t0
     print(f"\n[FAZA B] Zakończona w {elapsed:.1f}s")
 
-    torch.save(
-        {
-            "hat_model_state_dict": hat_model.state_dict(),
-            "hat_history": history,
-            "hat_results": hat_results,
-        },
-        PATH_CONFIG.checkpoint_dir / "phase_b.pt",
-    )
+    torch.save({
+        "hat_model_state_dict": hat_model.state_dict(),
+        "hat_history": history,
+        "hat_results": hat_results,
+    }, PATH_CONFIG.checkpoint_dir / "phase_b.pt")
 
     return {
         **phase_a_data,
@@ -199,16 +189,13 @@ def phase_c(args, phase_b_data: dict) -> dict:
     elapsed = time.time() - t0
     print(f"\n[FAZA C] Zakończona w {elapsed:.1f}s")
 
-    torch.save(
-        {
-            "qat_model_state_dict": qat_model.state_dict(),
-            "qat_history": qat_history,
-            "qat_results": qat_results,
-            "sensitivities": sensitivities,
-            "mcp_candidates": mcp_candidates,
-        },
-        PATH_CONFIG.checkpoint_dir / "phase_c.pt",
-    )
+    torch.save({
+        "qat_model_state_dict": qat_model.state_dict(),
+        "qat_history": qat_history,
+        "qat_results": qat_results,
+        "sensitivities": sensitivities,
+        "mcp_candidates": mcp_candidates,
+    }, PATH_CONFIG.checkpoint_dir / "phase_c.pt")
 
     return {
         **phase_b_data,
@@ -254,8 +241,7 @@ def phase_d(args, phase_c_data: dict) -> dict:
     # 2. Thermal drift simulation
     print("\n[FAZA D] Symulacja dryfu termicznego...")
     drift_results = thermal_drift_simulation(
-        qat_model,
-        loaders["test"],
+        qat_model, loaders["test"],
         n_runs=TRAIN_CONFIG.thermal_drift_runs,
         drift_pct=TRAIN_CONFIG.thermal_drift_pct,
     )
@@ -352,45 +338,21 @@ Przykłady użycia:
     )
 
     parser.add_argument(
-        "--phase",
-        type=str,
-        default="all",
+        "--phase", type=str, default="all",
         choices=["A", "B", "C", "D", "E", "all"],
         help="Faza do uruchomienia (A/B/C/D/E/all). Default: all",
     )
-    parser.add_argument(
-        "--epochs", type=int, default=None, help="Liczba epok HAT (domyślnie: 50)"
-    )
-    parser.add_argument(
-        "--qat-epochs", type=int, default=None, help="Liczba epok QAT (domyślnie: 20)"
-    )
-    parser.add_argument(
-        "--batch-size", type=int, default=TRAIN_CONFIG.batch_size, help="Batch size"
-    )
-    parser.add_argument(
-        "--encoding",
-        type=str,
-        default="ttfs",
-        choices=["ttfs", "rate"],
-        help="Typ enkodowania spike'ów",
-    )
-    parser.add_argument(
-        "--n-timesteps", type=int, default=100, help="Liczba kroków czasowych"
-    )
-    parser.add_argument(
-        "--data-limit",
-        type=int,
-        default=None,
-        help="Limit plików audio (do szybkich testów)",
-    )
-    parser.add_argument(
-        "--no-augment", action="store_true", help="Wyłącz augmentację danych"
-    )
-    parser.add_argument(
-        "--quick",
-        action="store_true",
-        help="Szybki tryb: data-limit=50, epochs=5, qat-epochs=3",
-    )
+    parser.add_argument("--epochs", type=int, default=None, help="Liczba epok HAT (domyślnie: 50)")
+    parser.add_argument("--qat-epochs", type=int, default=None, help="Liczba epok QAT (domyślnie: 20)")
+    parser.add_argument("--batch-size", type=int, default=TRAIN_CONFIG.batch_size, help="Batch size")
+    parser.add_argument("--encoding", type=str, default="ttfs", choices=["ttfs", "rate"],
+                        help="Typ enkodowania spike'ów")
+    parser.add_argument("--n-timesteps", type=int, default=100, help="Liczba kroków czasowych")
+    parser.add_argument("--data-limit", type=int, default=None,
+                        help="Limit plików audio (do szybkich testów)")
+    parser.add_argument("--no-augment", action="store_true", help="Wyłącz augmentację danych")
+    parser.add_argument("--quick", action="store_true",
+                        help="Szybki tryb: data-limit=50, epochs=5, qat-epochs=3")
     parser.add_argument("--seed", type=int, default=RANDOM_SEED, help="Random seed")
 
     args = parser.parse_args()
@@ -436,9 +398,7 @@ Przykłady użycia:
             data = phase_e(args, data)
 
     elapsed_total = time.time() - t_total
-    print(
-        f"\n[TOTAL] Pipeline zakończony w {elapsed_total:.1f}s ({elapsed_total / 60:.1f} min)"
-    )
+    print(f"\n[TOTAL] Pipeline zakończony w {elapsed_total:.1f}s ({elapsed_total / 60:.1f} min)")
 
 
 def _load_previous_phases(start_phase: str, args) -> dict:
@@ -478,15 +438,8 @@ def _load_previous_phases(start_phase: str, args) -> dict:
         data["baseline_results"] = loaded["baseline_results"]
     else:
         print("[WARN] Brak checkpointu Phase A — baseline nie będzie dostępny.")
-        data["baseline_results"] = {
-            "label": "Baseline (brak)",
-            "precision": 0,
-            "recall": 0,
-            "f1": 0,
-            "accuracy": 0,
-            "fnr": 1,
-            "weights": {},
-        }
+        data["baseline_results"] = {"label": "Baseline (brak)", "precision": 0, "recall": 0,
+                                     "f1": 0, "accuracy": 0, "fnr": 1, "weights": {}}
 
     # Ładuj checkpoint Phase B
     if start_phase in ("C", "D", "E"):

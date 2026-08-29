@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import matplotlib
-
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -87,8 +86,8 @@ def evaluate_model(
     cm = compute_confusion_matrix(all_preds, all_targets)
 
     # Średnia latencja (tylko dla poprawnych detekcji)
-    valid_latencies = [l for l in all_latencies if l < float("inf")]
-    avg_latency = np.mean(valid_latencies) if valid_latencies else float("inf")
+    valid_latencies = [l for l in all_latencies if l < float('inf')]
+    avg_latency = np.mean(valid_latencies) if valid_latencies else float('inf')
 
     result = {
         **metrics,
@@ -109,8 +108,8 @@ def evaluate_model(
     print(f"  FNR:          {metrics['fnr']:.4f}")
     print(f"  Avg latency:  {avg_latency:.1f} ms")
     print(f"  Confusion matrix:")
-    print(f"    TN={cm[0, 0]:4d}  FP={cm[0, 1]:4d}")
-    print(f"    FN={cm[1, 0]:4d}  TP={cm[1, 1]:4d}")
+    print(f"    TN={cm[0,0]:4d}  FP={cm[0,1]:4d}")
+    print(f"    FN={cm[1,0]:4d}  TP={cm[1,1]:4d}")
     print(f"{'=' * 50}")
 
     return result
@@ -148,12 +147,8 @@ def thermal_drift_simulation(
 
     recalls = []
     weight_params = [
-        model.w_n1,
-        model.w_n2,
-        model.w_n3_from_n1,
-        model.w_n3_from_n2,
-        model.w_inh,
-        model.w_inh_to_n3,
+        model.w_n1, model.w_n2, model.w_n3_from_n1,
+        model.w_n3_from_n2, model.w_inh, model.w_inh_to_n3,
     ]
 
     # Zapisz oryginalne wagi
@@ -196,14 +191,10 @@ def thermal_drift_simulation(
     }
 
     print(f"\n[Thermal Drift] Wyniki ({n_runs} runs, ±{drift_pct}% szum):")
-    print(
-        f"  Mean recall:     {result['mean_recall']:.4f} ± {result['std_recall']:.4f}"
-    )
+    print(f"  Mean recall:     {result['mean_recall']:.4f} ± {result['std_recall']:.4f}")
     print(f"  Worst-case (5%): {result['worst_case_recall_5pct']:.4f}")
     print(f"  P(recall < 0.80): {result['prob_recall_below_80']:.2%}")
-    print(
-        f"  Min/Max recall:  [{result['min_recall']:.4f}, {result['max_recall']:.4f}]"
-    )
+    print(f"  Min/Max recall:  [{result['min_recall']:.4f}, {result['max_recall']:.4f}]")
 
     return result
 
@@ -245,19 +236,12 @@ def weight_error_histogram(
         pct_errors.append(err_pct.item())
 
     x = np.arange(len(names))
-    bars = ax.bar(
-        x,
-        pct_errors,
-        color=["#dc3545" if p > 5 else "#28a745" for p in pct_errors],
-        edgecolor="black",
-        linewidth=0.5,
-    )
+    bars = ax.bar(x, pct_errors, color=["#dc3545" if p > 5 else "#28a745" for p in pct_errors],
+                  edgecolor="black", linewidth=0.5)
     ax.set_xticks(x)
     ax.set_xticklabels(names, rotation=45, ha="right")
     ax.set_ylabel("Błąd kwantyzacji (%)")
-    ax.set_title(
-        "Błąd E24 kwantyzacji per waga synaptyczna", fontsize=13, fontweight="bold"
-    )
+    ax.set_title("Błąd E24 kwantyzacji per waga synaptyczna", fontsize=13, fontweight="bold")
     ax.grid(axis="y", alpha=0.3)
     ax.axhline(y=5.0, color="red", linestyle="--", alpha=0.5, label="Próg 5%")
     ax.legend()
@@ -300,7 +284,7 @@ def power_estimate(
     for name, w_val in weights.items():
         r_syn = weight_to_resistance(abs(w_val))
         if r_syn > 0:
-            p = (vcc**2 / r_syn) * duty_cycle  # Watty
+            p = (vcc ** 2 / r_syn) * duty_cycle  # Watty
         else:
             p = 0.0
         power_per_synapse[name] = p * 1000  # mW
@@ -309,15 +293,11 @@ def power_estimate(
     power_per_synapse["total_mW"] = total_power_w * 1000
     power_per_synapse["total_uW"] = total_power_w * 1_000_000
 
-    print(
-        f"\n[Power Estimate] (spike_rate={spike_rate}Hz, duty_cycle={duty_cycle:.4f})"
-    )
+    print(f"\n[Power Estimate] (spike_rate={spike_rate}Hz, duty_cycle={duty_cycle:.4f})")
     for name, p_mw in power_per_synapse.items():
         if name.startswith("w_"):
             print(f"  {name:<18}: {p_mw:.4f} mW")
-    print(
-        f"  {'ŁĄCZNIE':<18}: {power_per_synapse['total_mW']:.4f} mW ({power_per_synapse['total_uW']:.1f} µW)"
-    )
+    print(f"  {'ŁĄCZNIE':<18}: {power_per_synapse['total_mW']:.4f} mW ({power_per_synapse['total_uW']:.1f} µW)")
 
     return power_per_synapse
 
@@ -356,9 +336,7 @@ def benchmark_table(
     for r in results:
         label = r.get("label", "—")
         # Sprawdź czy wagi są w zakresie E24
-        hw_ok = (
-            "✓" if all(abs(v) <= 0.95 for v in r.get("weights", {}).values()) else "?"
-        )
+        hw_ok = "✓" if all(abs(v) <= 0.95 for v in r.get("weights", {}).values()) else "?"
         lines.append(
             f"{label:<20} {r['precision']:>10.4f} {r['recall']:>10.4f} "
             f"{r['f1']:>10.4f} {r['accuracy']:>10.4f} {r['fnr']:>10.4f} "

@@ -1,13 +1,11 @@
-# --- audio_features.py ---
+# --- audio_features.py --- 
 # Ekstrakcja cech audio: STFT, pasma, envelope
 import numpy as np
 import librosa
 import torch
 
-
 def features_to_spikes(features):
     return torch.tensor(features).float()
-
 
 def extract_features(path, sr=16000, T=100):
     y, sr = librosa.load(path, sr=sr)
@@ -43,7 +41,7 @@ def extract_features(path, sr=16000, T=100):
     features = np.stack([hf_energy, lf_energy, envelope], axis=1)
 
     # --- 7. resize do T ---
-    idx = np.linspace(0, len(features) - 1, T).astype(int)
+    idx = np.linspace(0, len(features)-1, T).astype(int)
     features = features[idx]
 
     return features  # (T, 3)

@@ -60,7 +60,9 @@ def resample_linear(x: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
     return np.interp(xq, xp, fp).astype(np.float32)
 
 
-def pick_segment(x: np.ndarray, sr: int, segment_sec: float, strategy: str) -> np.ndarray:
+def pick_segment(
+    x: np.ndarray, sr: int, segment_sec: float, strategy: str
+) -> np.ndarray:
     if segment_sec <= 0:
         return x
     seg_len = int(segment_sec * sr)
@@ -71,19 +73,19 @@ def pick_segment(x: np.ndarray, sr: int, segment_sec: float, strategy: str) -> n
         return x[:seg_len]
     if strategy == "center":
         start = max(0, (len(x) - seg_len) // 2)
-        return x[start:start + seg_len]
+        return x[start : start + seg_len]
     if strategy == "max_energy":
         win = seg_len
         hop = max(1, seg_len // 4)
         best_e = -1.0
         best_i = 0
         for i in range(0, len(x) - win, hop):
-            seg = x[i:i + win]
+            seg = x[i : i + win]
             e = float(np.mean(seg * seg))
             if e > best_e:
                 best_e = e
                 best_i = i
-        return x[best_i:best_i + win]
+        return x[best_i : best_i + win]
 
     return x[:seg_len]
 
@@ -100,13 +102,14 @@ def pick_segment(x: np.ndarray, sr: int, segment_sec: float, strategy: str) -> n
 #   zcr      - zero-crossing rate of the broadband filtered signal per frame.
 #   crest    - peak-to-RMS ratio of the broadband filtered signal per frame.
 
+
 @dataclass
 class EncoderConfig:
     frame_window_ms: float = 20.0
     max_hf_ratio_val: float = 1.0
     max_zcr_val: float = 1.0
     max_crest_val: float = 10.0
-    hpf_alpha_broad: float = 0.99   # lower cutoff -> broadband high-pass
+    hpf_alpha_broad: float = 0.99  # lower cutoff -> broadband high-pass
     hpf_alpha_narrow: float = 0.85  # higher cutoff -> narrow, high-frequency-only band
     rc_min_rate_hz: float = 5.0
     rc_max_rate_hz: float = 200.0
@@ -179,7 +182,9 @@ def compute_max_vals(
         max_zcr = max(max_zcr, float(feats[:, 1].max()))
         max_crest = max(max_crest, float(feats[:, 2].max()))
 
-    print(f"Computed max_vals: hf_ratio={max_hf_ratio:.4f}, zcr={max_zcr:.4f}, crest={max_crest:.4f}")
+    print(
+        f"Computed max_vals: hf_ratio={max_hf_ratio:.4f}, zcr={max_zcr:.4f}, crest={max_crest:.4f}"
+    )
     return np.array([max_hf_ratio, max_zcr, max_crest], dtype=np.float32)
 
 
@@ -221,16 +226,24 @@ def compute_max_vals_from_paths(
         max_zcr = max(max_zcr, float(feats[:, 1].max()))
         max_crest = max(max_crest, float(feats[:, 2].max()))
 
-    print(f"Computed max_vals: hf_ratio={max_hf_ratio:.4f}, zcr={max_zcr:.4f}, crest={max_crest:.4f}")
+    print(
+        f"Computed max_vals: hf_ratio={max_hf_ratio:.4f}, zcr={max_zcr:.4f}, crest={max_crest:.4f}"
+    )
     return np.array([max_hf_ratio, max_zcr, max_crest], dtype=np.float32)
 
 
-def load_manifest_samples(manifest_path: str, repo_root: Optional[str], split: str) -> List[Tuple[str, int]]:
+def load_manifest_samples(
+    manifest_path: str, repo_root: Optional[str], split: str
+) -> List[Tuple[str, int]]:
     manifest = Path(manifest_path).expanduser().resolve()
     if not manifest.exists():
         raise FileNotFoundError(f"Manifest file not found: {manifest}")
 
-    root = Path(repo_root).expanduser().resolve() if repo_root else manifest.parent.parent.parent
+    root = (
+        Path(repo_root).expanduser().resolve()
+        if repo_root
+        else manifest.parent.parent.parent
+    )
     rows: List[Tuple[str, int]] = []
 
     with manifest.open("r", newline="") as fh:
@@ -319,9 +332,9 @@ def extract_hpf_features(x: np.ndarray, sr: int, cfg: EncoderConfig) -> np.ndarr
         energy_narrow = sum_sq_narrow / count
         rms_broad = math.sqrt(energy_broad)
 
-        feats[f, 0] = energy_narrow / (energy_broad + cfg.eps)   # hf_ratio
-        feats[f, 1] = zero_crossings / float(count)              # zcr
-        feats[f, 2] = max_abs_broad / (rms_broad + cfg.eps)       # crest
+        feats[f, 0] = energy_narrow / (energy_broad + cfg.eps)  # hf_ratio
+        feats[f, 1] = zero_crossings / float(count)  # zcr
+        feats[f, 2] = max_abs_broad / (rms_broad + cfg.eps)  # crest
 
     return feats
 
@@ -335,7 +348,9 @@ def encode_spikes(x: np.ndarray, sr: int, cfg: EncoderConfig) -> np.ndarray:
 
     smoothed = np.zeros(3, dtype=np.float32)
     norm_vals = np.zeros((n_frames, 3), dtype=np.float32)
-    max_vals = np.array([cfg.max_hf_ratio_val, cfg.max_zcr_val, cfg.max_crest_val], dtype=np.float32)
+    max_vals = np.array(
+        [cfg.max_hf_ratio_val, cfg.max_zcr_val, cfg.max_crest_val], dtype=np.float32
+    )
 
     for i in range(n_frames):
         smoothed = cfg.smooth_alpha * feats[i] + (1.0 - cfg.smooth_alpha) * smoothed
@@ -356,7 +371,9 @@ def encode_spikes(x: np.ndarray, sr: int, cfg: EncoderConfig) -> np.ndarray:
                     if norm[ch] < cfg.rc_noise_floor:
                         curr_isi_steps[ch] = 0
                     else:
-                        rate_hz = cfg.rc_min_rate_hz + norm[ch] * (cfg.rc_max_rate_hz - cfg.rc_min_rate_hz)
+                        rate_hz = cfg.rc_min_rate_hz + norm[ch] * (
+                            cfg.rc_max_rate_hz - cfg.rc_min_rate_hz
+                        )
                         isi_ms = 1000.0 / max(rate_hz, 1e-3)
                         curr_isi_steps[ch] = max(1, int(round(isi_ms / cfg.dt_ms)))
             else:
@@ -370,11 +387,18 @@ def encode_spikes(x: np.ndarray, sr: int, cfg: EncoderConfig) -> np.ndarray:
 
         for ch in range(3):
             if cfg.encoder_mode == "rate":
-                if curr_isi_steps[ch] > 0 and (step - last_spike_step[ch]) >= curr_isi_steps[ch]:
+                if (
+                    curr_isi_steps[ch] > 0
+                    and (step - last_spike_step[ch]) >= curr_isi_steps[ch]
+                ):
                     spikes[step, ch] = 1.0
                     last_spike_step[ch] = step
             else:
-                if (not ttfs_armed[ch]) and ttfs_time_step[ch] >= 0 and step >= ttfs_time_step[ch]:
+                if (
+                    (not ttfs_armed[ch])
+                    and ttfs_time_step[ch] >= 0
+                    and step >= ttfs_time_step[ch]
+                ):
                     spikes[step, ch] = 1.0
                     ttfs_armed[ch] = True
 
@@ -393,6 +417,7 @@ def fix_spike_length(spikes: np.ndarray, target_steps: int) -> np.ndarray:
 # ------------------------------
 # SNN model
 # ------------------------------
+
 
 class GlassBreakSNN(nn.Module):
     """3 -> n_hidden -> 1 LIF SNN.
@@ -416,9 +441,15 @@ class GlassBreakSNN(nn.Module):
             torch.randn(self.n_hidden, self.n_output) / math.sqrt(self.n_hidden)
         )
 
-        self.lif_input = snn.Leaky(beta=beta, threshold=0.5, learn_beta=True, learn_threshold=True)
-        self.lif_hidden = snn.Leaky(beta=beta, threshold=0.5, learn_beta=True, learn_threshold=True)
-        self.lif_output = snn.Leaky(beta=beta, threshold=0.5, learn_beta=True, learn_threshold=True)
+        self.lif_input = snn.Leaky(
+            beta=beta, threshold=0.5, learn_beta=True, learn_threshold=True
+        )
+        self.lif_hidden = snn.Leaky(
+            beta=beta, threshold=0.5, learn_beta=True, learn_threshold=True
+        )
+        self.lif_output = snn.Leaky(
+            beta=beta, threshold=0.5, learn_beta=True, learn_threshold=True
+        )
 
     def clamp_dynamics(self) -> None:
         """Keep learned beta/threshold in physically valid ranges. beta and
@@ -451,10 +482,18 @@ class GlassBreakSNN(nn.Module):
         mem_hidden = self.lif_hidden.init_leaky()
         mem_output = self.lif_output.init_leaky()
 
-        spk_input_rec = torch.zeros((n_timesteps, batch_size, self.n_input), device=x.device)
-        spk_hidden_rec = torch.zeros((n_timesteps, batch_size, self.n_hidden), device=x.device)
-        spk_output_rec = torch.zeros((n_timesteps, batch_size, self.n_output), device=x.device)
-        mem_output_rec = torch.zeros((n_timesteps, batch_size, self.n_output), device=x.device)
+        spk_input_rec = torch.zeros(
+            (n_timesteps, batch_size, self.n_input), device=x.device
+        )
+        spk_hidden_rec = torch.zeros(
+            (n_timesteps, batch_size, self.n_hidden), device=x.device
+        )
+        spk_output_rec = torch.zeros(
+            (n_timesteps, batch_size, self.n_output), device=x.device
+        )
+        mem_output_rec = torch.zeros(
+            (n_timesteps, batch_size, self.n_output), device=x.device
+        )
 
         for t in range(n_timesteps):
             cur_input = x[:, :, t]
@@ -487,6 +526,7 @@ class GlassBreakSNN(nn.Module):
 # Dataset
 # ------------------------------
 
+
 class AudioSpikeDataset(Dataset):
     def __init__(
         self,
@@ -500,7 +540,9 @@ class AudioSpikeDataset(Dataset):
         seed: int,
     ):
         self.samples: List[Tuple[np.ndarray, int]] = []
-        self.pooled_features: List[Tuple[np.ndarray, int]] = []  # for the separability diagnostic
+        self.pooled_features: List[
+            Tuple[np.ndarray, int]
+        ] = []  # for the separability diagnostic
         self.cfg = cfg
         self.sr = sr
         self.segment_sec = segment_sec
@@ -592,13 +634,17 @@ class ManifestAudioSpikeDataset(Dataset):
         return spikes_t, label
 
 
-def collate_batch(batch: Sequence[Tuple[torch.Tensor, int]]) -> Tuple[torch.Tensor, torch.Tensor]:
+def collate_batch(
+    batch: Sequence[Tuple[torch.Tensor, int]],
+) -> Tuple[torch.Tensor, torch.Tensor]:
     xs = torch.stack([item[0] for item in batch], dim=0)
     ys = torch.tensor([item[1] for item in batch], dtype=torch.float32)
     return xs, ys
 
 
-def stratified_split(labels: Sequence[int], test_ratio: float, seed: int) -> Tuple[List[int], List[int]]:
+def stratified_split(
+    labels: Sequence[int], test_ratio: float, seed: int
+) -> Tuple[List[int], List[int]]:
     """Split indices into train/test while preserving class balance."""
     rng = random.Random(seed)
     by_class: dict = {}
@@ -619,7 +665,9 @@ def stratified_split(labels: Sequence[int], test_ratio: float, seed: int) -> Tup
     return train_idx, test_idx
 
 
-def report_feature_separability(pooled_features: Sequence[Tuple[np.ndarray, int]]) -> None:
+def report_feature_separability(
+    pooled_features: Sequence[Tuple[np.ndarray, int]],
+) -> None:
     """Cheap, dependency-free sanity check: do the pooled (hf_ratio, zcr,
     crest) features actually differ between classes?"""
     pos = np.array([f for f, l in pooled_features if l == 1])
@@ -629,10 +677,12 @@ def report_feature_separability(pooled_features: Sequence[Tuple[np.ndarray, int]
     for i, name in enumerate(names):
         pm, ps = pos[:, i].mean(), pos[:, i].std()
         nm, ns = neg[:, i].mean(), neg[:, i].std()
-        pooled_std = math.sqrt((ps ** 2 + ns ** 2) / 2.0) + 1e-8
+        pooled_std = math.sqrt((ps**2 + ns**2) / 2.0) + 1e-8
         d = abs(pm - nm) / pooled_std
         flag = "" if d > 0.5 else "  <-- weak separation"
-        print(f"  {name:8s}: pos={pm:8.4f}±{ps:7.4f}  neg={nm:8.4f}±{ns:7.4f}  |d|={d:5.2f}{flag}")
+        print(
+            f"  {name:8s}: pos={pm:8.4f}±{ps:7.4f}  neg={nm:8.4f}±{ns:7.4f}  |d|={d:5.2f}{flag}"
+        )
     print("(|d| ~0.2 small, ~0.5 medium, ~0.8+ large effect size.)\n")
 
 
@@ -736,7 +786,9 @@ def train(
             )
             if val_metrics["f1"] > best_val_f1:
                 best_val_f1 = val_metrics["f1"]
-                best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+                best_state = {
+                    k: v.detach().clone() for k, v in model.state_dict().items()
+                }
         else:
             print(
                 f"Epoch {epoch:03d}: loss={train_metrics['loss']:.4f}, acc={train_metrics['accuracy']:.3f}, "
@@ -751,16 +803,42 @@ def train(
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train a 3-N-1 LIF SNN on positive/negative WAV data")
-    parser.add_argument("--positive-dir", default="positive/positive", help="Root directory for positive WAV files")
-    parser.add_argument("--negative-dir", default="negative/negative", help="Root directory for negative WAV files")
-    parser.add_argument("--manifest", default=None, help="Path to a combined dataset manifest CSV produced by build_combined_dataset.py")
-    parser.add_argument("--repo-root", default=None, help="Repository root used to resolve relative paths from the manifest")
-    parser.add_argument("--manifest-split", choices=["train", "val", "test", "all"], default="train",
-                         help="Which split from the manifest to use for training")
+    parser = argparse.ArgumentParser(
+        description="Train a 3-N-1 LIF SNN on positive/negative WAV data"
+    )
+    parser.add_argument(
+        "--positive-dir",
+        default="positive/positive",
+        help="Root directory for positive WAV files",
+    )
+    parser.add_argument(
+        "--negative-dir",
+        default="negative/negative",
+        help="Root directory for negative WAV files",
+    )
+    parser.add_argument(
+        "--manifest",
+        default=None,
+        help="Path to a combined dataset manifest CSV produced by build_combined_dataset.py",
+    )
+    parser.add_argument(
+        "--repo-root",
+        default=None,
+        help="Repository root used to resolve relative paths from the manifest",
+    )
+    parser.add_argument(
+        "--manifest-split",
+        choices=["train", "val", "test", "all"],
+        default="train",
+        help="Which split from the manifest to use for training",
+    )
     parser.add_argument("--sample-rate", type=int, default=16000)
     parser.add_argument("--segment-sec", type=float, default=0.5)
-    parser.add_argument("--segment-strategy", choices=["start", "center", "max_energy"], default="max_energy")
+    parser.add_argument(
+        "--segment-strategy",
+        choices=["start", "center", "max_energy"],
+        default="max_energy",
+    )
     parser.add_argument("--encoder-mode", choices=["rate", "ttfs"], default="rate")
     parser.add_argument("--hpf-alpha-broad", type=float, default=0.99)
     parser.add_argument("--hpf-alpha-narrow", type=float, default=0.85)
@@ -768,10 +846,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--lr", type=float, default=5e-4)
-    parser.add_argument("--grad-clip", type=float, default=1.0, help="Max grad norm; 0 disables clipping")
-    parser.add_argument("--test-ratio", type=float, default=0.2,
-                         help="Fraction of dataset held out for test; 0 means train on full dataset")
-    parser.add_argument("--max-files", type=int, default=-1, help="Max number of files to load from each directory; -1 means no limit")
+    parser.add_argument(
+        "--grad-clip",
+        type=float,
+        default=1.0,
+        help="Max grad norm; 0 disables clipping",
+    )
+    parser.add_argument(
+        "--test-ratio",
+        type=float,
+        default=0.2,
+        help="Fraction of dataset held out for test; 0 means train on full dataset",
+    )
+    parser.add_argument(
+        "--max-files",
+        type=int,
+        default=-1,
+        help="Max number of files to load from each directory; -1 means no limit",
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", default="cpu")
     return parser.parse_args()
@@ -779,7 +871,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    device = torch.device(args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu")
+    device = torch.device(
+        args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu"
+    )
     torch.manual_seed(args.seed)
     cfg = EncoderConfig(
         encoder_mode=args.encoder_mode,
@@ -793,11 +887,18 @@ def main() -> None:
     max_vals_path = os.path.join(output_dir, "max_vals.json")
 
     if args.manifest:
-        manifest_samples = load_manifest_samples(args.manifest, args.repo_root, args.manifest_split)
+        manifest_samples = load_manifest_samples(
+            args.manifest, args.repo_root, args.manifest_split
+        )
         file_paths = [path for path, _ in manifest_samples]
         max_vals = compute_max_vals_from_paths(
-            file_paths, args.sample_rate, cfg,
-            args.segment_sec, args.segment_strategy, args.max_files, args.seed
+            file_paths,
+            args.sample_rate,
+            cfg,
+            args.segment_sec,
+            args.segment_strategy,
+            args.max_files,
+            args.seed,
         )
         dataset = ManifestAudioSpikeDataset(
             manifest_samples,
@@ -810,8 +911,14 @@ def main() -> None:
         )
     else:
         max_vals = compute_max_vals(
-            args.positive_dir, args.negative_dir, args.sample_rate, cfg,
-            args.segment_sec, args.segment_strategy, args.max_files, args.seed
+            args.positive_dir,
+            args.negative_dir,
+            args.sample_rate,
+            cfg,
+            args.segment_sec,
+            args.segment_strategy,
+            args.max_files,
+            args.seed,
         )
         dataset = AudioSpikeDataset(
             pos_dir=args.positive_dir,
@@ -839,7 +946,9 @@ def main() -> None:
         train_idx, test_idx = stratified_split(all_labels, args.test_ratio, args.seed)
         train_set = torch.utils.data.Subset(dataset, train_idx)
         test_set = torch.utils.data.Subset(dataset, test_idx)
-        print(f"Using stratified test split: {len(test_idx)} test / {len(train_idx)} train samples")
+        print(
+            f"Using stratified test split: {len(test_idx)} test / {len(train_idx)} train samples"
+        )
     else:
         train_set = dataset
         test_set = None
@@ -858,21 +967,56 @@ def main() -> None:
     # data (e.g. 33:1) and leaves the model seeing mostly-negative batches,
     # which is exactly the "always predict negative" collapse this fixes.
     class_weights = 1.0 / torch.from_numpy(np.maximum(class_counts, 1)).float()
-    sample_weights = torch.tensor([class_weights[label] for label in train_labels]).float()
-    sampler = WeightedRandomSampler(sample_weights, len(sample_weights), replacement=True)
+    sample_weights = torch.tensor(
+        [class_weights[label] for label in train_labels]
+    ).float()
+    sampler = WeightedRandomSampler(
+        sample_weights, len(sample_weights), replacement=True
+    )
 
     pos_frac_expected = (
-        class_counts[1] * class_weights[1].item()
-        / (class_counts[1] * class_weights[1].item() + class_counts[0] * class_weights[0].item())
-    ) if len(class_counts) > 1 else 0.0
-    print(f"Dataset class distribution (train split) - Positive: {class_counts[1]}, Negative: {class_counts[0]}")
-    print(f"Expected positive fraction per sampled batch (with balanced sampler): {pos_frac_expected:.3f}")
+        (
+            class_counts[1]
+            * class_weights[1].item()
+            / (
+                class_counts[1] * class_weights[1].item()
+                + class_counts[0] * class_weights[0].item()
+            )
+        )
+        if len(class_counts) > 1
+        else 0.0
+    )
+    print(
+        f"Dataset class distribution (train split) - Positive: {class_counts[1]}, Negative: {class_counts[0]}"
+    )
+    print(
+        f"Expected positive fraction per sampled batch (with balanced sampler): {pos_frac_expected:.3f}"
+    )
 
-    train_loader = DataLoader(train_set, batch_size=args.batch_size, sampler=sampler, collate_fn=collate_batch)
-    test_loader = None if test_set is None else DataLoader(test_set, batch_size=args.batch_size, shuffle=False, collate_fn=collate_batch)
+    train_loader = DataLoader(
+        train_set, batch_size=args.batch_size, sampler=sampler, collate_fn=collate_batch
+    )
+    test_loader = (
+        None
+        if test_set is None
+        else DataLoader(
+            test_set,
+            batch_size=args.batch_size,
+            shuffle=False,
+            collate_fn=collate_batch,
+        )
+    )
 
     model = GlassBreakSNN(n_hidden=args.hidden_size)
-    train(model, train_loader, test_loader, device, epochs=args.epochs, lr=args.lr, grad_clip=args.grad_clip)
+    train(
+        model,
+        train_loader,
+        test_loader,
+        device,
+        epochs=args.epochs,
+        lr=args.lr,
+        grad_clip=args.grad_clip,
+    )
 
     save_path = os.path.join(output_dir, "glassbreak_snn_model.pt")
     torch.save(model.state_dict(), save_path)
@@ -884,13 +1028,17 @@ def main() -> None:
 
     beta_val_clamped = min(max(beta_val, 0.0), 0.999)
     if beta_val != beta_val_clamped:
-        print(f"NOTE: learned beta={beta_val:.4f} was outside valid (0,1) range, "
-              f"clamped to {beta_val_clamped:.4f} for hardware mapping.")
+        print(
+            f"NOTE: learned beta={beta_val:.4f} was outside valid (0,1) range, "
+            f"clamped to {beta_val_clamped:.4f} for hardware mapping."
+        )
 
     tau_mem = 1.0 / (1.0 - beta_val_clamped)
     pot_value = max(0, min(255, int(round((tau_mem - 1.0) / 10.0 * 255))))
-    print(f"Hidden layer: beta={beta_val_clamped:.4f}, tau_mem={tau_mem:.4f}, "
-          f"pot_value={pot_value} (threshold={threshold_val:.4f})")
+    print(
+        f"Hidden layer: beta={beta_val_clamped:.4f}, tau_mem={tau_mem:.4f}, "
+        f"pot_value={pot_value} (threshold={threshold_val:.4f})"
+    )
 
 
 if __name__ == "__main__":

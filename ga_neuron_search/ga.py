@@ -10,6 +10,7 @@ successive-halving przy inicjalizacji populacji. Fitness bez tego argumentu
 Higiena (#4): fitness nigdy nie jest NaN/inf — niepoprawne wartości są sprowadzane
 do -inf, żeby nie psuły sortowania i selekcji.
 """
+
 from __future__ import annotations
 
 import math
@@ -25,26 +26,26 @@ NEG_INF = float("-inf")
 
 @dataclass
 class GAConfig:
-    n_total: int                     # neurony w tym runie (ukryte + decyzyjny)
+    n_total: int  # neurony w tym runie (ukryte + decyzyjny)
     pop_size: int = 24
     generations: int = 15
-    elite: int = 3                   # ilu najlepszych przechodzi bez zmian
+    elite: int = 3  # ilu najlepszych przechodzi bez zmian
     tournament: int = 3
     crossover_p: float = 0.6
-    mutation_rate: float = 1.2       # >1 => czasem 2 operatory
+    mutation_rate: float = 1.2  # >1 => czasem 2 operatory
     max_hidden_layers: int = 4
     seed: int = 0
-    patience: int = 6                # gen. bez poprawy -> stop
+    patience: int = 6  # gen. bez poprawy -> stop
     # successive-halving na starcie: oceń screen_mult*pop losowych osobników
     # tanim budżetem, zatrzymaj najlepsze pop_size, dopiero je oceń pełnym.
-    screen_mult: int = 1             # 1 = wyłączone
-    screen_budget: float = 0.34      # ułamek pełnego budżetu na screening
+    screen_mult: int = 1  # 1 = wyłączone
+    screen_budget: float = 0.34  # ułamek pełnego budżetu na screening
 
 
 @dataclass
 class Individual:
     genome: Genome
-    fitness: float = NEG_INF         # #4: nigdy NaN
+    fitness: float = NEG_INF  # #4: nigdy NaN
 
 
 @dataclass
@@ -68,8 +69,9 @@ def _tournament_select(pop: List[Individual], k: int, rng: random.Random) -> Ind
     return max(rng.sample(pop, k), key=lambda ind: ind.fitness)
 
 
-def run_ga(fitness: FitnessFn, cfg: GAConfig,
-           log: Optional[Callable[[str], None]] = None) -> GAResult:
+def run_ga(
+    fitness: FitnessFn, cfg: GAConfig, log: Optional[Callable[[str], None]] = None
+) -> GAResult:
     rng = random.Random(cfg.seed)
     log = log or (lambda s: None)
     cache: Dict[str, float] = {}
@@ -100,19 +102,27 @@ def run_ga(fitness: FitnessFn, cfg: GAConfig,
     # populacja startowa (z opcjonalnym screeningiem)
     if cfg.screen_mult > 1:
         pool = [_rand_valid() for _ in range(cfg.screen_mult * cfg.pop_size)]
-        scored = sorted(pool, key=lambda g: evaluate(g, cfg.screen_budget), reverse=True)
+        scored = sorted(
+            pool, key=lambda g: evaluate(g, cfg.screen_budget), reverse=True
+        )
         survivors = scored[: cfg.pop_size]
-        log(f"[N={cfg.n_total}] screening {len(pool)} osobników @budżet "
-            f"{cfg.screen_budget:.2f} -> zostaje {len(survivors)}")
+        log(
+            f"[N={cfg.n_total}] screening {len(pool)} osobników @budżet "
+            f"{cfg.screen_budget:.2f} -> zostaje {len(survivors)}"
+        )
         pop = [Individual(g, evaluate(g, 1.0)) for g in survivors]
     else:
-        pop = [Individual(g := _rand_valid(), evaluate(g, 1.0))
-               for _ in range(cfg.pop_size)]
+        pop = [
+            Individual(g := _rand_valid(), evaluate(g, 1.0))
+            for _ in range(cfg.pop_size)
+        ]
 
     pop.sort(key=lambda i: i.fitness, reverse=True)
     best = pop[0]
     history = [best.fitness]
-    log(f"[N={cfg.n_total}] gen 0  best={best.fitness:.4f}  {best.genome.layer_sizes()}")
+    log(
+        f"[N={cfg.n_total}] gen 0  best={best.fitness:.4f}  {best.genome.layer_sizes()}"
+    )
 
     since = 0
     for gen in range(1, cfg.generations + 1):
@@ -136,10 +146,14 @@ def run_ga(fitness: FitnessFn, cfg: GAConfig,
         else:
             since += 1
         history.append(best.fitness)
-        log(f"[N={cfg.n_total}] gen {gen}  best={best.fitness:.4f}  "
-            f"gen_best={pop[0].fitness:.4f}  {best.genome.layer_sizes()}  eval={evaluated}")
+        log(
+            f"[N={cfg.n_total}] gen {gen}  best={best.fitness:.4f}  "
+            f"gen_best={pop[0].fitness:.4f}  {best.genome.layer_sizes()}  eval={evaluated}"
+        )
         if since >= cfg.patience:
-            log(f"[N={cfg.n_total}] early stop (brak poprawy przez {cfg.patience} gen.)")
+            log(
+                f"[N={cfg.n_total}] early stop (brak poprawy przez {cfg.patience} gen.)"
+            )
             break
 
     return GAResult(cfg.n_total, best, history, evaluated)

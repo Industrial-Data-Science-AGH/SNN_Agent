@@ -15,6 +15,7 @@ Przykład:
         --epochs 10 --pop 30 --gens 20 --screen-mult 3 --parsimony-eps 0.02 \
         --train-winner --winner-epochs 60 --out wyniki_real
 """
+
 from __future__ import annotations
 
 import argparse
@@ -35,31 +36,62 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default="ga_results")
     # successive-halving (#4):
-    ap.add_argument("--screen-mult", type=int, default=1,
-                    help="oceń screen_mult*pop losowych osobników tanim budżetem, "
-                         "zatrzymaj najlepsze pop (1 = wyłączone)")
-    ap.add_argument("--screen-budget", type=float, default=0.34,
-                    help="ułamek epok na screening")
-    ap.add_argument("--parsimony-eps", type=float, default=0.0,
-                    help="wybierz najmniejsze N w zasięgu eps clip-F1 od najlepszego")
+    ap.add_argument(
+        "--screen-mult",
+        type=int,
+        default=1,
+        help="oceń screen_mult*pop losowych osobników tanim budżetem, "
+        "zatrzymaj najlepsze pop (1 = wyłączone)",
+    )
+    ap.add_argument(
+        "--screen-budget", type=float, default=0.34, help="ułamek epok na screening"
+    )
+    ap.add_argument(
+        "--parsimony-eps",
+        type=float,
+        default=0.0,
+        help="wybierz najmniejsze N w zasięgu eps clip-F1 od najlepszego",
+    )
     # tryb real:
     ap.add_argument("--data", default=None)
     ap.add_argument("--val-data", default=None)
     ap.add_argument("--arch-dir", default="../architecture_14_neurons_patryk_09_07")
-    ap.add_argument("--limit", type=int, default=None,
-                    help="max plikow/klase; wartosc != cache zmusza przebudowe "
-                         "(WinError 5 w read-only) — zostaw puste, by uzyc _cache_*.npz")
+    ap.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="max plikow/klase; wartosc != cache zmusza przebudowe "
+        "(WinError 5 w read-only) — zostaw puste, by uzyc _cache_*.npz",
+    )
     ap.add_argument("--epochs", type=int, default=4, help="epoki proxy-treningu w GA")
     ap.add_argument("--num-samples", type=int, default=6000)
-    ap.add_argument("--k", type=int, default=1, help="dekoder: >=k spikow D = alarm (k=1 spojnie)")
-    ap.add_argument("--metric", choices=["ap", "clip_f1"], default="clip_f1",
-                    help="metryka fitness: clip_f1 (spojna z dekoderem k) lub ap (bezprogowa)")
-    ap.add_argument("--fitness-seeds", type=int, default=1,
-                    help="usrednij fitness po tylu seedach (mniejsza wariancja)")
-    ap.add_argument("--feature-penalty", type=float, default=0.005,
-                    help="kara za liczbe uzytych kanalow encodera (selekcja cech; 0 = wylaczona)")
-    ap.add_argument("--channels-head", type=int, default=None,
-                    help="uzyj tylko pierwszych N kanalow danych (A/B: np. 7 = same HW w spikes_ext)")
+    ap.add_argument(
+        "--k", type=int, default=1, help="dekoder: >=k spikow D = alarm (k=1 spojnie)"
+    )
+    ap.add_argument(
+        "--metric",
+        choices=["ap", "clip_f1"],
+        default="clip_f1",
+        help="metryka fitness: clip_f1 (spojna z dekoderem k) lub ap (bezprogowa)",
+    )
+    ap.add_argument(
+        "--fitness-seeds",
+        type=int,
+        default=1,
+        help="usrednij fitness po tylu seedach (mniejsza wariancja)",
+    )
+    ap.add_argument(
+        "--feature-penalty",
+        type=float,
+        default=0.005,
+        help="kara za liczbe uzytych kanalow encodera (selekcja cech; 0 = wylaczona)",
+    )
+    ap.add_argument(
+        "--channels-head",
+        type=int,
+        default=None,
+        help="uzyj tylko pierwszych N kanalow danych (A/B: np. 7 = same HW w spikes_ext)",
+    )
     ap.add_argument("--quiet", action="store_true", help="bez logu per-kandydat")
     # dotrenowanie zwyciezcy:
     ap.add_argument("--train-winner", action="store_true")
@@ -69,45 +101,72 @@ def main():
 
     if args.mode == "synth":
         from fitness import synth_fitness
+
         fitness, rf = synth_fitness, None
         print("[tryb] SYNTH - heurystyka bez treningu")
     else:
         if not args.data:
             ap.error("--mode real wymaga --data")
         from fitness import RealFitness
-        rf = RealFitness(arch_dir=args.arch_dir, data=args.data,
-                         val_data=args.val_data, limit=args.limit,
-                         epochs=args.epochs, num_samples=args.num_samples,
-                         k=args.k, metric=args.metric, fitness_seeds=args.fitness_seeds,
-                         feature_penalty=args.feature_penalty,
-                         channels_head=args.channels_head,
-                         verbose=not args.quiet, seed=args.seed)
+
+        rf = RealFitness(
+            arch_dir=args.arch_dir,
+            data=args.data,
+            val_data=args.val_data,
+            limit=args.limit,
+            epochs=args.epochs,
+            num_samples=args.num_samples,
+            k=args.k,
+            metric=args.metric,
+            fitness_seeds=args.fitness_seeds,
+            feature_penalty=args.feature_penalty,
+            channels_head=args.channels_head,
+            verbose=not args.quiet,
+            seed=args.seed,
+        )
         fitness = rf
         # pula kanałów encodera = to, co jest w danych (nie zaszyte 7) — GA wybiera
         from genome import configure_features
+
         configure_features(rf.n_channels, rf.channel_names)
-        print(f"[tryb] REAL - proxy-trening ({args.epochs} epok, k={args.k}, "
-              f"metryka={args.metric}, seedy={args.fitness_seeds}, "
-              f"kanaly={rf.n_channels}: {','.join(rf.channel_names)})")
+        print(
+            f"[tryb] REAL - proxy-trening ({args.epochs} epok, k={args.k}, "
+            f"metryka={args.metric}, seedy={args.fitness_seeds}, "
+            f"kanaly={rf.n_channels}: {','.join(rf.channel_names)})"
+        )
 
     results = []
     for n in args.neurons:
         t0 = time.time()
-        cfg = GAConfig(n_total=n, pop_size=args.pop, generations=args.gens,
-                       elite=args.elite, max_hidden_layers=args.max_hidden_layers,
-                       screen_mult=args.screen_mult, screen_budget=args.screen_budget,
-                       seed=args.seed)
+        cfg = GAConfig(
+            n_total=n,
+            pop_size=args.pop,
+            generations=args.gens,
+            elite=args.elite,
+            max_hidden_layers=args.max_hidden_layers,
+            screen_mult=args.screen_mult,
+            screen_budget=args.screen_budget,
+            seed=args.seed,
+        )
         res = run_ga(fitness, cfg, log=print)
         dt = time.time() - t0
         feats = res.best.genome.feature_names_used()
-        results.append({
-            "n_total": n, "fitness": res.best.fitness,
-            "topology": res.best.genome.to_dict(), "history": res.history,
-            "features_used": feats, "n_features_used": len(feats),
-            "evaluated": res.evaluated, "seconds": round(dt, 1),
-        })
-        print(f"\n=== N={n}: best {args.metric}={res.best.fitness:.4f} "
-              f"({res.evaluated} ocen, {dt:.0f}s) ===")
+        results.append(
+            {
+                "n_total": n,
+                "fitness": res.best.fitness,
+                "topology": res.best.genome.to_dict(),
+                "history": res.history,
+                "features_used": feats,
+                "n_features_used": len(feats),
+                "evaluated": res.evaluated,
+                "seconds": round(dt, 1),
+            }
+        )
+        print(
+            f"\n=== N={n}: best {args.metric}={res.best.fitness:.4f} "
+            f"({res.evaluated} ocen, {dt:.0f}s) ==="
+        )
         print(res.best.genome.pretty())
         print(f"  kanaly encodera ({len(feats)}): {', '.join(feats)}")
         print()
@@ -116,30 +175,38 @@ def main():
     with open(js, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
     with open(csv, "w", encoding="utf-8") as f:
-        f.write("n_total,fitness,hidden_layers,layer_sizes,n_features_used,features_used,evaluated,seconds\n")
+        f.write(
+            "n_total,fitness,hidden_layers,layer_sizes,n_features_used,features_used,evaluated,seconds\n"
+        )
         for r in results:
             t = r["topology"]
             sizes = "-".join(str(x) for x in t["layer_sizes"])
             feats = "|".join(r.get("features_used", []))
-            f.write(f"{r['n_total']},{r['fitness']:.4f},{t['hidden_layers']},"
-                    f"{sizes},{r.get('n_features_used', 0)},{feats},"
-                    f"{r['evaluated']},{r['seconds']}\n")
+            f.write(
+                f"{r['n_total']},{r['fitness']:.4f},{t['hidden_layers']},"
+                f"{sizes},{r.get('n_features_used', 0)},{feats},"
+                f"{r['evaluated']},{r['seconds']}\n"
+            )
 
     print("\n" + "=" * 52)
     print(f"{'N':>4} | {args.metric:>8} | {'warstwy':>18} | ocen")
     print("-" * 52)
     for r in sorted(results, key=lambda x: x["fitness"], reverse=True):
         sizes = "-".join(str(x) for x in r["topology"]["layer_sizes"])
-        print(f"{r['n_total']:>4} | {r['fitness']:>8.4f} | {sizes:>18} | {r['evaluated']}")
+        print(
+            f"{r['n_total']:>4} | {r['fitness']:>8.4f} | {sizes:>18} | {r['evaluated']}"
+        )
     print("=" * 52)
 
     # parsymonia: najmniejsze N w zasięgu eps od najlepszego clip-F1
     best_fit = max(r["fitness"] for r in results)
     cand = [r for r in results if r["fitness"] >= best_fit - args.parsimony_eps]
     chosen = min(cand, key=lambda r: r["n_total"])
-    print(f"[parsymonia] najlepszy {args.metric}={best_fit:.4f}; w zasięgu eps={args.parsimony_eps} "
-          f"-> wybór N={chosen['n_total']} ({args.metric}={chosen['fitness']:.4f}, "
-          f"kanały={','.join(chosen.get('features_used', []))})")
+    print(
+        f"[parsymonia] najlepszy {args.metric}={best_fit:.4f}; w zasięgu eps={args.parsimony_eps} "
+        f"-> wybór N={chosen['n_total']} ({args.metric}={chosen['fitness']:.4f}, "
+        f"kanały={','.join(chosen.get('features_used', []))})"
+    )
     print(f"zapisano: {js} , {csv}")
 
     if args.train_winner:
@@ -148,20 +215,33 @@ def main():
             return
         from genome import Genome
         from winner import export_genome_config, train_full
+
         winners = results if args.winner_per_n else [chosen]
         for w in winners:
             n = w["n_total"]
-            print(f"\n########## PELNY TRENING ZWYCIEZCY N={n} "
-                  f"(sweep-F1 {w['fitness']:.4f}) ##########")
+            print(
+                f"\n########## PELNY TRENING ZWYCIEZCY N={n} "
+                f"(sweep-F1 {w['fitness']:.4f}) ##########"
+            )
             g = Genome.from_dict(w["topology"])
             print(g.pretty())
-            model, m = train_full(rf, g, epochs=args.winner_epochs,
-                                  ckpt=f"{args.out}_winner_N{n}.pt")
+            model, m = train_full(
+                rf, g, epochs=args.winner_epochs, ckpt=f"{args.out}_winner_N{n}.pt"
+            )
             cfg_path = f"{args.out}_hw_config_N{n}.json"
-            export_genome_config(model, cfg_path, channels=rf.channel_names,
-                                 extra={"winner_val_metrics": m, "n_total": n,
-                                        "sweep_fitness": w["fitness"]})
-            print(f"[train-winner] N={n}: clip-F1={m.get('clip_f1', 0):.3f} -> {cfg_path}")
+            export_genome_config(
+                model,
+                cfg_path,
+                channels=rf.channel_names,
+                extra={
+                    "winner_val_metrics": m,
+                    "n_total": n,
+                    "sweep_fitness": w["fitness"],
+                },
+            )
+            print(
+                f"[train-winner] N={n}: clip-F1={m.get('clip_f1', 0):.3f} -> {cfg_path}"
+            )
 
 
 if __name__ == "__main__":

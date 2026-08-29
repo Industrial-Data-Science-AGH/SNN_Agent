@@ -61,12 +61,14 @@ VOICE_INTERVAL_RE = re.compile(r"_(synthetic_\d+)_(\d+\.\d+)-(\d+\.\d+)\.wav$")
 # ZBIERANIE REKORDÓW
 # =============================================================================
 
-def _base_record(repo_root: Path, wav: Path, source: str, subclass: str,
-                 kind: str) -> Optional[dict]:
+
+def _base_record(
+    repo_root: Path, wav: Path, source: str, subclass: str, kind: str
+) -> Optional[dict]:
     rel = str(wav.relative_to(repo_root))
     try:
         info = sf.info(str(wav))
-    except Exception as exc:                      # plik uszkodzony albo nie-audio
+    except Exception as exc:  # plik uszkodzony albo nie-audio
         print(f"[WARN] nie mogę odczytać {rel}: {exc}")
         return None
     return {
@@ -79,7 +81,7 @@ def _base_record(repo_root: Path, wav: Path, source: str, subclass: str,
         "source": source,
         "subclass": subclass,
         "group_id": group_id_for(source, wav),
-        "split": "",                              # uzupełniane później
+        "split": "",  # uzupełniane później
         "duration_s": round(info.duration, 4),
         "sample_rate": info.samplerate,
         "channels": info.channels,
@@ -101,8 +103,11 @@ def collect_esc50(repo_root: Path) -> List[dict]:
     out = []
     for wav in sorted(audio.glob("*.wav")):
         target, category = meta.get(wav.name, (-1, "unknown"))
-        kind = "positive" if target == ESC50_GLASS_BREAKING_CLASS else \
-            ESC50_KIND.get(target, "loud_event")
+        kind = (
+            "positive"
+            if target == ESC50_GLASS_BREAKING_CLASS
+            else ESC50_KIND.get(target, "loud_event")
+        )
         rec = _base_record(repo_root, wav, "esc50", category, kind)
         if rec:
             out.append(rec)
@@ -126,8 +131,10 @@ def collect_datasec(repo_root: Path) -> List[dict]:
             if rec:
                 out.append(rec)
     if unknown:
-        print(f"[WARN] klasy DataSEC bez wpisu w taksonomii (przyjęto loud_event): "
-              f"{sorted(unknown)}")
+        print(
+            f"[WARN] klasy DataSEC bez wpisu w taksonomii (przyjęto loud_event): "
+            f"{sorted(unknown)}"
+        )
     print(f"[INFO] DataSEC: {len(out)} nagrań")
     return out
 
@@ -165,7 +172,10 @@ def collect_voice(repo_root: Path) -> List[dict]:
         print("[WARN] brak dataset/clean/annotation — podklasy VOICe będą przybliżone.")
 
     out, resolved, guessed = [], 0, 0
-    for folder, default_label in (("glass", "glassbreak"), ("hard_negative", "gunshot")):
+    for folder, default_label in (
+        ("glass", "glassbreak"),
+        ("hard_negative", "gunshot"),
+    ):
         d = base / folder
         if not d.exists():
             continue
@@ -185,18 +195,22 @@ def collect_voice(repo_root: Path) -> List[dict]:
                     guessed += 1
             else:
                 guessed += 1
-            rec = _base_record(repo_root, wav, "voice", label,
-                               VOICE_KIND.get(label, "loud_event"))
+            rec = _base_record(
+                repo_root, wav, "voice", label, VOICE_KIND.get(label, "loud_event")
+            )
             if rec:
                 out.append(rec)
-    print(f"[INFO] VOICe: {len(out)} wycinków "
-          f"(podklasa z adnotacji: {resolved}, przybliżona: {guessed})")
+    print(
+        f"[INFO] VOICe: {len(out)} wycinków "
+        f"(podklasa z adnotacji: {resolved}, przybliżona: {guessed})"
+    )
     return out
 
 
 # =============================================================================
 # PODZIAŁ
 # =============================================================================
+
 
 def unify_groups_by_content(records: List[dict]) -> int:
     """Scala grupy, które zawierają BAJT W BAJT ten sam plik.
@@ -254,13 +268,16 @@ def unify_groups_by_content(records: List[dict]) -> int:
             r["group_id"] = remap[r["group_id"]]
 
     if merged:
-        print(f"[INFO] scalono {len(remap)} grup w {len(set(remap.values()))} "
-              f"(identyczna zawartość w różnych źródłach) — {merged} zestawów duplikatów")
+        print(
+            f"[INFO] scalono {len(remap)} grup w {len(set(remap.values()))} "
+            f"(identyczna zawartość w różnych źródłach) — {merged} zestawów duplikatów"
+        )
     return merged
 
 
-def assign_splits(records: List[dict], val_frac: float, test_frac: float,
-                  seed: int) -> None:
+def assign_splits(
+    records: List[dict], val_frac: float, test_frac: float, seed: int
+) -> None:
     """Podział po GRUPACH, osobno w obrębie każdego źródła.
 
     Osobno per źródło, żeby proporcje 70/15/15 trzymały się w każdym z nich —
@@ -307,15 +324,20 @@ def assign_splits(records: List[dict], val_frac: float, test_frac: float,
 # RAPORT
 # =============================================================================
 
+
 def build_stats(records: List[dict], version: str, seed: int) -> str:
     L = [f"# Statystyki zbioru `{version}`", ""]
-    L.append(f"Wygenerowane {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}, "
-             f"ziarno podziału `{seed}`.")
+    L.append(
+        f"Wygenerowane {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}, "
+        f"ziarno podziału `{seed}`."
+    )
     L.append("")
 
     total_h = sum(r["duration_s"] for r in records) / 3600
-    L.append(f"Razem **{len(records)} nagrań**, **{len({r['group_id'] for r in records})} "
-             f"grup źródłowych**, **{total_h:.1f} h** audio.")
+    L.append(
+        f"Razem **{len(records)} nagrań**, **{len({r['group_id'] for r in records})} "
+        f"grup źródłowych**, **{total_h:.1f} h** audio."
+    )
     L.append("")
 
     L.append("## Podział")
@@ -325,13 +347,17 @@ def build_stats(records: List[dict], version: str, seed: int) -> str:
     for sp in ("train", "val", "test"):
         rs = [r for r in records if r["split"] == sp]
         pos = [r for r in rs if r["label"] == "positive"]
-        L.append(f"| {sp} | {len(rs)} | {len({r['group_id'] for r in rs})} | "
-                 f"{sum(r['duration_s'] for r in rs)/3600:.2f} | "
-                 f"{len(pos)} ({100*len(pos)/max(len(rs),1):.1f}%) | "
-                 f"**{len({r['group_id'] for r in pos})}** |")
+        L.append(
+            f"| {sp} | {len(rs)} | {len({r['group_id'] for r in rs})} | "
+            f"{sum(r['duration_s'] for r in rs) / 3600:.2f} | "
+            f"{len(pos)} ({100 * len(pos) / max(len(rs), 1):.1f}%) | "
+            f"**{len({r['group_id'] for r in pos})}** |"
+        )
     L.append("")
-    L.append("Kolumna *grupy pozytywne* jest ważniejsza niż liczba plików: to ona mówi, "
-             "na ilu **niezależnych nagraniach** liczona jest metryka.")
+    L.append(
+        "Kolumna *grupy pozytywne* jest ważniejsza niż liczba plików: to ona mówi, "
+        "na ilu **niezależnych nagraniach** liczona jest metryka."
+    )
     L.append("")
 
     L.append("## Rodzaj dźwięku (`kind`) — podstawa raportu fałszywych alarmów")
@@ -343,8 +369,10 @@ def build_stats(records: List[dict], version: str, seed: int) -> str:
         if not rs:
             continue
         c = Counter(r["split"] for r in rs)
-        L.append(f"| `{kind}` | {len(rs)} | {sum(r['duration_s'] for r in rs)/3600:.2f} | "
-                 f"{c['train']} | {c['val']} | {c['test']} |")
+        L.append(
+            f"| `{kind}` | {len(rs)} | {sum(r['duration_s'] for r in rs) / 3600:.2f} | "
+            f"{c['train']} | {c['val']} | {c['test']} |"
+        )
     L.append("")
 
     L.append("## Źródła i licencje")
@@ -353,14 +381,18 @@ def build_stats(records: List[dict], version: str, seed: int) -> str:
     L.append("|---|---:|---:|---:|---|")
     for src in sorted({r["source"] for r in records}):
         rs = [r for r in records if r["source"] == src]
-        L.append(f"| {src} | {len(rs)} | {len({r['group_id'] for r in rs})} | "
-                 f"{sum(r['duration_s'] for r in rs)/3600:.2f} | {SOURCE_LICENSE[src]} |")
+        L.append(
+            f"| {src} | {len(rs)} | {len({r['group_id'] for r in rs})} | "
+            f"{sum(r['duration_s'] for r in rs) / 3600:.2f} | {SOURCE_LICENSE[src]} |"
+        )
     L.append("")
     nc = [r for r in records if r["license"] in ("CC BY-NC 3.0",)]
     if nc:
-        L.append(f"> **Uwaga licencyjna:** {len(nc)} nagrań jest na licencji niekomercyjnej. "
-                 f"Do zbioru treningowego modelu przeznaczonego do produktu trzeba je odfiltrować "
-                 f"(`license != 'CC BY-NC 3.0'`).")
+        L.append(
+            f"> **Uwaga licencyjna:** {len(nc)} nagrań jest na licencji niekomercyjnej. "
+            f"Do zbioru treningowego modelu przeznaczonego do produktu trzeba je odfiltrować "
+            f"(`license != 'CC BY-NC 3.0'`)."
+        )
         L.append("")
 
     L.append("## Parametry audio")
@@ -372,19 +404,27 @@ def build_stats(records: List[dict], version: str, seed: int) -> str:
     L.append(f"- kanały: {dict(ch.most_common())}")
     L.append(f"- format próbki: {dict(st.most_common())}")
     d = sorted(r["duration_s"] for r in records)
-    L.append(f"- długość [s]: min {d[0]:.2f}, p50 {d[len(d)//2]:.2f}, "
-             f"p95 {d[int(len(d)*0.95)]:.2f}, max {d[-1]:.2f}")
+    L.append(
+        f"- długość [s]: min {d[0]:.2f}, p50 {d[len(d) // 2]:.2f}, "
+        f"p95 {d[int(len(d) * 0.95)]:.2f}, max {d[-1]:.2f}"
+    )
     L.append("")
 
     L.append("## Znane ograniczenia")
     L.append("")
-    L.append("- Klasa pozytywna jest zdominowana przez wycinki VOICe pochodzące z 207 miksów; "
-             "liczba **niezależnych** nagrań szkła jest o rząd wielkości mniejsza niż liczba plików.")
-    L.append("- Tło stacjonarne pochodzi z ciągłych klas DataSEC i ESC-50, nie z nagrań "
-             "z docelowego pomieszczenia. Fałszywe alarmy *w ciszy* są więc mierzone na "
-             "zastępniku, nie na realnym tle instalacji.")
-    L.append("- Audio nie jest transkodowane ani normalizowane — parametry są tylko mierzone "
-             "i walidowane. Konwersję robi enkoder przy odczycie.")
+    L.append(
+        "- Klasa pozytywna jest zdominowana przez wycinki VOICe pochodzące z 207 miksów; "
+        "liczba **niezależnych** nagrań szkła jest o rząd wielkości mniejsza niż liczba plików."
+    )
+    L.append(
+        "- Tło stacjonarne pochodzi z ciągłych klas DataSEC i ESC-50, nie z nagrań "
+        "z docelowego pomieszczenia. Fałszywe alarmy *w ciszy* są więc mierzone na "
+        "zastępniku, nie na realnym tle instalacji."
+    )
+    L.append(
+        "- Audio nie jest transkodowane ani normalizowane — parametry są tylko mierzone "
+        "i walidowane. Konwersję robi enkoder przy odczycie."
+    )
     L.append("- ESC-50 jest na licencji niekomercyjnej.")
     return "\n".join(L) + "\n"
 
@@ -393,33 +433,43 @@ def build_stats(records: List[dict], version: str, seed: int) -> str:
 # MAIN
 # =============================================================================
 
+
 def git_commit(repo_root: Path) -> str:
     try:
-        return subprocess.check_output(["git", "-C", str(repo_root), "rev-parse", "HEAD"],
-                                       text=True).strip()
+        return subprocess.check_output(
+            ["git", "-C", str(repo_root), "rev-parse", "HEAD"], text=True
+        ).strip()
     except Exception:
         return "unknown"
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parent.parent)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    ap.add_argument(
+        "--repo-root", type=Path, default=Path(__file__).resolve().parent.parent
+    )
     ap.add_argument("--version", required=True, help="np. v1.0.0")
     ap.add_argument("--val-frac", type=float, default=0.15)
     ap.add_argument("--test-frac", type=float, default=0.15)
     ap.add_argument("--seed", type=int, default=42)
-    ap.add_argument("--dry-run", action="store_true", help="policz i pokaż, nie zapisuj")
+    ap.add_argument(
+        "--dry-run", action="store_true", help="policz i pokaż, nie zapisuj"
+    )
     args = ap.parse_args()
 
     if not is_valid_version(args.version):
-        sys.exit(f"[BŁĄD] '{args.version}' nie jest wersją semantyczną (oczekiwano vX.Y.Z)")
+        sys.exit(
+            f"[BŁĄD] '{args.version}' nie jest wersją semantyczną (oczekiwano vX.Y.Z)"
+        )
 
     repo_root = args.repo_root.resolve()
     out_dir = version_dir(repo_root, args.version)
     if out_dir.exists() and not args.dry_run:
-        sys.exit(f"[BŁĄD] {out_dir} już istnieje. Wersji NIE nadpisujemy — "
-                 f"wydaj nowy numer.")
+        sys.exit(
+            f"[BŁĄD] {out_dir} już istnieje. Wersji NIE nadpisujemy — wydaj nowy numer."
+        )
 
     records: List[dict] = []
     records += collect_esc50(repo_root)
@@ -451,27 +501,38 @@ def main() -> None:
         "version": args.version,
         "created_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "git_commit": git_commit(repo_root),
-        "split": {"val_frac": args.val_frac, "test_frac": args.test_frac,
-                  "seed": args.seed, "grouped_by": "group_id, osobno per source"},
+        "split": {
+            "val_frac": args.val_frac,
+            "test_frac": args.test_frac,
+            "seed": args.seed,
+            "grouped_by": "group_id, osobno per source",
+        },
         "counts": {
             "records": len(records),
             "groups": len({r["group_id"] for r in records}),
             "positive": sum(1 for r in records if r["label"] == "positive"),
             "hours": round(sum(r["duration_s"] for r in records) / 3600, 3),
         },
-        "sources": {s: sum(1 for r in records if r["source"] == s)
-                    for s in sorted({r["source"] for r in records})},
+        "sources": {
+            s: sum(1 for r in records if r["source"] == s)
+            for s in sorted({r["source"] for r in records})
+        },
         "manifest_sha256": sha256_of(man),
     }
     (out_dir / "dataset.json").write_text(
-        json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        json.dumps(meta, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     (out_dir / "stats.md").write_text(stats, encoding="utf-8")
 
     print(f"[ok] zapisano {out_dir}")
-    print(f"     manifest.csv  ({len(records)} wierszy, sha256 {meta['manifest_sha256'][:16]}…)")
+    print(
+        f"     manifest.csv  ({len(records)} wierszy, sha256 {meta['manifest_sha256'][:16]}…)"
+    )
     print(f"     dataset.json  stats.md")
     print()
-    print(f"Zwaliduj:  python snn_pipeline/validate_dataset.py --version {args.version}")
+    print(
+        f"Zwaliduj:  python snn_pipeline/validate_dataset.py --version {args.version}"
+    )
 
 
 if __name__ == "__main__":

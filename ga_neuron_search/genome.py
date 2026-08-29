@@ -23,6 +23,7 @@ Nazwy węzłów warstwy L numerujemy 0..n_L-1; wejście neuronu to indeks w wars
 Ten plik NIE importuje torcha — jest czystym opisem struktury, dzięki czemu GA
 i testy działają bez zależności ML.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -71,6 +72,7 @@ class Genome:
             [[0,1,2]],                            # D: 1 neuron, wejścia = G
         ]
     """
+
     layers: List[List[List[int]]] = field(default_factory=list)
 
     # ---------------------------------------------------------------- rozmiary
@@ -113,12 +115,16 @@ class Genome:
             prev = sizes[k]  # rozmiar warstwy poprzedniej
             for i, neuron in enumerate(layer):
                 if not (1 <= len(neuron) <= MAX_FANIN):
-                    errs.append(f"L{k+1}n{i}: fan-in {len(neuron)} spoza [1,{MAX_FANIN}]")
+                    errs.append(
+                        f"L{k + 1}n{i}: fan-in {len(neuron)} spoza [1,{MAX_FANIN}]"
+                    )
                 if len(set(neuron)) != len(neuron):
-                    errs.append(f"L{k+1}n{i}: zduplikowane wejście {neuron}")
+                    errs.append(f"L{k + 1}n{i}: zduplikowane wejście {neuron}")
                 for src in neuron:
                     if not (0 <= src < prev):
-                        errs.append(f"L{k+1}n{i}: wejście {src} poza zakresem [0,{prev})")
+                        errs.append(
+                            f"L{k + 1}n{i}: wejście {src} poza zakresem [0,{prev})"
+                        )
 
         # fan-out każdej warstwy (cechy + ukryte, bez ostatniej bo nie ma następnej)
         for k in range(len(self.layers)):
@@ -130,7 +136,9 @@ class Genome:
         # bo bez zdublowanych wejść nie da się wpiąć 3 styków z <3 neuronów
         want = min(OUT_FANIN, sizes[-2]) if len(sizes) >= 2 else OUT_FANIN
         if len(self.layers[-1]) != 1:
-            errs.append(f"ostatnia warstwa ma {len(self.layers[-1])} neuronów, oczekiwano 1")
+            errs.append(
+                f"ostatnia warstwa ma {len(self.layers[-1])} neuronów, oczekiwano 1"
+            )
         elif len(self.layers[-1][0]) != want:
             errs.append(f"neuron decyzyjny: fan-in {len(self.layers[-1][0])} != {want}")
 
@@ -148,8 +156,11 @@ class Genome:
 
     def feature_names_used(self) -> List[str]:
         """Nazwy kanałów encodera, które GA faktycznie wpiął (wynik selekcji cech)."""
-        return [FEATURE_NAMES[i] for i in sorted(self.features_used())
-                if 0 <= i < len(FEATURE_NAMES)]
+        return [
+            FEATURE_NAMES[i]
+            for i in sorted(self.features_used())
+            if 0 <= i < len(FEATURE_NAMES)
+        ]
 
     # ---------------------------------------------------------------- hash / io
     def key(self) -> str:
@@ -158,10 +169,12 @@ class Genome:
         return hashlib.sha1(blob.encode()).hexdigest()[:16]
 
     def to_dict(self) -> dict:
-        return {"layers": self.layers,
-                "total_neurons": self.total_neurons(),
-                "hidden_layers": self.n_hidden_layers(),
-                "layer_sizes": self.layer_sizes()}
+        return {
+            "layers": self.layers,
+            "total_neurons": self.total_neurons(),
+            "hidden_layers": self.n_hidden_layers(),
+            "layer_sizes": self.layer_sizes(),
+        }
 
     @classmethod
     def from_dict(cls, d: dict) -> "Genome":
@@ -172,14 +185,17 @@ class Genome:
 
     def pretty(self) -> str:
         s = " -> ".join(str(x) for x in self.layer_sizes())
-        lines = [f"topologia {s}  (N={self.total_neurons()}, warstw ukrytych={self.n_hidden_layers()})"]
+        lines = [
+            f"topologia {s}  (N={self.total_neurons()}, warstw ukrytych={self.n_hidden_layers()})"
+        ]
         for k, layer in enumerate(self.layers):
-            tag = "D" if k == len(self.layers) - 1 else f"H{k+1}"
+            tag = "D" if k == len(self.layers) - 1 else f"H{k + 1}"
             lines.append(f"  {tag}: " + ", ".join(str(n) for n in layer))
         return "\n".join(lines)
 
 
 # ==================================================================== budowanie
+
 
 def sizes_feasible(hidden_sizes: List[int]) -> bool:
     """Czy ciąg rozmiarów warstw ukrytych da się okablować przy fan-out<=3.
@@ -211,18 +227,22 @@ def _gen_hidden_sizes(n_hidden: int, parts: int, rng: random.Random) -> List[int
     każda warstwa >=2 (warstwa szerokości 1 wymusza łańcuch). Gdy się nie da w
     >=2, spada do jednej szerokiej warstwy."""
     parts = max(1, min(parts, n_hidden))
-    if parts >= 2:                       # >=2 na warstwę => co najwyżej n_hidden//2 warstw
+    if parts >= 2:  # >=2 na warstwę => co najwyżej n_hidden//2 warstw
         parts = min(parts, max(1, n_hidden // 2))
     best = None
     for _ in range(200):
         if parts == 1:
             sizes = [n_hidden]
         else:
-            cuts = sorted(rng.sample(range(1, n_hidden), parts - 1)) if n_hidden > parts \
+            cuts = (
+                sorted(rng.sample(range(1, n_hidden), parts - 1))
+                if n_hidden > parts
                 else list(range(1, n_hidden))
+            )
             sizes, prev = [], 0
             for c in cuts:
-                sizes.append(c - prev); prev = c
+                sizes.append(c - prev)
+                prev = c
             sizes.append(n_hidden - prev)
         if not sizes_feasible(sizes):
             continue
@@ -232,8 +252,13 @@ def _gen_hidden_sizes(n_hidden: int, parts: int, rng: random.Random) -> List[int
     return best or [n_hidden]
 
 
-def _wire_neuron(prev_size: int, fanout_left: List[int], rng: random.Random,
-                 exact: Optional[int] = None, min_k: int = 1) -> List[int]:
+def _wire_neuron(
+    prev_size: int,
+    fanout_left: List[int],
+    rng: random.Random,
+    exact: Optional[int] = None,
+    min_k: int = 1,
+) -> List[int]:
     """Wylosuj wejścia (fan-in) z węzłów z zapasem fan-out. min_k wymusza dolny
     fan-in — neuron ukryty >=2 => realne mieszanie sygnałów, nie łańcuch."""
     lo = min(max(1, min_k), prev_size)
@@ -249,8 +274,9 @@ def _wire_neuron(prev_size: int, fanout_left: List[int], rng: random.Random,
     return sorted(pick)
 
 
-def random_genome(n_total: int, rng: random.Random,
-                  max_hidden_layers: int = 3) -> Genome:
+def random_genome(
+    n_total: int, rng: random.Random, max_hidden_layers: int = 3
+) -> Genome:
     """Losowy poprawny genom o dokładnie n_total neuronach (ukryte + decyzyjny).
 
     Ostatni neuron to decyzyjny (fan-in=3), więc ukrytych jest n_total-1.
@@ -267,8 +293,10 @@ def random_genome(n_total: int, rng: random.Random,
     prev_size = N_FEATURES
     for li, size in enumerate(sizes):
         fanout_left = [MAX_FANOUT] * prev_size
-        layer = [_wire_neuron(prev_size, fanout_left, rng, min_k=MIN_FANIN_HIDDEN)
-                 for _ in range(size)]
+        layer = [
+            _wire_neuron(prev_size, fanout_left, rng, min_k=MIN_FANIN_HIDDEN)
+            for _ in range(size)
+        ]
         layers.append(layer)
         prev_size = size
 
@@ -283,6 +311,7 @@ def random_genome(n_total: int, rng: random.Random,
 
 
 # ==================================================================== repair
+
 
 def repair(g: Genome, rng: random.Random) -> Genome:
     """Napraw genom w miejscu tak, by spełniał wszystkie twarde ograniczenia.
@@ -349,8 +378,11 @@ def _enforce_fanout(g: Genome, k: int, rng: random.Random) -> None:
         users = [neuron for neuron in g.layers[k] if src in neuron]
         while counts[src] > MAX_FANOUT and users:
             neuron = users.pop()
-            spare = [j for j in range(prev_size)
-                     if counts[j] < MAX_FANOUT and j not in neuron]
+            spare = [
+                j
+                for j in range(prev_size)
+                if counts[j] < MAX_FANOUT and j not in neuron
+            ]
             if not spare:
                 # brak miejsca — po prostu usuń wejście (fan-in >=1 utrzymany)
                 if len(neuron) > 1:
@@ -415,9 +447,9 @@ def _repair_min_width(g: Genome, rng: random.Random) -> None:
     odbuduj okablowanie (warstwa decyzyjna zostaje, repair ją potem dostroi)."""
     hid = len(g.layers) - 1
     if hid < 2:
-        return                                  # 0/1 warstwa ukryta => brak łańcucha
+        return  # 0/1 warstwa ukryta => brak łańcucha
     hidden_sizes = [len(l) for l in g.layers[:-1]]
-    if _sizes_min2_ok(hidden_sizes):            # rozmiary pozwalają na fan-in>=2 wszędzie
+    if _sizes_min2_ok(hidden_sizes):  # rozmiary pozwalają na fan-in>=2 wszędzie
         return
     n_hidden = sum(hidden_sizes)
     parts = min(hid, max(1, n_hidden // 2))
@@ -425,14 +457,16 @@ def _repair_min_width(g: Genome, rng: random.Random) -> None:
     new_hidden, prev = [], N_FEATURES
     for size in sizes:
         fo = [MAX_FANOUT] * prev
-        new_hidden.append([_wire_neuron(prev, fo, rng, min_k=MIN_FANIN_HIDDEN)
-                           for _ in range(size)])
+        new_hidden.append(
+            [_wire_neuron(prev, fo, rng, min_k=MIN_FANIN_HIDDEN) for _ in range(size)]
+        )
         prev = size
     g.layers = new_hidden + [g.layers[-1]]
 
 
-def _wire_layer_balanced(prev: int, size: int, want: int,
-                         rng: random.Random) -> List[List[int]]:
+def _wire_layer_balanced(
+    prev: int, size: int, want: int, rng: random.Random
+) -> List[List[int]]:
     """Zbalansowane okablowanie warstwy metodą round-robin: każdy neuron dostaje
     `want` różnych wejść, a fan-out rozkłada się równo (<= ceil(size*want/prev)).
     Gdy `2*size <= 3*prev`, gwarantuje fan-in >=2 przy fan-out <=3 — bez ślepych
@@ -460,28 +494,34 @@ def _repair_hidden_fanin(g: Genome, rng: random.Random) -> None:
     utknie w ślepym zaułku (np. fan-out poprzedniej warstwy = [3,3,1]) i warstwa
     JEST wykonalna w >=2 — przepnij ją całą zbalansowanym round-robinem."""
     sizes = g.layer_sizes()
-    for k in range(len(g.layers) - 1):        # tylko warstwy ukryte
+    for k in range(len(g.layers) - 1):  # tylko warstwy ukryte
         prev = sizes[k]
         want = min(MIN_FANIN_HIDDEN, prev)
         counts = g.fanout_counts(k)
         for neuron in g.layers[k]:
             while len(neuron) < want:
-                cand = [i for i in range(prev)
-                        if i not in neuron and counts[i] < MAX_FANOUT]
+                cand = [
+                    i for i in range(prev) if i not in neuron and counts[i] < MAX_FANOUT
+                ]
                 if not cand:
                     break
                 pick = rng.choice(cand)
-                neuron.append(pick); neuron.sort()
+                neuron.append(pick)
+                neuron.sort()
                 counts[pick] += 1
         # jeśli mimo to został neuron poniżej celu, a warstwa jest wykonalna —
         # zbuduj okablowanie od nowa zbalansowanym round-robinem (bez zaułka)
         size = len(g.layers[k])
-        if (want >= 2 and MIN_FANIN_HIDDEN * size <= MAX_FANOUT * prev
-                and any(len(n) < want for n in g.layers[k])):
+        if (
+            want >= 2
+            and MIN_FANIN_HIDDEN * size <= MAX_FANOUT * prev
+            and any(len(n) < want for n in g.layers[k])
+        ):
             g.layers[k] = _wire_layer_balanced(prev, size, want, rng)
 
 
 # ==================================================================== mutacje
+
 
 def mut_rewire(g: Genome, rng: random.Random) -> None:
     """Zmień jedno wejście losowego neuronu."""
@@ -507,7 +547,7 @@ def mut_fanin(g: Genome, rng: random.Random) -> None:
         if cand:
             neuron.append(rng.choice(cand))
             neuron.sort()
-    elif len(neuron) > MIN_FANIN_HIDDEN:   # nie schodź poniżej 2 dla ukrytych
+    elif len(neuron) > MIN_FANIN_HIDDEN:  # nie schodź poniżej 2 dla ukrytych
         neuron.pop(rng.randrange(len(neuron)))
 
 
@@ -519,7 +559,7 @@ def mut_move_neuron(g: Genome, rng: random.Random) -> None:
     src = rng.randrange(hid)
     dst = src + (1 if (src == 0 or rng.random() < 0.5) else -1)
     dst = max(0, min(hid - 1, dst))
-    if src == dst or len(g.layers[src]) <= 2:   # nie zostawiaj warstwy szerokości 1
+    if src == dst or len(g.layers[src]) <= 2:  # nie zostawiaj warstwy szerokości 1
         return
     neuron = g.layers[src].pop(rng.randrange(len(g.layers[src])))
     # nowe wejścia z warstwy poprzedzającej dst
@@ -534,7 +574,7 @@ def mut_split_layer(g: Genome, rng: random.Random) -> None:
     if hid < 1:
         return
     k = rng.randrange(hid)
-    if len(g.layers[k]) < 4:          # obie połówki muszą mieć >=2 (bez łańcucha)
+    if len(g.layers[k]) < 4:  # obie połówki muszą mieć >=2 (bez łańcucha)
         return
     layer = g.layers[k]
     cut = rng.randint(2, len(layer) - 2)
@@ -542,8 +582,10 @@ def mut_split_layer(g: Genome, rng: random.Random) -> None:
     g.layers[k] = first
     # neurony `second` przepinamy tak, by brały wejścia z `first`
     prev = len(first)
-    rewired = [sorted(rng.sample(range(prev), rng.randint(1, min(MAX_FANIN, prev))))
-               for _ in second]
+    rewired = [
+        sorted(rng.sample(range(prev), rng.randint(1, min(MAX_FANIN, prev))))
+        for _ in second
+    ]
     g.layers.insert(k + 1, rewired)
 
 
@@ -593,7 +635,7 @@ MUTATIONS = [
     (mut_move_neuron, 0.12),
     (mut_split_layer, 0.12),
     (mut_merge_layers, 0.10),
-    (mut_drop_feature, 0.16),   # selekcja cech encodera
+    (mut_drop_feature, 0.16),  # selekcja cech encodera
 ]
 
 

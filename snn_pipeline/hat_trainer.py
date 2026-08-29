@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -163,8 +164,10 @@ class HATTrainer:
                 if lif is not None:
                     lif.threshold = torch.tensor(new_vth)
 
-                print(f"  {name}: spike_rate p10={p10:.4f} p50={p50:.4f} p90={p90:.4f} "
-                      f"-> V_th: {old_vth:.3f} -> {new_vth:.3f}")
+                print(
+                    f"  {name}: spike_rate p10={p10:.4f} p50={p50:.4f} p90={p90:.4f} "
+                    f"-> V_th: {old_vth:.3f} -> {new_vth:.3f}"
+                )
 
         # Przywróć tryb
         self.model.set_quantize_mode(old_mode)
@@ -324,7 +327,9 @@ class HATTrainer:
         print(f"  Epochs: {epochs}, LR: {self.optimizer.param_groups[0]['lr']}")
         print(f"  Loss: BCE + F1 penalty + precision penalty + recall penalty + E24")
         print(f"  Temperature: {self.config.temp_start} -> {self.config.temp_end}")
-        print(f"  Mismatch: ±{self.config.mismatch_weight_pct}% wag, ±{self.config.mismatch_vth_mv}mV V_th")
+        print(
+            f"  Mismatch: ±{self.config.mismatch_weight_pct}% wag, ±{self.config.mismatch_vth_mv}mV V_th"
+        )
         print(f"  Checkpoint: max F1 (nie max recall)")
         print("=" * 70)
 
@@ -373,21 +378,26 @@ class HATTrainer:
             if current_f1 > best_f1:
                 best_f1 = current_f1
                 best_epoch = epoch
-                torch.save({
-                    "epoch": epoch,
-                    "model_state_dict": self.model.state_dict(),
-                    "optimizer_state_dict": self.optimizer.state_dict(),
-                    "val_metrics": val_metrics,
-                    "weights": self.model.get_weights_dict(),
-                    "thresholds": self.model.get_thresholds_dict(),
-                }, checkpoint_dir / "hat_best.pt")
+                torch.save(
+                    {
+                        "epoch": epoch,
+                        "model_state_dict": self.model.state_dict(),
+                        "optimizer_state_dict": self.optimizer.state_dict(),
+                        "val_metrics": val_metrics,
+                        "weights": self.model.get_weights_dict(),
+                        "thresholds": self.model.get_thresholds_dict(),
+                    },
+                    checkpoint_dir / "hat_best.pt",
+                )
 
         # Załaduj najlepszy checkpoint (po F1)
         best_ckpt = checkpoint_dir / "hat_best.pt"
         if best_ckpt.exists() and best_f1 > 0:
             loaded = torch.load(best_ckpt, map_location=DEVICE, weights_only=False)
             self.model.load_state_dict(loaded["model_state_dict"])
-            print(f"\n[HAT] Załadowano najlepszy checkpoint z epoki {best_epoch} (F1={best_f1:.3f})")
+            print(
+                f"\n[HAT] Załadowano najlepszy checkpoint z epoki {best_epoch} (F1={best_f1:.3f})"
+            )
 
         # Na koniec przełącz na twardą kwantyzację E24
         self.model.set_quantize_mode("hat")
@@ -418,11 +428,29 @@ class HATTrainer:
         axes[0, 0].grid(True, alpha=0.3)
 
         # F1 + Recall
-        axes[0, 1].plot(epochs, self.history["val_f1"], label="Val F1", color="purple", linewidth=2)
-        axes[0, 1].plot(epochs, self.history["val_recall"], label="Val Recall", color="green", linestyle="--")
-        axes[0, 1].plot(epochs, self.history["val_precision"], label="Val Precision", color="red", linestyle="--")
-        axes[0, 1].axhline(y=self.config.recall_target, color="gray", linestyle=":",
-                           label=f"Recall target ({self.config.recall_target})")
+        axes[0, 1].plot(
+            epochs, self.history["val_f1"], label="Val F1", color="purple", linewidth=2
+        )
+        axes[0, 1].plot(
+            epochs,
+            self.history["val_recall"],
+            label="Val Recall",
+            color="green",
+            linestyle="--",
+        )
+        axes[0, 1].plot(
+            epochs,
+            self.history["val_precision"],
+            label="Val Precision",
+            color="red",
+            linestyle="--",
+        )
+        axes[0, 1].axhline(
+            y=self.config.recall_target,
+            color="gray",
+            linestyle=":",
+            label=f"Recall target ({self.config.recall_target})",
+        )
         axes[0, 1].set_title("F1 / Precision / Recall")
         axes[0, 1].set_xlabel("Epoch")
         axes[0, 1].set_ylim(-0.05, 1.05)
@@ -430,9 +458,23 @@ class HATTrainer:
         axes[0, 1].grid(True, alpha=0.3)
 
         # Train metrics
-        axes[1, 0].plot(epochs, self.history["train_f1"], label="Train F1", color="purple")
-        axes[1, 0].plot(epochs, self.history["train_recall"], label="Train Recall", color="green", linestyle="--")
-        axes[1, 0].plot(epochs, self.history["train_precision"], label="Train Precision", color="red", linestyle="--")
+        axes[1, 0].plot(
+            epochs, self.history["train_f1"], label="Train F1", color="purple"
+        )
+        axes[1, 0].plot(
+            epochs,
+            self.history["train_recall"],
+            label="Train Recall",
+            color="green",
+            linestyle="--",
+        )
+        axes[1, 0].plot(
+            epochs,
+            self.history["train_precision"],
+            label="Train Precision",
+            color="red",
+            linestyle="--",
+        )
         axes[1, 0].set_title("Train Metrics")
         axes[1, 0].set_xlabel("Epoch")
         axes[1, 0].set_ylim(-0.05, 1.05)
@@ -463,11 +505,11 @@ class HATTrainer:
         ]
 
         baseline_map = {
-            "w_n1": ("N1", BASELINE_NEURONS['N1'].w_in[0]),
-            "w_n2": ("N2", BASELINE_NEURONS['N2'].w_in[0]),
-            "w_n3_from_n1": ("N3", BASELINE_NEURONS['N3'].w_in[0]),
-            "w_n3_from_n2": ("N3", BASELINE_NEURONS['N3'].w_in[1]),
-            "w_inh": ("N_inh", BASELINE_NEURONS['N_inh'].w_in[0]),
+            "w_n1": ("N1", BASELINE_NEURONS["N1"].w_in[0]),
+            "w_n2": ("N2", BASELINE_NEURONS["N2"].w_in[0]),
+            "w_n3_from_n1": ("N3", BASELINE_NEURONS["N3"].w_in[0]),
+            "w_n3_from_n2": ("N3", BASELINE_NEURONS["N3"].w_in[1]),
+            "w_inh": ("N_inh", BASELINE_NEURONS["N_inh"].w_in[0]),
             "w_inh_to_n3": ("N_inh->N3", -0.5),
         }
 

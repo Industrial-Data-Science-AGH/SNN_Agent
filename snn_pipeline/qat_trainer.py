@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -56,7 +57,8 @@ class QATTrainer:
     def __init__(
         self,
         model: GlassBreakSNN,
-        learning_rate: float = TRAIN_CONFIG.learning_rate * 0.1,  # Mniejszy LR dla fine-tuning
+        learning_rate: float = TRAIN_CONFIG.learning_rate
+        * 0.1,  # Mniejszy LR dla fine-tuning
         config: Any = TRAIN_CONFIG,
     ) -> None:
         self.model = model.to(DEVICE)
@@ -111,7 +113,10 @@ class QATTrainer:
 
         # Zbierz aktywacje z glass_break samples
         activations: Dict[str, List[float]] = {
-            "N1": [], "N2": [], "N3": [], "N_inh": [],
+            "N1": [],
+            "N2": [],
+            "N3": [],
+            "N_inh": [],
         }
         collected = 0
 
@@ -120,7 +125,7 @@ class QATTrainer:
             batch_labels = batch_labels.to(DEVICE)
 
             # Filtruj tylko pozytywne (glass_break)
-            positive_mask = (batch_labels.flatten() == 1)
+            positive_mask = batch_labels.flatten() == 1
             if positive_mask.sum() == 0:
                 continue
 
@@ -291,11 +296,14 @@ class QATTrainer:
 
             if val_metrics["f1"] > best_f1:
                 best_f1 = val_metrics["f1"]
-                torch.save({
-                    "epoch": epoch,
-                    "model_state_dict": self.model.state_dict(),
-                    "val_metrics": val_metrics,
-                }, checkpoint_dir / "qat_best.pt")
+                torch.save(
+                    {
+                        "epoch": epoch,
+                        "model_state_dict": self.model.state_dict(),
+                        "val_metrics": val_metrics,
+                    },
+                    checkpoint_dir / "qat_best.pt",
+                )
 
         # Przełącz na twardą kwantyzację
         self.model.set_quantize_mode("hat")
@@ -325,7 +333,9 @@ class QATTrainer:
         axes[0].grid(True, alpha=0.3)
 
         axes[1].plot(epochs, self.history["val_recall"], label="Recall", color="green")
-        axes[1].plot(epochs, self.history["val_precision"], label="Precision", color="red")
+        axes[1].plot(
+            epochs, self.history["val_precision"], label="Precision", color="red"
+        )
         axes[1].set_title("Precision / Recall")
         axes[1].set_ylim(-0.05, 1.05)
         axes[1].legend()

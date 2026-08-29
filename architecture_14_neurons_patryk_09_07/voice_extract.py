@@ -24,6 +24,7 @@ Użycie:
     python voice_extract.py --annotation ../dataset/clean/annotation \
         --audio ../dataset/clean/audio --out ./voice_extracted
 """
+
 from __future__ import annotations
 
 import argparse
@@ -54,9 +55,15 @@ def _extract_segment(y, sr: int, start: float, end: float, pad: float) -> "any":
     return y[lo:hi]
 
 
-def extract(annotation_dir: str, audio_dir: str, out_dir: str,
-            pad: float = 0.3, hard_negative_labels=("gunshot", "babycry"),
-            hard_negative_sample: int | None = None, seed: int = 0) -> None:
+def extract(
+    annotation_dir: str,
+    audio_dir: str,
+    out_dir: str,
+    pad: float = 0.3,
+    hard_negative_labels=("gunshot", "babycry"),
+    hard_negative_sample: int | None = None,
+    seed: int = 0,
+) -> None:
     out = Path(out_dir)
     glass_out = out / "glass"
     hardneg_out = out / "hard_negative"
@@ -83,8 +90,10 @@ def extract(annotation_dir: str, audio_dir: str, out_dir: str,
             elif label in hard_negative_labels:
                 hardneg_events.append((audio_path, start, end))
 
-    print(f"[info] znaleziono {len(glass_events)} glassbreak, "
-          f"{len(hardneg_events)} gunshot/babycry (przed subsamplingiem)")
+    print(
+        f"[info] znaleziono {len(glass_events)} glassbreak, "
+        f"{len(hardneg_events)} gunshot/babycry (przed subsamplingiem)"
+    )
 
     if hard_negative_sample is not None and len(hardneg_events) > hard_negative_sample:
         random.Random(seed).shuffle(hardneg_events)
@@ -115,18 +124,31 @@ def extract(annotation_dir: str, audio_dir: str, out_dir: str,
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__,
-                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     ap.add_argument("--annotation", required=True)
     ap.add_argument("--audio", required=True)
     ap.add_argument("--out", default="./voice_extracted")
-    ap.add_argument("--pad", type=float, default=0.3, help="padding w sekundach z każdej strony")
-    ap.add_argument("--hard-negative-sample", type=int, default=None,
-                    help="ogranicz liczbę wyciętych gunshot/babycry (domyślnie: wszystkie)")
+    ap.add_argument(
+        "--pad", type=float, default=0.3, help="padding w sekundach z każdej strony"
+    )
+    ap.add_argument(
+        "--hard-negative-sample",
+        type=int,
+        default=None,
+        help="ogranicz liczbę wyciętych gunshot/babycry (domyślnie: wszystkie)",
+    )
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
-    extract(args.annotation, args.audio, args.out, pad=args.pad,
-            hard_negative_sample=args.hard_negative_sample, seed=args.seed)
+    extract(
+        args.annotation,
+        args.audio,
+        args.out,
+        pad=args.pad,
+        hard_negative_sample=args.hard_negative_sample,
+        seed=args.seed,
+    )
 
 
 if __name__ == "__main__":

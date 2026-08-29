@@ -108,14 +108,30 @@ class GlassBreakSNN(nn.Module):
         # NEURONY LIF (snntorch)
         # =====================================================================
         # Beta = decay rate membrany = exp(-dt/tau_m)
-        self.lif_n1 = snn.Leaky(beta=beta, threshold=baseline["N1"].v_th,
-                                 learn_beta=False, learn_threshold=True)
-        self.lif_n2 = snn.Leaky(beta=beta, threshold=baseline["N2"].v_th,
-                                 learn_beta=False, learn_threshold=True)
-        self.lif_n3 = snn.Leaky(beta=beta, threshold=baseline["N3"].v_th,
-                                 learn_beta=False, learn_threshold=True)
-        self.lif_inh = snn.Leaky(beta=beta, threshold=baseline["N_inh"].v_th,
-                                  learn_beta=False, learn_threshold=True)
+        self.lif_n1 = snn.Leaky(
+            beta=beta,
+            threshold=baseline["N1"].v_th,
+            learn_beta=False,
+            learn_threshold=True,
+        )
+        self.lif_n2 = snn.Leaky(
+            beta=beta,
+            threshold=baseline["N2"].v_th,
+            learn_beta=False,
+            learn_threshold=True,
+        )
+        self.lif_n3 = snn.Leaky(
+            beta=beta,
+            threshold=baseline["N3"].v_th,
+            learn_beta=False,
+            learn_threshold=True,
+        )
+        self.lif_inh = snn.Leaky(
+            beta=beta,
+            threshold=baseline["N_inh"].v_th,
+            learn_beta=False,
+            learn_threshold=True,
+        )
 
         # =====================================================================
         # KONFIGURACJA KWANTYZACJI
@@ -218,9 +234,15 @@ class GlassBreakSNN(nn.Module):
         # =====================================================================
         w_n1 = self._apply_quantization(self.w_n1, bits=BASELINE_NEURONS["N1"].qat_bits)
         w_n2 = self._apply_quantization(self.w_n2, bits=BASELINE_NEURONS["N2"].qat_bits)
-        w_n3_1 = self._apply_quantization(self.w_n3_from_n1, bits=BASELINE_NEURONS["N3"].qat_bits)
-        w_n3_2 = self._apply_quantization(self.w_n3_from_n2, bits=BASELINE_NEURONS["N3"].qat_bits)
-        w_inh = self._apply_quantization(self.w_inh, bits=BASELINE_NEURONS["N_inh"].qat_bits)
+        w_n3_1 = self._apply_quantization(
+            self.w_n3_from_n1, bits=BASELINE_NEURONS["N3"].qat_bits
+        )
+        w_n3_2 = self._apply_quantization(
+            self.w_n3_from_n2, bits=BASELINE_NEURONS["N3"].qat_bits
+        )
+        w_inh = self._apply_quantization(
+            self.w_inh, bits=BASELINE_NEURONS["N_inh"].qat_bits
+        )
         w_inh_n3 = self.w_inh_to_n3  # Waga hamująca — nie kwantyzujemy (ma być ujemna)
 
         # =====================================================================
@@ -254,16 +276,16 @@ class GlassBreakSNN(nn.Module):
 
             # --- Warstwa 1: N1, N2, N_inh (równoległa) ---
             # Prąd synaptyczny = wejście × waga
-            cur_n1 = x_t * w_n1       # (batch,)
-            cur_n2 = x_t * w_n2       # (batch,)
-            cur_inh = x_t * w_inh     # (batch,)
+            cur_n1 = x_t * w_n1  # (batch,)
+            cur_n2 = x_t * w_n2  # (batch,)
+            cur_inh = x_t * w_inh  # (batch,)
 
             spk_n1, mem_n1 = self.lif_n1(cur_n1, mem_n1)
             spk_n2, mem_n2 = self.lif_n2(cur_n2, mem_n2)
             spk_inh, mem_inh = self.lif_inh(cur_inh, mem_inh)
 
             # --- Warstwa 2: N3 (zbiera N1 + N2, hamowany przez N_inh) ---
-            cur_n3 = (spk_n1 * w_n3_1 + spk_n2 * w_n3_2 + spk_inh * w_inh_n3)
+            cur_n3 = spk_n1 * w_n3_1 + spk_n2 * w_n3_2 + spk_inh * w_inh_n3
             spk_n3, mem_n3 = self.lif_n3(cur_n3, mem_n3)
 
             spk_n1_rec.append(spk_n1)

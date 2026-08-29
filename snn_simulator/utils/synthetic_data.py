@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 
+
 def generate_synthetic_sample(T=100):
     """
     Tworzy dane:
@@ -19,7 +20,7 @@ def generate_synthetic_sample(T=100):
 
         burst = np.zeros(T)
         start = np.random.randint(20, 60)
-        burst[start:start+8] = 1.0
+        burst[start : start + 8] = 1.0
         env += burst
 
         lf *= 0.1

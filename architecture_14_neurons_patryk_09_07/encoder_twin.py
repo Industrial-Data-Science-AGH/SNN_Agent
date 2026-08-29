@@ -350,7 +350,11 @@ def encode_file(path: str, gain: float, state: Optional[EncoderState] = None,
 
         out_rows.append(bits)
 
-    return np.array(out_rows, dtype=np.uint8) if out_rows else np.zeros((0, N_CH), dtype=np.uint8)
+    return (
+        np.array(out_rows, dtype=np.uint8)
+        if out_rows
+        else np.zeros((0, N_CH), dtype=np.uint8)
+    )
 
 
 # =============================================================================
@@ -618,6 +622,26 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
                                  gain_method, gain_file=gain_file)
 
     _assert_groups_disjoint(rows)
+    # --- globalne wzmocnienie: liczone WYŁĄCZNIE na train, potem zamrożone ---
+    train_paths = [r["abspath"] for r in rows if r["split"] == "train"]
+    gain = compute_global_gain(train_paths)
+    gain_path = Path(out_dir) / "global_gain.json"
+    gain_path.parent.mkdir(parents=True, exist_ok=True)
+    json.dump(
+        {
+            "gain": gain,
+            "percentile": GAIN_PERCENTILE,
+            "computed_on": "split=train",
+            "n_files": len(train_paths),
+        },
+        open(gain_path, "w"),
+        indent=2,
+    )
+    print(
+        f"[gain] globalne wzmocnienie {gain:.4f} (z {len(train_paths)} "
+        f"plików train, percentyl {GAIN_PERCENTILE}) -> {gain_path}",
+        flush=True,
+    )
 
     version = dataset_version or _infer_version(manifest_path)
     prov = {
@@ -702,6 +726,7 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
 # =============================================================================
 # CLI
 # =============================================================================
+
 
 def _cmd_build(args) -> None:
     build_dataset(args.glass, args.negative, args.out,

@@ -220,5 +220,5 @@ def latency_ms(
 
     spike_indices = torch.nonzero(spike_train, as_tuple=True)[0]
     if len(spike_indices) == 0:
-        return float('inf')
+        return float("inf")
     return spike_indices[0].item() * dt_ms

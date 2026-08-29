@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from utils.synthetic_data import generate_synthetic_sample
 
+
 def train_torch(model, epochs=10):
     optimizer = optim.Adam(model.parameters(), lr=0.003)
     loss_fn = nn.BCEWithLogitsLoss()

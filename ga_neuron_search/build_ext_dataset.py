@@ -93,9 +93,9 @@ def compute_new_features(x_f: np.ndarray, fs: float) -> np.ndarray:
                             flat, centroid, band_low]).astype(np.float32)
 
 
-def _frame_signal(et, path: str) -> np.ndarray:
+def _frame_signal(et, path: str, gain: float) -> np.ndarray:
     """Ten sam sygnał co w encoder_twin.encode_file, poramkowany [n_frames, HOP]."""
-    codes = et.wav_to_adc_codes(path)
+    codes = et.wav_to_adc_codes(path, gain=gain)
     x = et._remove_dc(codes)
     nf = len(x) // et.HOP_SAMPLES
     if nf == 0:
@@ -305,27 +305,35 @@ def main():
         return "test" if f in test_set else ("val" if f in val_set else "train")
 
     # warmup jednego ciągłego stanu na negatywach TRENINGOWYCH
+    # nie było gaina to trza dać
     neg_train = [f for f in neg if split_of(f, n_val, n_test) == "train"]
-    state, n_used = et._warmup_state(neg_train, args.warmup_seconds)
+    glass_train = [f for f in glass if split_of(f, g_val, g_test) == "train"]
+    gain = et.compute_global_gain(neg_train + glass_train)
+
+    state, n_used = et._warmup_state(neg_train, args.warmup_seconds, gain)
     used = set(neg_train[:n_used])
 
-    # strumień: najpierw pozostałe negatywy, potem glass (jak ciągła praca urządzenia)
+    stream = [(0, f) for f in neg if f not in used] + [(1, f) for f in glass]
+    rng.shuffle(stream)
+
+    """
+    strumień: najpierw pozostałe negatywy, potem glass (jak ciągła praca urządzenia)
     # Stan enkodera jest CIĄGŁY, więc zakodowanie pliku zależy od tego, co było
     # przed nim. Przy układzie blokowym (wszystkie negatywy, potem wszystkie
     # pozytywy) ta zależność koreluje z etykietą i adaptacyjny floor kanałów
     # z-score dryfuje razem z klasą. Tasujemy, żeby historia była nieskorelowana
     # z etykietą — i żeby strumień przypominał ciągłą pracę urządzenia.
-    stream = [(0, f) for f in neg if f not in used] + [(1, f) for f in glass]
-    rng.shuffle(stream)
+    """
+
 
     # PASS: policz 7 HW (encode_file) + 7 nowych (ciągłe) frame-aligned
     recs = []  # (label, split, hw[n,7], new[n,7])
     t0 = time.time()
     for i, (label, f) in enumerate(stream):
-        hw = et.encode_file(f, state=state)          # [n,7] uint8, mutuje state
+        hw = et.encode_file(f, gain, state=state)          # [n,7] uint8, mutuje state
         if hw.shape[0] == 0:
             continue
-        x_f = _frame_signal(et, f)
+        x_f = _frame_signal(et, f, gain)
         new = compute_new_features(x_f, et.FS_HZ)    # [nf,7]
         m = min(len(hw), len(new))
         if m == 0:

@@ -112,7 +112,7 @@ def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
     eval_split = "test"
 
     if ckpt:
-        torch.save({"model":best_model, "metrics": median_m,
+        torch.save({"model": best_state, "metrics": median_m,
                     "topology": genome.to_dict()}, ckpt)
         
     log("\n" + "=" * 65)

@@ -54,3 +54,7 @@ architecture_14_neurons_patryk_09_07/spikes_v*/
 # to caly kontrakt z docs/DATASET_CONTRACT.md, razem ~7 MB. Bez nich nikt poza
 # autorem nie moze odtworzyc artefaktu spike'owego. Audio nadal poza gitem.
 !dataset/versions/
+
+# zipy itp
+*.zip
+*.7z

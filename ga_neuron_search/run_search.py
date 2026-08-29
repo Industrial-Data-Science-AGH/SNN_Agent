@@ -38,8 +38,10 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default="ga_results")
     ap.add_argument("--workers", type=int, default=None,
-                    help="liczba procesów ewaluacji (real, CPU); None = os.cpu_count(), "
-                         "1 = sekwencyjnie (jak dotąd)")
+                    help="Liczba procesów do równoległej oceny (domyślnie liczba rdzeni CPU). "
+                        "Uwaga: Każdy worker ładuje własną kopię cache'u danych w RAM "
+                        "(architektura N+1 kopii w pamięci głównej). Na maszynach z małą ilością "
+                        "RAM-u ustawienie dużej wartości (np. 18) może spowodować błąd OOM.")
     ap.add_argument("--device", default=None,
                     help="cuda | cpu; domyślnie cuda-jak-dostępne, inaczej cpu "
                          "(na Macu CPU — MPS zmierzone ~3x wolniejsze)")

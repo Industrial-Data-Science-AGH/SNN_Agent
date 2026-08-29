@@ -55,7 +55,7 @@ from dataset_contract import (
 )
 
 MIN_POSITIVE_GROUPS_TEST = 12
-BALANCE_RANGE = (0.01, 0.60)  # dopuszczalny udział pozytywów w splicie
+BALANCE_RANGE = (0.01, 0.60)     # dopuszczalny udział pozytywów w splicie
 
 
 class Report:
@@ -81,21 +81,13 @@ def load_manifest(path: Path) -> List[dict]:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    ap.add_argument(
-        "--repo-root", type=Path, default=Path(__file__).resolve().parent.parent
-    )
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parent.parent)
     ap.add_argument("--version", required=True)
-    ap.add_argument(
-        "--quick",
-        action="store_true",
-        help="pomiń liczenie sha256 i czytanie nagłówków audio",
-    )
-    ap.add_argument(
-        "--min-positive-groups-test", type=int, default=MIN_POSITIVE_GROUPS_TEST
-    )
+    ap.add_argument("--quick", action="store_true",
+                    help="pomiń liczenie sha256 i czytanie nagłówków audio")
+    ap.add_argument("--min-positive-groups-test", type=int, default=MIN_POSITIVE_GROUPS_TEST)
     args = ap.parse_args()
 
     if not is_valid_version(args.version):
@@ -137,9 +129,7 @@ def main() -> None:
         r.error("K1", f"powtórzone ID: {len(dup_ids)} (np. {dup_ids[:3]})")
 
     # ---------------------------------------------------------------- K2 pliki
-    missing = [
-        row["filepath"] for row in rows if not (repo_root / row["filepath"]).exists()
-    ]
+    missing = [row["filepath"] for row in rows if not (repo_root / row["filepath"]).exists()]
     if missing:
         r.error("K2", f"brakuje {len(missing)} plików (np. {missing[:3]})")
     else:
@@ -151,37 +141,23 @@ def main() -> None:
         groups[row["group_id"]].add(row["split"])
     leaked = {g: sorted(s) for g, s in groups.items() if len(s) > 1}
     if leaked:
-        r.error(
-            "K3",
-            f"PRZECIEK — {len(leaked)} grup w więcej niż jednym splicie "
-            f"(np. {list(leaked.items())[:3]})",
-        )
+        r.error("K3", f"PRZECIEK — {len(leaked)} grup w więcej niż jednym splicie "
+                      f"(np. {list(leaked.items())[:3]})")
     else:
         r.ok("K3", f"brak przecieku — {len(groups)} grup, każda w jednym splicie")
 
     # ---------------------------------------------------------------- K7 grupy poz.
-    pos_groups = {
-        sp: {
-            row["group_id"]
-            for row in rows
-            if row["split"] == sp and row["label"] == "positive"
-        }
-        for sp in SPLITS
-    }
+    pos_groups = {sp: {row["group_id"] for row in rows
+                       if row["split"] == sp and row["label"] == "positive"}
+                  for sp in SPLITS}
     n_test = len(pos_groups["test"])
     if n_test < args.min_positive_groups_test:
-        r.error(
-            "K7",
-            f"tylko {n_test} grup pozytywnych w teście "
-            f"(minimum {args.min_positive_groups_test}) — metryka byłaby "
-            f"obarczona ogromnym błędem próbkowania",
-        )
+        r.error("K7", f"tylko {n_test} grup pozytywnych w teście "
+                      f"(minimum {args.min_positive_groups_test}) — metryka byłaby "
+                      f"obarczona ogromnym błędem próbkowania")
     else:
-        r.ok(
-            "K7",
-            f"grupy pozytywne: train={len(pos_groups['train'])} "
-            f"val={len(pos_groups['val'])} test={n_test}",
-        )
+        r.ok("K7", f"grupy pozytywne: train={len(pos_groups['train'])} "
+                   f"val={len(pos_groups['val'])} test={n_test}")
 
     # ---------------------------------------------------------------- K4/K5/K6
     if args.quick:
@@ -199,26 +175,19 @@ def main() -> None:
                 changed.append(row["filepath"])
             try:
                 info = sf.info(str(p))
-                if (
-                    info.samplerate < MIN_SAMPLE_RATE
-                    or info.channels > MAX_CHANNELS
-                    or not (MIN_DURATION_S <= info.duration <= MAX_DURATION_S)
-                ):
+                if (info.samplerate < MIN_SAMPLE_RATE or info.channels > MAX_CHANNELS
+                        or not (MIN_DURATION_S <= info.duration <= MAX_DURATION_S)):
                     bad_audio.append(
                         f"{row['filepath']} (sr={info.samplerate}, ch={info.channels}, "
-                        f"{info.duration:.2f}s)"
-                    )
+                        f"{info.duration:.2f}s)")
             except Exception as exc:
                 unreadable.append(f"{row['filepath']}: {exc}")
             if i % 2000 == 0:
                 print(f"  … sprawdzono {i}/{len(rows)}", flush=True)
 
         if changed:
-            r.error(
-                "K4",
-                f"{len(changed)} plików ma inną sumę kontrolną niż w manifeście "
-                f"(np. {changed[:3]}) — zbiór NIE jest tą wersją",
-            )
+            r.error("K4", f"{len(changed)} plików ma inną sumę kontrolną niż w manifeście "
+                          f"(np. {changed[:3]}) — zbiór NIE jest tą wersją")
         else:
             r.ok("K4", "wszystkie sumy kontrolne zgodne")
 
@@ -228,40 +197,25 @@ def main() -> None:
                 continue
             (cross if len({g["split"] for g in group}) > 1 else inner).append(group)
         if cross:
-            r.error(
-                "K5",
-                f"{len(cross)} zestawów identycznych plików rozrzuconych "
-                f"po różnych splitach (np. "
-                f"{[g['filepath'] for g in cross[0]][:2]})",
-            )
+            r.error("K5", f"{len(cross)} zestawów identycznych plików rozrzuconych "
+                          f"po różnych splitach (np. "
+                          f"{[g['filepath'] for g in cross[0]][:2]})")
         else:
             r.ok("K5", "brak identycznych plików między splitami")
         if inner:
-            r.warn(
-                "O1",
-                f"{len(inner)} zestawów identycznych plików wewnątrz splitów "
-                f"— rozważ deduplikację",
-            )
+            r.warn("O1", f"{len(inner)} zestawów identycznych plików wewnątrz splitów "
+                         f"— rozważ deduplikację")
 
         if unreadable or bad_audio:
             if unreadable:
-                r.error(
-                    "K6",
-                    f"{len(unreadable)} plików nie do odczytania "
-                    f"(np. {unreadable[:2]})",
-                )
+                r.error("K6", f"{len(unreadable)} plików nie do odczytania "
+                              f"(np. {unreadable[:2]})")
             if bad_audio:
-                r.error(
-                    "K6",
-                    f"{len(bad_audio)} plików poza dozwolonym zakresem audio "
-                    f"(np. {bad_audio[:2]})",
-                )
+                r.error("K6", f"{len(bad_audio)} plików poza dozwolonym zakresem audio "
+                              f"(np. {bad_audio[:2]})")
         else:
-            r.ok(
-                "K6",
-                f"audio w porządku (sr ≥ {MIN_SAMPLE_RATE}, ch ≤ {MAX_CHANNELS}, "
-                f"{MIN_DURATION_S}–{MAX_DURATION_S}s)",
-            )
+            r.ok("K6", f"audio w porządku (sr ≥ {MIN_SAMPLE_RATE}, ch ≤ {MAX_CHANNELS}, "
+                       f"{MIN_DURATION_S}–{MAX_DURATION_S}s)")
 
     # ---------------------------------------------------------------- ostrzeżenia
     for sp in SPLITS:
@@ -271,11 +225,8 @@ def main() -> None:
             continue
         frac = sum(1 for row in rs if row["label"] == "positive") / len(rs)
         if not (BALANCE_RANGE[0] <= frac <= BALANCE_RANGE[1]):
-            r.warn(
-                "O2",
-                f"{sp}: pozytywy stanowią {100 * frac:.1f}% — poza widełkami "
-                f"{100 * BALANCE_RANGE[0]:.0f}–{100 * BALANCE_RANGE[1]:.0f}%",
-            )
+            r.warn("O2", f"{sp}: pozytywy stanowią {100*frac:.1f}% — poza widełkami "
+                         f"{100*BALANCE_RANGE[0]:.0f}–{100*BALANCE_RANGE[1]:.0f}%")
         kinds_here = {row["kind"] for row in rs}
         for k in KINDS:
             if k not in kinds_here:
@@ -283,11 +234,8 @@ def main() -> None:
 
     nc = [row for row in rows if row["license"] in NONCOMMERCIAL_LICENSES]
     if nc:
-        r.warn(
-            "O4",
-            f"{len(nc)} nagrań na licencji niekomercyjnej — do produktu "
-            f"trzeba je odfiltrować",
-        )
+        r.warn("O4", f"{len(nc)} nagrań na licencji niekomercyjnej — do produktu "
+                     f"trzeba je odfiltrować")
 
     # ---------------------------------------------------------------- podsumowanie
     print()

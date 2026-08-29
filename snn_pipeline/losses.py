@@ -94,11 +94,11 @@ class HardwareAwareLoss(nn.Module):
 
         # 3. Precision penalty — NOWY, chroni przed false positives
         precision_deficit = torch.clamp(self.precision_target - soft_p, min=0.0)
-        loss_precision = precision_deficit**2
+        loss_precision = precision_deficit ** 2
 
         # 4. Recall penalty — zmniejszona waga (0.5 zamiast 2.0)
         recall_deficit = torch.clamp(self.recall_target - soft_r, min=0.0)
-        loss_recall = recall_deficit**2
+        loss_recall = recall_deficit ** 2
 
         # 5. E24 regularization — bez zmian
         loss_hw = torch.tensor(0.0, device=predictions.device)
@@ -161,9 +161,7 @@ class HardwareAwareLoss(nn.Module):
 
         soft_precision = soft_tp / (soft_tp + soft_fp + eps)
         soft_recall = soft_tp / (soft_tp + soft_fn + eps)
-        soft_f1 = (
-            2.0 * soft_precision * soft_recall / (soft_precision + soft_recall + eps)
-        )
+        soft_f1 = 2.0 * soft_precision * soft_recall / (soft_precision + soft_recall + eps)
 
         return soft_precision, soft_recall, soft_f1
 
@@ -205,7 +203,7 @@ class FocalLoss(nn.Module):
             Focal loss (skalar).
         """
         pred_safe = torch.clamp(predictions, 1e-7, 1.0 - 1e-7)
-        bce = F.binary_cross_entropy(pred_safe, targets, reduction="none")
+        bce = F.binary_cross_entropy(pred_safe, targets, reduction='none')
 
         # p_t = prawdopodobieństwo poprawnej klasy
         p_t = pred_safe * targets + (1.0 - pred_safe) * (1.0 - targets)

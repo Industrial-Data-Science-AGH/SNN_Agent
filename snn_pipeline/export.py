@@ -161,15 +161,7 @@ def export_weights_csv(
     thresholds = model.get_thresholds_dict()
 
     rows = [
-        [
-            "Neuron",
-            "Synapsa",
-            "Waga",
-            "R_syn_exact_ohm",
-            "R_syn_E24_ohm",
-            "Blad_pct",
-            "V_th",
-        ],
+        ["Neuron", "Synapsa", "Waga", "R_syn_exact_ohm", "R_syn_E24_ohm", "Blad_pct", "V_th"],
     ]
 
     synapse_map = {
@@ -187,17 +179,11 @@ def export_weights_csv(
         r_exact, r_e24 = weight_to_nearest_e24_resistance(abs(w_val))
         err_pct = abs(r_exact - r_e24) / max(r_exact, 1) * 100
 
-        rows.append(
-            [
-                neuron,
-                synapse,
-                f"{w_val:.4f}",
-                f"{r_exact:.0f}",
-                f"{r_e24:.0f}",
-                f"{err_pct:.2f}",
-                f"{vth_val:.4f}",
-            ]
-        )
+        rows.append([
+            neuron, synapse, f"{w_val:.4f}",
+            f"{r_exact:.0f}", f"{r_e24:.0f}", f"{err_pct:.2f}",
+            f"{vth_val:.4f}",
+        ])
 
     with open(save_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
@@ -266,28 +252,28 @@ def generate_arduino_header(
 // =============================================================================
 // WAGI SYNAPTYCZNE (znormalizowane 0.0–1.0, × 100 dla integer arytmetyki)
 // =============================================================================
-#define W_N1_INPUT        {int(abs(weights["w_n1"]) * 100)}      // Waga Input→N1 (×100)
-#define W_N2_INPUT        {int(abs(weights["w_n2"]) * 100)}      // Waga Input→N2 (×100)
-#define W_N3_FROM_N1      {int(abs(weights["w_n3_from_n1"]) * 100)}      // Waga N1→N3 (×100)
-#define W_N3_FROM_N2      {int(abs(weights["w_n3_from_n2"]) * 100)}      // Waga N2→N3 (×100)
-#define W_INH_INPUT       {int(abs(weights["w_inh"]) * 100)}      // Waga Input→N_inh (×100)
-#define W_INH_TO_N3       {int(abs(weights["w_inh_to_n3"]) * 100)}      // Waga hamowania N_inh→N3 (×100, UJEMNA)
+#define W_N1_INPUT        {int(abs(weights['w_n1']) * 100)}      // Waga Input→N1 (×100)
+#define W_N2_INPUT        {int(abs(weights['w_n2']) * 100)}      // Waga Input→N2 (×100)
+#define W_N3_FROM_N1      {int(abs(weights['w_n3_from_n1']) * 100)}      // Waga N1→N3 (×100)
+#define W_N3_FROM_N2      {int(abs(weights['w_n3_from_n2']) * 100)}      // Waga N2→N3 (×100)
+#define W_INH_INPUT       {int(abs(weights['w_inh']) * 100)}      // Waga Input→N_inh (×100)
+#define W_INH_TO_N3       {int(abs(weights['w_inh_to_n3']) * 100)}      // Waga hamowania N_inh→N3 (×100, UJEMNA)
 
 // =============================================================================
 // PROGI WYZWALANIA V_th (znormalizowane × 100)
 // =============================================================================
-#define VTH_N1            {int(thresholds["vth_n1"] * 100)}      // Próg N1 (×100)
-#define VTH_N2            {int(thresholds["vth_n2"] * 100)}      // Próg N2 (×100)
-#define VTH_N3            {int(thresholds["vth_n3"] * 100)}      // Próg N3 (×100)
-#define VTH_INH           {int(thresholds["vth_inh"] * 100)}      // Próg N_inh (×100)
+#define VTH_N1            {int(thresholds['vth_n1'] * 100)}      // Próg N1 (×100)
+#define VTH_N2            {int(thresholds['vth_n2'] * 100)}      // Próg N2 (×100)
+#define VTH_N3            {int(thresholds['vth_n3'] * 100)}      // Próg N3 (×100)
+#define VTH_INH           {int(thresholds['vth_inh'] * 100)}      // Próg N_inh (×100)
 
 // =============================================================================
 // PROGI ANALOGOWE (mV, przy VCC=5V)
 // =============================================================================
-#define VTH_N1_MV         {int(thresholds["vth_n1"] * HW_CONFIG.vcc * 1000)}     // Próg N1 (mV)
-#define VTH_N2_MV         {int(thresholds["vth_n2"] * HW_CONFIG.vcc * 1000)}     // Próg N2 (mV)
-#define VTH_N3_MV         {int(thresholds["vth_n3"] * HW_CONFIG.vcc * 1000)}     // Próg N3 (mV)
-#define VTH_INH_MV        {int(thresholds["vth_inh"] * HW_CONFIG.vcc * 1000)}     // Próg N_inh (mV)
+#define VTH_N1_MV         {int(thresholds['vth_n1'] * HW_CONFIG.vcc * 1000)}     // Próg N1 (mV)
+#define VTH_N2_MV         {int(thresholds['vth_n2'] * HW_CONFIG.vcc * 1000)}     // Próg N2 (mV)
+#define VTH_N3_MV         {int(thresholds['vth_n3'] * HW_CONFIG.vcc * 1000)}     // Próg N3 (mV)
+#define VTH_INH_MV        {int(thresholds['vth_inh'] * HW_CONFIG.vcc * 1000)}     // Próg N_inh (mV)
 
 // =============================================================================
 // SPI PROTOCOL

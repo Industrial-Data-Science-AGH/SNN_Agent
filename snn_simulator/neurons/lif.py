@@ -1,6 +1,5 @@
 import numpy as np
 
-
 class LIFNeuron:
     def __init__(self, beta, threshold):
         self.beta = beta

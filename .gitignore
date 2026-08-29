@@ -33,6 +33,3 @@ architecture_14_neurons_patryk_09_07/spikes_csv
 
 # pozostałości po równoległym zapisie cache
 **/_cache_*.npz.tmp*
-
-*.zip
-*.7z

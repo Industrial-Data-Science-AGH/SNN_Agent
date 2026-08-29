@@ -97,7 +97,9 @@ class RateCodingEncoder:
 
         return torch.tensor(spikes, dtype=torch.float32)
 
-    def encode_single(self, energy: float, n_timesteps: int = 100) -> torch.Tensor:
+    def encode_single(
+        self, energy: float, n_timesteps: int = 100
+    ) -> torch.Tensor:
         """Enkoduje pojedynczą wartość energii na spike train.
 
         Args:
@@ -205,7 +207,9 @@ class TTFSEncoder:
 
         return torch.tensor(spikes, dtype=torch.float32)
 
-    def encode_single(self, energy: float, n_timesteps: int = 100) -> torch.Tensor:
+    def encode_single(
+        self, energy: float, n_timesteps: int = 100
+    ) -> torch.Tensor:
         """Enkoduje pojedynczą wartość energii na spike train TTFS.
 
         Args:

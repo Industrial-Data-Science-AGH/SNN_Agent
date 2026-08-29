@@ -22,7 +22,6 @@ from snn_pipeline.config import E24_BASE, E24_NORMALIZED_TENSOR, HW_CONFIG
 # PEŁNA LISTA WARTOŚCI E24 (znormalizowanych do [0,1])
 # =============================================================================
 
-
 def build_e24_normalized_grid() -> torch.Tensor:
     """Buduje pełną siatkę wartości E24 znormalizowanych do zakresu [0,1].
 
@@ -65,10 +64,7 @@ def get_e24_grid(device: Optional[torch.device] = None) -> torch.Tensor:
 # QUANTIZE TO E24 — najważniejsza operacja
 # =============================================================================
 
-
-def quantize_to_e24(
-    w: torch.Tensor, grid: Optional[torch.Tensor] = None
-) -> torch.Tensor:
+def quantize_to_e24(w: torch.Tensor, grid: Optional[torch.Tensor] = None) -> torch.Tensor:
     """Zaokrągla ciągłą wagę do najbliższej wartości z siatki E24.
 
     Operacja nieróżniczkowalna — gradient nie przepływa. Użyj E24STE do treningu.
@@ -120,7 +116,6 @@ def quantize_to_e24_with_error(
 # =============================================================================
 # STRAIGHT-THROUGH ESTIMATOR (STE) — rdzeń HAT
 # =============================================================================
-
 
 class E24STEFunction(Function):
     """Straight-Through Estimator dla kwantyzacji E24.
@@ -187,7 +182,6 @@ def e24_ste(w: torch.Tensor, grid: Optional[torch.Tensor] = None) -> torch.Tenso
 # GUMBEL-SOFTMAX TEMPERATURE ANNEALING
 # =============================================================================
 
-
 class E24GumbelQuantizer(nn.Module):
     """Kwantyzator E24 z Gumbel-softmax temperature annealing.
 
@@ -249,7 +243,6 @@ class E24GumbelQuantizer(nn.Module):
 # MIXED PRECISION QUANTIZER (dla QAT)
 # =============================================================================
 
-
 def quantize_mixed_precision(
     w: torch.Tensor,
     bits: int = 5,
@@ -279,7 +272,7 @@ def quantize_mixed_precision(
     if grid is None:
         grid = get_e24_grid(w.device)
 
-    n_levels = min(2**bits, len(grid))
+    n_levels = min(2 ** bits, len(grid))
 
     if n_levels >= len(grid):
         # Pełna precyzja E24
@@ -295,7 +288,6 @@ def quantize_mixed_precision(
 # =============================================================================
 # WARTOŚCI E24 ↔ REZYSTANCJA (konwersja fizyczna)
 # =============================================================================
-
 
 def weight_to_resistance(
     w: float,

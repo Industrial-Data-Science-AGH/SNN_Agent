@@ -32,14 +32,9 @@ Sieć warstwowa, ale **liczba warstw też ewoluuje**. Warstwa 0 = 7 cech encoder
 
 ```python
 Genome.layers = [
-    [
-        [0, 1, 5],
-        [2, 3, 6],
-        [0, 4, 5],
-        [1, 4, 6],
-    ],  # H1: 4 neurony, wejścia = indeksy cech
-    [[0, 1, 2], [1, 2, 3], [2, 3, 0]],  # H2: 3 neurony, wejścia = neurony H1
-    [[0, 1, 2]],  # D:  1 neuron,  wejścia = neurony H2
+    [[0,1,5],[2,3,6],[0,4,5],[1,4,6]],  # H1: 4 neurony, wejścia = indeksy cech
+    [[0,1,2],[1,2,3],[2,3,0]],          # H2: 3 neurony, wejścia = neurony H1
+    [[0,1,2]],                          # D:  1 neuron,  wejścia = neurony H2
 ]
 ```
 Neuron = lista 1–3 indeksów wejść w warstwie **poprzedniej**. To jest 1:1

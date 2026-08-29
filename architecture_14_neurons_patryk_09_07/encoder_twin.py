@@ -51,7 +51,6 @@ Użycie:
         --negative ../notebooks/dataset/negative --out ./spikes_csv
     python encoder_twin.py preview sciezka/do/pliku.wav
 """
-
 from __future__ import annotations
 
 import argparse
@@ -69,8 +68,8 @@ from scipy.signal import lfilter
 # =============================================================================
 # STAŁE — skopiowane 1:1 z encoder_v2.ino
 # =============================================================================
-FS_HZ = 19231  # rzeczywiste fs przy prescalerze ADC = 32
-HOP_SAMPLES = 192  # 192 / 19231 Hz ~= 10.0 ms  <- dt sieci
+FS_HZ = 19231            # rzeczywiste fs przy prescalerze ADC = 32
+HOP_SAMPLES = 192        # 192 / 19231 Hz ~= 10.0 ms  <- dt sieci
 N_CH = 7
 # v3: `crest` (martwa w treningu 14-neur.) zastąpiona dwiema cechami WIDMOWYMI.
 # hf_ratio = udział energii pasma górnego (>~2.2 kHz) w energii ramki — rozróżnia
@@ -92,9 +91,7 @@ THR_Z = np.array([4.0, 3.5, 3.0, 2.5, 3.5, np.nan, np.nan])
 ABS_THR = np.array([np.nan, np.nan, np.nan, np.nan, np.nan, 0.28, 0.35])
 
 A_UP, A_DN, A_MAD = 0.0015, 0.0300, 0.0100
-EPS = (
-    1e-6  # ogólny epsilon (dzielenia poza z-score: hf_ratio, cv, spike_thr, bramka HF)
-)
+EPS = 1e-6   # ogólny epsilon (dzielenia poza z-score: hf_ratio, cv, spike_thr, bramka HF)
 
 # EPS PER KANAŁ dla mianownika z-score w _update_floor — każdy kanał ma inną
 # jednostkę, więc jeden wspólny EPS=1e-6 kolapsuje przy cyfrowej ciszy (mad->0,
@@ -105,20 +102,17 @@ EPS = (
 #   cv, zcr   : ułamek jednej próbki na HOP_SAMPLES próbek statystyki ramki -> 1/HOP_SAMPLES
 #   flux      : rozdzielczość log1p(rms) przy najmniejszej mierzalnej zmianie
 #               rms (rząd 1 LSB / sqrt(HOP_SAMPLES), tłumione przez log1p)
-EPS_FLOOR = np.array(
-    [
-        1.0,  # peak
-        1.0,  # peak_cnt
-        1.0 / HOP_SAMPLES,  # cv
-        1.0 / HOP_SAMPLES,  # zcr
-        1.0 / (1.0 + HOP_SAMPLES**0.5),  # flux
-        np.nan,
-        np.nan,  # hf_lo/hf_hi: próg bezwzględny, nieużywane tu
-    ]
-)
+EPS_FLOOR = np.array([
+    1.0,                                   # peak
+    1.0,                                   # peak_cnt
+    1.0 / HOP_SAMPLES,                     # cv
+    1.0 / HOP_SAMPLES,                     # zcr
+    1.0 / (1.0 + HOP_SAMPLES ** 0.5),       # flux
+    np.nan, np.nan,                        # hf_lo/hf_hi: próg bezwzględny, nieużywane tu
+])
 
 REFRAC_FRAMES = 1
-PRIME_FRAMES = 50  # ~0.5 s przy 100 Hz ramek
+PRIME_FRAMES = 50        # ~0.5 s przy 100 Hz ramek
 
 # 1-pole highpass pasma górnego: lp += (x-lp)>>HF_HP_SHIFT, hf = x - lp.
 # SHIFT=1 => a=0.5 => cutoff ~2.2 kHz @19231 Hz. Kaskada nie poprawiała separacji
@@ -131,16 +125,15 @@ HF_GATE_MULT = 1.5
 # --- emulacja ADC 10-bit (patrz uwagi o wierności powyżej) ---
 ADC_FULL_SCALE = 1023.0
 ADC_BIAS = 511.5
-DC_EMA_SHIFT = 9  # dc_est += (raw<<4 - dc_est) >> 9  =>  k = 1/512
+DC_EMA_SHIFT = 9          # dc_est += (raw<<4 - dc_est) >> 9  =>  k = 1/512
 SPIKE_THR_INIT = 40.0
 SPIKE_THR_MIN, SPIKE_THR_MAX = 8.0, ADC_FULL_SCALE
 
-GAIN_PERCENTILE = 99.9  # percentyl amplitudy trafiający w pełną skalę ADC
+GAIN_PERCENTILE = 99.9   # percentyl amplitudy trafiający w pełną skalę ADC
 
 
-def compute_global_gain(
-    paths, percentile: float = GAIN_PERCENTILE, fs_hz: int = FS_HZ
-) -> float:
+def compute_global_gain(paths, percentile: float = GAIN_PERCENTILE,
+                        fs_hz: int = FS_HZ) -> float:
     """Liczy JEDNO globalne wzmocnienie z listy plików (percentyl amplitudy
     -> pełna skala ADC). WYWOŁYWAĆ WYŁĄCZNIE na zbiorze TRENINGOWYM i zamrozić
     wynik (np. zapisać do JSON obok datasetu) — patrz build_manifest().
@@ -155,9 +148,8 @@ def compute_global_gain(
     return 1.0 / max(ref, 1e-9)
 
 
-def wav_to_adc_codes(
-    path: str, gain: float, fs_hz: int = FS_HZ, aug_gain_db: float = 0.0, rng=None
-) -> np.ndarray:
+def wav_to_adc_codes(path: str, gain: float, fs_hz: int = FS_HZ,
+                     aug_gain_db: float = 0.0, rng=None) -> np.ndarray:
     """Wczytuje audio i odtwarza to, co widziałby ADC Arduino: resample do FS_HZ
     + rekwantyzacja do 10-bit kodów wyśrodkowanych na ADC_BIAS.
 
@@ -204,7 +196,6 @@ def _high_band(x: np.ndarray) -> np.ndarray:
 class EncoderState:
     """Stan enkodera przenoszony między ramkami — odpowiednik zmiennych
     `static`/`volatile` w encoder_v2.ino."""
-
     floor_v: np.ndarray = field(default_factory=lambda: np.zeros(N_CH))
     mad_v: np.ndarray = field(default_factory=lambda: np.zeros(N_CH))
     refrac: np.ndarray = field(default_factory=lambda: np.zeros(N_CH, dtype=int))
@@ -225,18 +216,13 @@ def _update_floor(state: EncoderState, c: int, v: float) -> float:
     return (v - state.floor_v[c]) / (state.mad_v[c] + EPS_FLOOR[c])
 
 
-def encode_file(
-    path: str,
-    gain: float,
-    state: Optional[EncoderState] = None,
-    aug_gain_db: float = 0.0,
-    rng=None,
-) -> np.ndarray:
+def encode_file(path: str, gain: float, state: Optional[EncoderState] = None,
+                aug_gain_db: float = 0.0, rng=None) -> np.ndarray:
     """Zwraca macierz [n_frames_po_primingu, 7] spike'ów (0/1) dla jednego pliku
     audio — dokładnie to, co encoder_v2.ino wypisałby na Serial jako s0..s6."""
     codes = wav_to_adc_codes(path, gain=gain, aug_gain_db=aug_gain_db, rng=rng)
     x = _remove_dc(codes)
-    hf = _high_band(x)  # pasmo górne (~>2.2 kHz) — cechy widmowe
+    hf = _high_band(x)                       # pasmo górne (~>2.2 kHz) — cechy widmowe
     ax = np.abs(x)
     sign = np.where(x >= 0, 1, -1)
     sign_ext = np.concatenate(([0], sign))  # prev_sign startuje od 0, jak w .ino
@@ -254,19 +240,19 @@ def encode_file(
     # Cechy niezależne od progu (spike_thr wpływa tylko na peak_cnt) — w pełni
     # zwektoryzowane, licz raz dla całego pliku.
     acc_abs = ax_f.sum(axis=1)
-    acc_sq = (x_f**2).sum(axis=1)
+    acc_sq = (x_f ** 2).sum(axis=1)
     acc_max = ax_f.max(axis=1)
     acc_zc = zc_f.sum(axis=1)
-    acc_hf_sq = (hf_f**2).sum(axis=1)  # energia pasma górnego w ramce
+    acc_hf_sq = (hf_f ** 2).sum(axis=1)      # energia pasma górnego w ramce
 
     n = float(HOP_SAMPLES)
     mean_abs = acc_abs / n
     rms = np.sqrt(acc_sq / n)
     peak = acc_max
-    var_abs = np.maximum(0.0, acc_sq / n - mean_abs**2)
+    var_abs = np.maximum(0.0, acc_sq / n - mean_abs ** 2)
     cv = np.sqrt(var_abs) / (mean_abs + EPS)
     zcr = acc_zc / n
-    hf_ratio = acc_hf_sq / (acc_sq + EPS)  # udział energii HF (szkło >> łomot/strzał)
+    hf_ratio = acc_hf_sq / (acc_sq + EPS)    # udział energii HF (szkło >> łomot/strzał)
 
     if state is None:
         state = EncoderState()
@@ -283,14 +269,12 @@ def encode_file(
         state.rms_prev = rms[k]
 
         # próg mikro-szpilki na NASTĘPNĄ ramkę — 3x poziom tła kanału `peak`
-        state.spike_thr = float(
-            np.clip(3.0 * (state.floor_v[CH_PEAK] + EPS), SPIKE_THR_MIN, SPIKE_THR_MAX)
-        )
+        state.spike_thr = float(np.clip(3.0 * (state.floor_v[CH_PEAK] + EPS),
+                                         SPIKE_THR_MIN, SPIKE_THR_MAX))
 
         # kanały hf_lo/hf_hi dostają tę samą wartość hf_ratio (różnią się progiem)
-        feat = np.array(
-            [peak[k], peak_cnt, cv[k], zcr[k], flux, hf_ratio[k], hf_ratio[k]]
-        )
+        feat = np.array([peak[k], peak_cnt, cv[k], zcr[k], flux,
+                         hf_ratio[k], hf_ratio[k]])
 
         if not state.floors_primed:
             state.floor_v[:] = feat
@@ -308,7 +292,7 @@ def encode_file(
         bits = np.zeros(N_CH, dtype=np.uint8)
         for c in range(N_CH):
             if not np.isnan(ABS_THR[c]):
-                above = hf_gated and (feat[c] > ABS_THR[c])  # próg bezwzględny
+                above = hf_gated and (feat[c] > ABS_THR[c])   # próg bezwzględny
             else:
                 above = _update_floor(state, c, feat[c]) > THR_Z[c]
                 if above:
@@ -323,21 +307,15 @@ def encode_file(
 
         out_rows.append(bits)
 
-    return (
-        np.array(out_rows, dtype=np.uint8)
-        if out_rows
-        else np.zeros((0, N_CH), dtype=np.uint8)
-    )
+    return np.array(out_rows, dtype=np.uint8) if out_rows else np.zeros((0, N_CH), dtype=np.uint8)
 
 
 # =============================================================================
 # BUDOWA DATASETU CSV — wejście dla snn_hw_pipeline.py train --data ...
 # =============================================================================
 
-
-def _warmup_state(
-    negative_files: list, warmup_seconds: float, gain: float
-) -> Tuple[EncoderState, int]:
+def _warmup_state(negative_files: list, warmup_seconds: float,
+                  gain: float) -> Tuple[EncoderState, int]:
     """Rozgrzewa jeden EncoderState na kolejnych plikach tła, aż zbierze co
     najmniej `warmup_seconds` sekund audio PO fazie primingu (floors_primed).
     Wyjście tych plików jest odrzucane — służą wyłącznie do ustabilizowania
@@ -357,14 +335,10 @@ def _warmup_state(
         if state.floors_primed and warmed_frames * frame_dt >= warmup_seconds:
             break
     else:
-        print(
-            f"[!] warmup: zabrakło plików tła, rozgrzano tylko "
-            f"{warmed_frames * frame_dt:.1f}s zamiast {warmup_seconds:.1f}s"
-        )
-    print(
-        f"[warmup] rozgrzano stan enkodera na {used} plikach tła "
-        f"({warmed_frames * frame_dt:.1f}s realnego audio, odrzucone)"
-    )
+        print(f"[!] warmup: zabrakło plików tła, rozgrzano tylko "
+              f"{warmed_frames * frame_dt:.1f}s zamiast {warmup_seconds:.1f}s")
+    print(f"[warmup] rozgrzano stan enkodera na {used} plikach tła "
+          f"({warmed_frames * frame_dt:.1f}s realnego audio, odrzucone)")
     return state, used
 
 
@@ -379,13 +353,8 @@ def _glob_dirs(dirs) -> list:
     return files
 
 
-def build_dataset(
-    glass_dirs,
-    negative_dirs,
-    out_dir: str,
-    warmup_seconds: float = 30.0,
-    warmup_dir: Optional[str] = None,
-) -> None:
+def build_dataset(glass_dirs, negative_dirs, out_dir: str,
+                   warmup_seconds: float = 30.0, warmup_dir: Optional[str] = None) -> None:
     """Buduje CSV-y dla SpikeClips, utrzymując JEDEN ciągły EncoderState przez
     cały zbiór (patrz uwaga na górze pliku — brak resetu per plik, tak jak
     ciągła praca realnego urządzenia).
@@ -407,12 +376,8 @@ def build_dataset(
     gain = compute_global_gain(glass_files + negative_files)
     print(f"[gain] globalne wzmocnienie {gain:.4f}", flush=True)
 
-    warmup_dir = warmup_dir or (
-        negative_dirs[0] if isinstance(negative_dirs, list) else negative_dirs
-    )
-    warmup_files = sorted(
-        glob.glob(os.path.join(warmup_dir, "**", "*.wav"), recursive=True)
-    )
+    warmup_dir = warmup_dir or (negative_dirs[0] if isinstance(negative_dirs, list) else negative_dirs)
+    warmup_files = sorted(glob.glob(os.path.join(warmup_dir, "**", "*.wav"), recursive=True))
 
     state, n_warmup_used = _warmup_state(warmup_files, warmup_seconds, gain=gain)
     used_for_warmup = set(warmup_files[:n_warmup_used])
@@ -436,26 +401,17 @@ def build_dataset(
         with open(out_path, "w", encoding="utf-8") as fh:
             fh.write("frame," + ",".join(f"s{c}" for c in range(N_CH)) + ",label\n")
             for frame_idx, row in enumerate(spikes):
-                fh.write(
-                    f"{frame_idx}," + ",".join(str(int(v)) for v in row) + f",{label}\n"
-                )
+                fh.write(f"{frame_idx}," + ",".join(str(int(v)) for v in row) + f",{label}\n")
         counts[label] += 1
 
     print(f"[ok] glass: {counts[1]}/{len(glass_files)} plików -> CSV w {out_dir}")
-    print(
-        f"[ok] negative: {counts[0]}/{len(remaining_negative)} plików "
-        f"(+ {n_warmup_used} zużytych na warmup) -> CSV w {out_dir}"
-    )
+    print(f"[ok] negative: {counts[0]}/{len(remaining_negative)} plików "
+          f"(+ {n_warmup_used} zużytych na warmup) -> CSV w {out_dir}")
 
 
-def build_manifest(
-    manifest_path: str,
-    out_dir: str,
-    root: str = ".",
-    warmup_seconds: float = 30.0,
-    seed: int = 0,
-    aug_gain_db: float = 12.0,
-) -> None:
+def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
+                   warmup_seconds: float = 30.0, seed: int = 0,
+                   aug_gain_db: float = 12.0) -> None:
     """Buduje CSV-y wg manifestu (filepath,label,source,subclass,split) z sesji
     rozszerzania datasetu. Zachowuje podział train/val/test z manifestu jako
     podkatalogi wyjścia — trener dostaje wtedy --data out/train --val-data out/val,
@@ -487,10 +443,8 @@ def build_manifest(
 
     missing = [r for r in rows if not os.path.exists(r["abspath"])]
     if missing:
-        print(
-            f"[!] {len(missing)} plików z manifestu nie istnieje, np. "
-            f"{missing[0]['abspath']} — pomijam je"
-        )
+        print(f"[!] {len(missing)} plików z manifestu nie istnieje, np. "
+              f"{missing[0]['abspath']} — pomijam je")
         rows = [r for r in rows if os.path.exists(r["abspath"])]
 
     # --- globalne wzmocnienie: liczone WYŁĄCZNIE na train, potem zamrożone ---
@@ -498,35 +452,18 @@ def build_manifest(
     gain = compute_global_gain(train_paths)
     gain_path = Path(out_dir) / "global_gain.json"
     gain_path.parent.mkdir(parents=True, exist_ok=True)
-    json.dump(
-        {
-            "gain": gain,
-            "percentile": GAIN_PERCENTILE,
-            "computed_on": "split=train",
-            "n_files": len(train_paths),
-        },
-        open(gain_path, "w"),
-        indent=2,
-    )
-    print(
-        f"[gain] globalne wzmocnienie {gain:.4f} (z {len(train_paths)} "
-        f"plików train, percentyl {GAIN_PERCENTILE}) -> {gain_path}",
-        flush=True,
-    )
+    json.dump({"gain": gain, "percentile": GAIN_PERCENTILE,
+              "computed_on": "split=train", "n_files": len(train_paths)},
+              open(gain_path, "w"), indent=2)
+    print(f"[gain] globalne wzmocnienie {gain:.4f} (z {len(train_paths)} "
+          f"plików train, percentyl {GAIN_PERCENTILE}) -> {gain_path}", flush=True)
 
-    warmup_files = sorted(
-        r["abspath"]
-        for r in rows
-        if r["label"] == "negative"
-        and r["split"] == "train"
-        and r["source"] == "notebooks"
-    )
+    warmup_files = sorted(r["abspath"] for r in rows
+                          if r["label"] == "negative" and r["split"] == "train"
+                          and r["source"] == "notebooks")
     if not warmup_files:
-        warmup_files = sorted(
-            r["abspath"]
-            for r in rows
-            if r["label"] == "negative" and r["split"] == "train"
-        )
+        warmup_files = sorted(r["abspath"] for r in rows
+                              if r["label"] == "negative" and r["split"] == "train")
     base_state, n_used = _warmup_state(warmup_files, warmup_seconds, gain=gain)
     used_for_warmup = set(warmup_files[:n_used])
 
@@ -535,25 +472,17 @@ def build_manifest(
     rng = random.Random(seed)
     for split in ("train", "val", "test"):
         (out / split).mkdir(parents=True, exist_ok=True)
-        split_rows = [
-            r
-            for r in rows
-            if r["split"] == split and r["abspath"] not in used_for_warmup
-        ]
+        split_rows = [r for r in rows if r["split"] == split
+                     and r["abspath"] not in used_for_warmup]
         rng.shuffle(split_rows)  # przeplot klas, deterministyczny (seed) —
-        # zamiast sortowania po etykiecie
+                                 # zamiast sortowania po etykiecie
         split_state = copy.deepcopy(base_state)  # niezależny stan per split
         split_aug = aug_gain_db if split == "train" else 0.0
         split_rng = np.random.default_rng(seed + hash(split) % 1000)
         for r in split_rows:
             label = 1 if r["label"] == "positive" else 0
-            spikes = encode_file(
-                r["abspath"],
-                gain=gain,
-                state=split_state,
-                aug_gain_db=split_aug,
-                rng=split_rng,
-            )
+            spikes = encode_file(r["abspath"], gain=gain, state=split_state,
+                                 aug_gain_db=split_aug, rng=split_rng)
             if spikes.shape[0] == 0:
                 print(f"[!] {r['abspath']}: za krótki na choćby jedną ramkę — pomijam")
                 continue
@@ -565,43 +494,29 @@ def build_manifest(
             with open(out_path, "w", encoding="utf-8") as fh:
                 fh.write("frame," + ",".join(f"s{c}" for c in range(N_CH)) + ",label\n")
                 for frame_idx, row_bits in enumerate(spikes):
-                    fh.write(
-                        f"{frame_idx},"
-                        + ",".join(str(int(v)) for v in row_bits)
-                        + f",{label}\n"
-                    )
+                    fh.write(f"{frame_idx},"
+                             + ",".join(str(int(v)) for v in row_bits) + f",{label}\n")
             counts[key] += 1
             done = sum(counts.values())
             if done % 500 == 0:
                 print(f"[postęp] {done} plików zakodowanych", flush=True)
 
     for split in ("train", "val", "test"):
-        print(
-            f"[ok] {split}: glass {counts.get((split, 1), 0)}, "
-            f"negative {counts.get((split, 0), 0)} -> {out / split}",
-            flush=True,
-        )
+        print(f"[ok] {split}: glass {counts.get((split, 1), 0)}, "
+              f"negative {counts.get((split, 0), 0)} -> {out / split}", flush=True)
 
 
 # =============================================================================
 # CLI
 # =============================================================================
 
-
 def _cmd_build(args) -> None:
-    build_dataset(
-        args.glass,
-        args.negative,
-        args.out,
-        warmup_seconds=args.warmup_seconds,
-        warmup_dir=args.warmup_dir,
-    )
+    build_dataset(args.glass, args.negative, args.out,
+                  warmup_seconds=args.warmup_seconds, warmup_dir=args.warmup_dir)
 
 
 def _cmd_preview(args) -> None:
-    gain = compute_global_gain(
-        [args.wav]
-    )  # podgląd pojedynczego pliku — brak train do kalibracji
+    gain = compute_global_gain([args.wav])  # podgląd pojedynczego pliku — brak train do kalibracji
     spikes = encode_file(args.wav, gain=gain)
     print(f"plik: {args.wav}")
     print(f"ramek po primingu: {spikes.shape[0]}")
@@ -610,70 +525,41 @@ def _cmd_preview(args) -> None:
     rates = spikes.mean(axis=0) * 100.0
     for name, rate in zip(CHANNELS, rates):
         print(f"  {name:10s}: {rate:5.1f}% ramek ze spikiem")
-    print(
-        f"  ktokolwiek strzelił w co najmniej 1 ramce: {(spikes.any(axis=1)).mean() * 100:.1f}% ramek"
-    )
+    print(f"  ktokolwiek strzelił w co najmniej 1 ramce: {(spikes.any(axis=1)).mean()*100:.1f}% ramek")
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    ap = argparse.ArgumentParser(description=__doc__,
+                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     b = sub.add_parser("build", help="Zbuduj CSV-y ze zbioru glass/negative")
-    b.add_argument(
-        "--glass",
-        required=True,
-        nargs="+",
-        help="jeden lub więcej folderów z .wav tłuczonego szkła",
-    )
-    b.add_argument(
-        "--negative",
-        required=True,
-        nargs="+",
-        help="jeden lub więcej folderów z .wav tła/negatywów",
-    )
+    b.add_argument("--glass", required=True, nargs="+",
+                   help="jeden lub więcej folderów z .wav tłuczonego szkła")
+    b.add_argument("--negative", required=True, nargs="+",
+                   help="jeden lub więcej folderów z .wav tła/negatywów")
     b.add_argument("--out", default="./spikes_csv")
-    b.add_argument(
-        "--warmup-seconds",
-        type=float,
-        default=30.0,
-        help="ile sekund realnego tła zużyć na rozgrzanie floor/MAD przed "
-        "zapisem jakichkolwiek CSV (patrz uwaga w docstringu modułu)",
-    )
-    b.add_argument(
-        "--warmup-dir",
-        default=None,
-        help="folder z PRAWDZIWIE stacjonarnym tłem do rozgrzewki "
-        "(domyślnie: pierwszy z --negative). Nie podawaj tu folderu "
-        "z krótkimi wycinkami zdarzeń (np. hard_negative z VOICe).",
-    )
+    b.add_argument("--warmup-seconds", type=float, default=30.0,
+                   help="ile sekund realnego tła zużyć na rozgrzanie floor/MAD przed "
+                        "zapisem jakichkolwiek CSV (patrz uwaga w docstringu modułu)")
+    b.add_argument("--warmup-dir", default=None,
+                   help="folder z PRAWDZIWIE stacjonarnym tłem do rozgrzewki "
+                        "(domyślnie: pierwszy z --negative). Nie podawaj tu folderu "
+                        "z krótkimi wycinkami zdarzeń (np. hard_negative z VOICe).")
     b.set_defaults(func=_cmd_build)
 
-    m = sub.add_parser(
-        "build-manifest", help="Zbuduj CSV-y wg manifestu (filepath,label,...,split)"
-    )
+    m = sub.add_parser("build-manifest",
+                       help="Zbuduj CSV-y wg manifestu (filepath,label,...,split)")
     m.add_argument("--manifest", required=True)
-    m.add_argument(
-        "--root",
-        default=".",
-        help="katalog, względem którego rozwiązywane są ścieżki z manifestu",
-    )
+    m.add_argument("--root", default=".",
+                   help="katalog, względem którego rozwiązywane są ścieżki z manifestu")
     m.add_argument("--out", default="./spikes_manifest")
     m.add_argument("--warmup-seconds", type=float, default=30.0)
     m.add_argument("--seed", type=int, default=0)
     m.add_argument("--aug-gain-db", type=float, default=12.0)
-    m.set_defaults(
-        func=lambda a: build_manifest(
-            a.manifest,
-            a.out,
-            root=a.root,
-            warmup_seconds=a.warmup_seconds,
-            seed=a.seed,
-            aug_gain_db=a.aug_gain_db,
-        )
-    )
+    m.set_defaults(func=lambda a: build_manifest(a.manifest, a.out, root=a.root,
+                                                 warmup_seconds=a.warmup_seconds,
+                                                 seed=a.seed, aug_gain_db=a.aug_gain_db))
 
     p = sub.add_parser("preview", help="Podgląd spike-rate jednego pliku (debug)")
     p.add_argument("wav")

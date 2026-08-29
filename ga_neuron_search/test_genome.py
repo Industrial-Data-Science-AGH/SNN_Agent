@@ -7,20 +7,12 @@ Sprawdza, że każda operacja (random, mutate, crossover, repair) utrzymuje
 wszystkie twarde ograniczenia sprzętowe i że GA na fitnessie syntetycznym
 faktycznie poprawia wynik.
 """
-
 from __future__ import annotations
 
 import random
 
-from genome import (
-    MAX_FANIN,
-    MAX_FANOUT,
-    OUT_FANIN,
-    Genome,
-    crossover,
-    mutate,
-    random_genome,
-)
+from genome import (MAX_FANIN, MAX_FANOUT, OUT_FANIN, Genome, crossover,
+                    mutate, random_genome)
 
 
 def assert_valid(g: Genome, ctx: str):
@@ -40,14 +32,11 @@ def assert_valid(g: Genome, ctx: str):
     hid = len(g.layers) - 1
     if hid >= 2:
         for k in range(hid):
-            assert len(g.layers[k]) >= 2, (
-                f"{ctx}: warstwa ukryta {k} szerokości 1 (łańcuch)"
-            )
+            assert len(g.layers[k]) >= 2, f"{ctx}: warstwa ukryta {k} szerokości 1 (łańcuch)"
     fanins = [len(n) for k in range(hid) for n in g.layers[k]]
     if fanins:
-        assert sum(fanins) / len(fanins) >= 1.9, (
-            f"{ctx}: średni fan-in ukrytych {sum(fanins) / len(fanins):.2f} < 1.9 (łańcuch?)"
-        )
+        assert sum(fanins) / len(fanins) >= 1.9, \
+            f"{ctx}: średni fan-in ukrytych {sum(fanins)/len(fanins):.2f} < 1.9 (łańcuch?)"
 
 
 def test_random_and_N():
@@ -67,9 +56,7 @@ def test_mutation_preserves():
         for _ in range(500):
             g = mutate(g, rng, rate=1.3)
             assert_valid(g, f"mutate N={n}")
-            assert g.total_neurons() == n, (
-                f"mutacja zmieniła N: {g.total_neurons()} != {n}"
-            )
+            assert g.total_neurons() == n, f"mutacja zmieniła N: {g.total_neurons()} != {n}"
     print("ok: mutate — utrzymuje ograniczenia i stałe N (500 mutacji/N)")
 
 
@@ -88,7 +75,6 @@ def test_crossover_preserves():
 def test_ga_improves():
     from fitness import synth_fitness
     from ga import GAConfig, run_ga
-
     for n in [6, 8, 10]:
         cfg = GAConfig(n_total=n, pop_size=20, generations=12, seed=0)
         res = run_ga(synth_fitness, cfg)

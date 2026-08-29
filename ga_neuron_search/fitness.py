@@ -12,7 +12,6 @@ fitness.py — funkcje oceny osobnika (genomu).
 
 Dane: gotowy `_cache_*.npz` ładowany wprost (bez zapisu — omija WinError 5).
 """
-
 from __future__ import annotations
 
 import math
@@ -24,7 +23,6 @@ from genome import Genome, N_FEATURES
 
 
 # ------------------------------------------------------------------ synth
-
 
 def synth_fitness(g: Genome) -> float:
     if not g.is_valid():
@@ -41,30 +39,25 @@ def synth_fitness(g: Genome) -> float:
 
 # ------------------------------------------------------------------ dane
 
-
 class CachedClips:
     """Zbiór okien wczytany wprost z `_cache_*.npz` (bez SpikeClips, bez zapisu)."""
 
     def __init__(self, npz_path: str):
         import numpy as np
-
         z = np.load(npz_path, allow_pickle=False)
         self.win = z["win"]
         self.lab = z["lab"].astype(np.float32)
         self.fidx = z["fidx"] if "fidx" in z else np.zeros(len(self.lab), np.int32)
         self.file_lab = z["file_lab"] if "file_lab" in z else self.lab
-        print(
-            f"[data] cache-direct: {len(self.lab)} okien, pozytywnych "
-            f"{int(self.lab.sum())} ({100 * self.lab.mean():.1f}%) <- {npz_path}",
-            flush=True,
-        )
+        print(f"[data] cache-direct: {len(self.lab)} okien, pozytywnych "
+              f"{int(self.lab.sum())} ({100*self.lab.mean():.1f}%) <- {npz_path}",
+              flush=True)
 
     def __len__(self):
         return len(self.lab)
 
     def __getitem__(self, i):
         import torch
-
         return torch.from_numpy(self.win[i]).float(), torch.tensor(self.lab[i])
 
 
@@ -72,44 +65,25 @@ def load_clips(data: str, T: int, stride: int, limit: Optional[int], SpikeClips)
     cache = os.path.join(data, f"_cache_T{T}_s{stride}.npz")
     if os.path.exists(cache):
         if limit:
-            print(
-                f"[data] uwaga: --limit ignorowany (uzywam gotowego cache {cache})",
-                flush=True,
-            )
+            print(f"[data] uwaga: --limit ignorowany (uzywam gotowego cache {cache})",
+                  flush=True)
         return CachedClips(cache)
     return SpikeClips(data, T=T, stride=stride, limit=limit)
 
 
 # ------------------------------------------------------------------ real
 
-
 class RealFitness:
     """Proxy-trening GenomeNet -> metryka zdarzeniowa jako fitness."""
 
-    def __init__(
-        self,
-        arch_dir: str,
-        data: str,
-        val_data: Optional[str] = None,
-        limit: Optional[int] = None,
-        epochs: int = 4,
-        T: int = 200,
-        stride: int = 50,
-        bs: int = 128,
-        lr: float = 3e-3,
-        num_samples: int = 6000,
-        val_cap: int = 3000,
-        k: int = 1,
-        metric: str = "clip_f1",
-        fitness_seeds: int = 1,
-        pos_weight: float = 3.0,
-        fanout_penalty: float = 0.01,
-        feature_penalty: float = 0.005,
-        channels_head: Optional[int] = None,
-        verbose: bool = True,
-        seed: int = 0,
-        device: Optional[str] = None,
-    ):
+    def __init__(self, arch_dir: str, data: str, val_data: Optional[str] = None,
+                 limit: Optional[int] = None, epochs: int = 4, T: int = 200,
+                 stride: int = 50, bs: int = 128, lr: float = 3e-3,
+                 num_samples: int = 6000, val_cap: int = 3000, k: int = 1,
+                 metric: str = "clip_f1", fitness_seeds: int = 1,
+                 pos_weight: float = 3.0, fanout_penalty: float = 0.01,
+                 feature_penalty: float = 0.005, channels_head: Optional[int] = None,
+                 verbose: bool = True, seed: int = 0, device: Optional[str] = None):
         assert metric in ("ap", "clip_f1"), "metric: 'ap' albo 'clip_f1'"
         arch_dir = os.path.abspath(arch_dir)
         if arch_dir not in sys.path:
@@ -159,48 +133,35 @@ class RealFitness:
         self.n_channels = int(self.va_win.shape[-1])
         self.channel_names = _load_channel_names(val_data or data, self.n_channels)
 
-        print(
-            f"[val] {len(self.va_lab)} okien / {len(np.unique(self.va_fidx))} klipów "
-            f"(dekoder k={k}, metryka={metric}, seedy={fitness_seeds}, "
-            f"kanały={self.n_channels})",
-            flush=True,
-        )
+        print(f"[val] {len(self.va_lab)} okien / {len(np.unique(self.va_fidx))} klipów "
+              f"(dekoder k={k}, metryka={metric}, seedy={fitness_seeds}, "
+              f"kanały={self.n_channels})", flush=True)
 
     def eval_events(self, model, k: Optional[int] = None):
         import net
-
-        return net.genome_eval_events(
-            model, self.va_win, self.va_lab, self.va_fidx, self.device, k or self.k
-        )
+        return net.genome_eval_events(model, self.va_win, self.va_lab,
+                                      self.va_fidx, self.device, k or self.k)
 
     def train_once(self, g: Genome, epochs: int, seed: int):
         """Jeden trening (fresh init) + ocena. Zwraca (metrics, loss0, lossN)."""
         import net
-
         torch = self.torch
-        torch.manual_seed(seed)
-        self.np.random.seed(seed)
+        torch.manual_seed(seed); self.np.random.seed(seed)
         model = net.GenomeNet(g, hw=None, quantize=False).to(self.device)
         opt = torch.optim.Adam(model.parameters(), lr=self.lr)
-        dl_tr = self.DataLoader(
-            self.tr_ds,
-            batch_size=self.bs,
-            sampler=self.make_sampler(self.tr_lab, self.num_samples),
-        )
+        dl_tr = self.DataLoader(self.tr_ds, batch_size=self.bs,
+                                sampler=self.make_sampler(self.tr_lab, self.num_samples))
         loss0 = lossN = 0.0
         for ep in range(epochs):
-            model.train()
-            model.set_mismatch(True)
+            model.train(); model.set_mismatch(True)
             ls, nb = 0.0, 0
             for x, y in dl_tr:
                 x, y = x.to(self.device), y.to(self.device)
                 loss, _ = net.genome_loss(model(x), y, self.pos_weight, k_ref=self.k)
-                opt.zero_grad()
-                loss.backward()
+                opt.zero_grad(); loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 opt.step()
-                ls += loss.item()
-                nb += 1
+                ls += loss.item(); nb += 1
             model.set_mismatch(False)
             mean = ls / max(nb, 1)
             if ep == 0:
@@ -213,8 +174,7 @@ class RealFitness:
         aps, f1s, l0, lN = [], [], 0.0, 0.0
         for si in range(self.fitness_seeds):
             m, loss0, lossN = self.train_once(g, epochs, self.seed + si)
-            aps.append(m["ap"])
-            f1s.append(m["clip_f1"])
+            aps.append(m["ap"]); f1s.append(m["clip_f1"])
             l0, lN = loss0, lossN
         ap = sum(aps) / len(aps)
         f1 = sum(f1s) / len(f1s)
@@ -222,11 +182,9 @@ class RealFitness:
         # kara parsymonii: drobny minus za okablowanie (fan-out) i za liczbę
         # użytych kanałów encodera — rozstrzyga remisy na korzyść MNIEJSZEGO
         # zestawu wejść (selekcja cech), nie przebijając realnych różnic jakości.
-        score = (
-            (ap if self.metric == "ap" else f1)
-            - self.fanout_penalty * _avg_fanout(g)
+        score = (ap if self.metric == "ap" else f1) \
+            - self.fanout_penalty * _avg_fanout(g) \
             - self.feature_penalty * n_feat
-        )
         # GUARD anty-miraż: sieć, która przy progu k nic nie wykrywa (clipF1==0),
         # jest bezużyteczna — AP potrafi wtedy fałszywie wyjść 1.0 przy prawie
         # milczącym neuronie. Takie rozwiązanie dostaje fitness ~0.
@@ -235,13 +193,10 @@ class RealFitness:
             score = 0.0
         if self.verbose:
             std = (sum((a - ap) ** 2 for a in aps) / len(aps)) ** 0.5
-            print(
-                f"    [eval] {g.layer_sizes()} loss {l0:.3f}->{lN:.3f}  "
-                f"AP {ap:.3f}±{std:.3f}  clipF1 {f1:.3f}  cechy {n_feat}"
-                f"{'  [MARTWY->0]' if dead else ''} (ep{epochs}, "
-                f"seedy{self.fitness_seeds})",
-                flush=True,
-            )
+            print(f"    [eval] {g.layer_sizes()} loss {l0:.3f}->{lN:.3f}  "
+                  f"AP {ap:.3f}±{std:.3f}  clipF1 {f1:.3f}  cechy {n_feat}"
+                  f"{'  [MARTWY->0]' if dead else ''} (ep{epochs}, "
+                  f"seedy{self.fitness_seeds})", flush=True)
         return score
 
 
@@ -249,7 +204,6 @@ def _load_channel_names(data_dir: str, n_channels: int):
     """Nazwy kanałów: sidecar channels.json obok danych (zbiory rozszerzone),
     inaczej pipeline CHANNELS (gdy pasuje liczebnością), inaczej ch{i}."""
     import json
-
     cands = [data_dir]
     if data_dir:
         cands.append(os.path.dirname(data_dir.rstrip("/\\")))
@@ -267,7 +221,6 @@ def _load_channel_names(data_dir: str, n_channels: int):
                 pass
     try:
         from snn_hw_pipeline import CHANNELS as PIPE_CHANNELS
-
         if len(PIPE_CHANNELS) == n_channels:
             return list(PIPE_CHANNELS)
     except Exception:

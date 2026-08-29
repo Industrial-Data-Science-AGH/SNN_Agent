@@ -40,20 +40,20 @@ VERSIONS_DIR = "dataset/versions"
 # SCHEMAT MANIFESTU
 # =============================================================================
 MANIFEST_COLUMNS: List[str] = [
-    "id",  # stabilne ID, wyliczone ze źródła i ścieżki (patrz make_id)
-    "filepath",  # ścieżka względna do repo_root
-    "sha256",  # suma kontrolna zawartości pliku
-    "bytes",  # rozmiar w bajtach
-    "label",  # positive | negative
-    "kind",  # positive | stationary | loud_event | speech | animal
-    "source",  # esc50 | datasec | voice
-    "subclass",  # oryginalna klasa w źródle
-    "group_id",  # NAGRANIE ŹRÓDŁOWE — jednostka podziału
-    "split",  # train | val | test
+    "id",             # stabilne ID, wyliczone ze źródła i ścieżki (patrz make_id)
+    "filepath",       # ścieżka względna do repo_root
+    "sha256",         # suma kontrolna zawartości pliku
+    "bytes",          # rozmiar w bajtach
+    "label",          # positive | negative
+    "kind",           # positive | stationary | loud_event | speech | animal
+    "source",         # esc50 | datasec | voice
+    "subclass",       # oryginalna klasa w źródle
+    "group_id",       # NAGRANIE ŹRÓDŁOWE — jednostka podziału
+    "split",          # train | val | test
     "duration_s",
     "sample_rate",
     "channels",
-    "subtype",  # format próbki wg soundfile, np. PCM_16
+    "subtype",        # format próbki wg soundfile, np. PCM_16
     "license",
 ]
 
@@ -131,7 +131,7 @@ def group_id_for(source: str, path: Path) -> str:
         # Końcówki `-NNN` NIE obcinamy: to numer nagrania w klasie, a nie numer
         # fragmentu jednego nagrania. Obcięcie zlepiłoby 109 niezależnych nagrań
         # szkła w jedną grupę i zmarnowało cały zbiór.
-        m = _FREESOUND_RE.search(name)  # zapas, gdyby przyszła wersja użyła Freesound
+        m = _FREESOUND_RE.search(name)   # zapas, gdyby przyszła wersja użyła Freesound
         return f"datasec_fs{m.group(1)}" if m else f"datasec_{stem}"
 
     m = _FREESOUND_RE.search(name)
@@ -151,39 +151,16 @@ def group_id_for(source: str, path: Path) -> str:
 
 ESC50_KIND: Dict[int, str] = {}
 for _t in (10, 11, 12, 13, 16, 17, 18, 28, 35, 36, 38, 7):
-    ESC50_KIND[_t] = "stationary"  # deszcz, fale, ogień, świerszcze, wiatr,
-    # lanie wody, spłuczka, chrapanie, pralka,
-    # odkurzacz, tykanie zegara, owady
-for _t in (
-    19,
-    22,
-    25,
-    30,
-    31,
-    32,
-    33,
-    34,
-    37,
-    40,
-    41,
-    42,
-    43,
-    44,
-    45,
-    46,
-    47,
-    48,
-    49,
-    15,
-    27,
-    29,
-):
-    ESC50_KIND[_t] = "loud_event"  # burza, klaskanie, kroki, pukanie, myszka,
-    # klawiatura, drzwi, puszka, budzik, śmigłowiec,
-    # piła, syrena, klakson, silnik, pociąg, dzwony,
-    # samolot, fajerwerki, piła ręczna, krople, mycie zębów, picie
+    ESC50_KIND[_t] = "stationary"       # deszcz, fale, ogień, świerszcze, wiatr,
+                                        # lanie wody, spłuczka, chrapanie, pralka,
+                                        # odkurzacz, tykanie zegara, owady
+for _t in (19, 22, 25, 30, 31, 32, 33, 34, 37, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 15, 27, 29):
+    ESC50_KIND[_t] = "loud_event"       # burza, klaskanie, kroki, pukanie, myszka,
+                                        # klawiatura, drzwi, puszka, budzik, śmigłowiec,
+                                        # piła, syrena, klakson, silnik, pociąg, dzwony,
+                                        # samolot, fajerwerki, piła ręczna, krople, mycie zębów, picie
 for _t in (20, 21, 23, 24, 26):
-    ESC50_KIND[_t] = "speech"  # płacz, kichanie, oddech, kaszel, śmiech
+    ESC50_KIND[_t] = "speech"           # płacz, kichanie, oddech, kaszel, śmiech
 for _t in (0, 1, 2, 3, 4, 5, 6, 8, 9, 14):
     ESC50_KIND[_t] = "animal"
 
@@ -225,7 +202,6 @@ VOICE_KIND: Dict[str, str] = {
 # =============================================================================
 # NARZĘDZIA
 # =============================================================================
-
 
 def make_id(source: str, relpath: str) -> str:
     """Stabilne ID rekordu.

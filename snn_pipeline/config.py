@@ -17,7 +17,6 @@ from pathlib import Path
 # =============================================================================
 RANDOM_SEED: int = 42
 
-
 def set_global_seed(seed: int = RANDOM_SEED) -> None:
     """Ustawia seed dla wszystkich generatorów losowych.
 
@@ -32,42 +31,17 @@ def set_global_seed(seed: int = RANDOM_SEED) -> None:
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
-
 # =============================================================================
 # SERIA E24 — wartości rezystorów (24 wartości na dekadę)
 # =============================================================================
 # Bazowe wartości E24 (mnożniki w jednej dekadzie, np. 1.0 = 10Ω, 100Ω, 1kΩ...)
 E24_BASE: List[float] = [
-    1.0,
-    1.1,
-    1.2,
-    1.3,
-    1.5,
-    1.6,
-    1.8,
-    2.0,
-    2.2,
-    2.4,
-    2.7,
-    3.0,
-    3.3,
-    3.6,
-    3.9,
-    4.3,
-    4.7,
-    5.1,
-    5.6,
-    6.2,
-    6.8,
-    7.5,
-    8.2,
-    9.1,
+    1.0, 1.1, 1.2, 1.3, 1.5, 1.6, 1.8, 2.0,
+    2.2, 2.4, 2.7, 3.0, 3.3, 3.6, 3.9, 4.3,
+    4.7, 5.1, 5.6, 6.2, 6.8, 7.5, 8.2, 9.1
 ]
 
-
-def generate_e24_full_range(
-    r_min: float = 10.0, r_max: float = 10_000_000.0
-) -> np.ndarray:
+def generate_e24_full_range(r_min: float = 10.0, r_max: float = 10_000_000.0) -> np.ndarray:
     """Generuje pełną listę wartości E24 w podanym zakresie oporności.
 
     Seria E24 ma 24 wartości na dekadę. Funkcja generuje wartości od r_min do r_max
@@ -87,25 +61,26 @@ def generate_e24_full_range(
     values = []
     # Dekady: 10^1, 10^2, ..., 10^7
     for decade_exp in range(1, 8):
-        multiplier = 10**decade_exp
+        multiplier = 10 ** decade_exp
         for base in E24_BASE:
             r = base * multiplier
             if r_min <= r <= r_max:
                 values.append(r)
     return np.sort(np.array(values, dtype=np.float64))
 
-
 # Pełna lista E24 w zakresie synaps PCB (10kΩ – 470kΩ)
 E24_SYNAPSE_RANGE: np.ndarray = generate_e24_full_range(10_000.0, 470_000.0)
 
 # Pełna lista E24 znormalizowana do [0, 1] (do użytku w treningu)
 E24_FULL: np.ndarray = generate_e24_full_range(10.0, 10_000_000.0)
-E24_NORMALIZED: np.ndarray = np.sort(
-    np.unique(np.array([b / 10.0 for b in E24_BASE], dtype=np.float64))
-)  # Wartości 0.10 ... 0.91 — bazowe mnożniki znormalizowane
+E24_NORMALIZED: np.ndarray = np.sort(np.unique(
+    np.array([b / 10.0 for b in E24_BASE], dtype=np.float64)
+))  # Wartości 0.10 ... 0.91 — bazowe mnożniki znormalizowane
 
 # Tensor PyTorch do użytku w forward pass (zaokrąglanie)
-E24_NORMALIZED_TENSOR: torch.Tensor = torch.tensor(E24_NORMALIZED, dtype=torch.float32)
+E24_NORMALIZED_TENSOR: torch.Tensor = torch.tensor(
+    E24_NORMALIZED, dtype=torch.float32
+)
 
 
 # =============================================================================
@@ -128,18 +103,17 @@ class HardwareConfig:
         max_synapse_current_ua: Maksymalny prąd synapsy (µA).
         mcp4151_steps: Liczba kroków potencjometru cyfrowego (0-255).
     """
-
-    r_in: float = 100_000.0  # 100kΩ
-    r_syn_min: float = 10_000.0  # 10kΩ
-    r_syn_max: float = 470_000.0  # 470kΩ
-    v_th_step: float = 0.05  # 50mV krok
-    v_th_min: float = 0.3  # V
-    v_th_max: float = 1.5  # V
-    vcc: float = 5.0  # V
+    r_in: float = 100_000.0          # 100kΩ
+    r_syn_min: float = 10_000.0      # 10kΩ
+    r_syn_max: float = 470_000.0     # 470kΩ
+    v_th_step: float = 0.05          # 50mV krok
+    v_th_min: float = 0.3            # V
+    v_th_max: float = 1.5            # V
+    vcc: float = 5.0                 # V
     resistor_tolerance: float = 0.01  # ±1%
-    thermal_drift_mv: float = 5.0  # ±5mV
+    thermal_drift_mv: float = 5.0    # ±5mV
     max_synapse_current_ua: float = 100.0
-    mcp4151_steps: int = 256  # 0-255
+    mcp4151_steps: int = 256         # 0-255
 
 
 # =============================================================================
@@ -157,13 +131,10 @@ class LIFConfig:
         refractory_ms: Okres refrakcji (milisekundy).
         beta: Współczynnik decay membrany = exp(-dt/tau_m).
     """
-
-    tau_m: float = 0.020  # 20ms — kompromis między 10-100ms
-    v_th_default: float = (
-        0.65  # ~1.2V w normalizacji przy VCC=5V → 0.24, ale spec mówi 0.65
-    )
+    tau_m: float = 0.020             # 20ms — kompromis między 10-100ms
+    v_th_default: float = 0.65       # ~1.2V w normalizacji przy VCC=5V → 0.24, ale spec mówi 0.65
     v_rest: float = 0.0
-    dt: float = 0.001  # 1ms krok
+    dt: float = 0.001               # 1ms krok
     refractory_ms: float = 2.0
 
     @property
@@ -186,13 +157,11 @@ class NeuronParams:
         description: Opis roli neuronu.
         qat_bits: Precyzja kwantyzacji (bity) dla QAT.
     """
-
     name: str
     w_in: List[float]
     v_th: float
     description: str
     qat_bits: int = 5
-
 
 # Baseline parametry z symulacji (branch sim_train)
 BASELINE_NEURONS = {
@@ -246,7 +215,6 @@ class AudioConfig:
         ttfs_window_ms: Okno TTFS (ms).
         spike_duration_s: Czas trwania pojedynczego spike'a (sekundy).
     """
-
     sample_rate: int = 22050
     bandpass_low: float = 500.0
     bandpass_high: float = 8000.0
@@ -285,7 +253,6 @@ class TrainConfig:
         v_th_sweep_step: Krok sweep progu.
         calibration_samples: Liczba próbek kalibracyjnych (QAT).
     """
-
     hat_epochs: int = 50
     qat_epochs: int = 20
     batch_size: int = 32
@@ -295,9 +262,9 @@ class TrainConfig:
     recall_target: float = 0.85
     temp_start: float = 5.0
     temp_end: float = 0.1
-    mismatch_weight_pct: float = 1.0  # ±1%
-    mismatch_vth_mv: float = 5.0  # ±5mV
-    thermal_drift_pct: float = 2.0  # ±2% dla ewaluacji
+    mismatch_weight_pct: float = 1.0    # ±1%
+    mismatch_vth_mv: float = 5.0        # ±5mV
+    thermal_drift_pct: float = 2.0      # ±2% dla ewaluacji
     thermal_drift_runs: int = 100
     v_th_sweep_min: float = 0.3
     v_th_sweep_max: float = 1.5
@@ -318,17 +285,10 @@ class PathConfig:
         output_dir: Katalog wyjściowy (wagi, wykresy, raporty).
         checkpoint_dir: Katalog z checkpointami modelu.
     """
-
     project_root: Path = field(default_factory=lambda: Path(__file__).parent.parent)
-    data_dir: Path = field(
-        default_factory=lambda: Path(__file__).parent.parent / "data"
-    )
-    output_dir: Path = field(
-        default_factory=lambda: Path(__file__).parent.parent / "output"
-    )
-    checkpoint_dir: Path = field(
-        default_factory=lambda: Path(__file__).parent.parent / "checkpoints"
-    )
+    data_dir: Path = field(default_factory=lambda: Path(__file__).parent.parent / "data")
+    output_dir: Path = field(default_factory=lambda: Path(__file__).parent.parent / "output")
+    checkpoint_dir: Path = field(default_factory=lambda: Path(__file__).parent.parent / "checkpoints")
 
     def __post_init__(self) -> None:
         """Tworzy katalogi jeśli nie istnieją."""

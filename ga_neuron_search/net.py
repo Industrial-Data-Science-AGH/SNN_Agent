@@ -10,7 +10,6 @@ Ocena (#1): NIE zwijamy okna do vmax. Decyzja i metryki idą po LICZBIE SPIKÓW
 neuronu decyzyjnego D w czasie ("k spików w oknie") i są agregowane do poziomu
 KLIPU — tak jak działa demo na sprzęcie (evaluate_events w pipeline).
 """
-
 from __future__ import annotations
 
 import sys
@@ -46,10 +45,9 @@ class GenomeNet(nn.Module):
         prev = genome.layer_sizes()[0]
         for k, layer in enumerate(genome.layers):
             n_post = len(layer)
-            names = [f"L{k + 1}n{i}" for i in range(n_post)]
+            names = [f"L{k+1}n{i}" for i in range(n_post)]
             self.layers_mod.append(
-                LuiLayer(prev, n_post, layer, names, hw=hw, quantize=quantize)
-            )
+                LuiLayer(prev, n_post, layer, names, hw=hw, quantize=quantize))
             prev = n_post
 
     def forward(self, x):
@@ -79,10 +77,8 @@ class GenomeNet(nn.Module):
 
 # ============================================================ strata (czasowa)
 
-
-def genome_loss(
-    out, y, pos_weight, rate_lo=0.02, rate_hi=0.30, margin_w=0.5, spk_w=0.5, k_ref=1.0
-):
+def genome_loss(out, y, pos_weight, rate_lo=0.02, rate_hi=0.30, margin_w=0.5,
+                spk_w=0.5, k_ref=1.0):
     """Strata z członem CZASOWYM.
 
     Składniki:
@@ -97,33 +93,27 @@ def genome_loss(
     vmax = out["vo"].max(dim=1).values
     logit = 6.0 * (vmax - V_TH)
     bce = F.binary_cross_entropy_with_logits(
-        logit, y, pos_weight=torch.tensor(pos_weight, device=y.device)
-    )
+        logit, y, pos_weight=torch.tensor(pos_weight, device=y.device))
 
     pos = (y > 0.5).float()
     neg = 1.0 - pos
     margin = ((vmax - 0.80).clamp(min=0) ** 2 * neg).sum() / neg.sum().clamp(min=1)
 
     nspk = out["so"].sum(dim=(1, 2)).clamp(max=5.0)  # liczba spików D w oknie [B]
-    spk = ((k_ref - nspk).clamp(min=0) * pos).sum() / pos.sum().clamp(min=1) + (
-        nspk * neg
-    ).sum() / neg.sum().clamp(min=1)
+    spk = ((k_ref - nspk).clamp(min=0) * pos).sum() / pos.sum().clamp(min=1) \
+        + (nspk * neg).sum() / neg.sum().clamp(min=1)
 
     reg = 0.0
     for sh in out["hidden"]:
         r = sh.mean(dim=(0, 1))
-        reg = (
-            reg
-            + ((rate_lo - r).clamp(min=0) ** 2).sum()
-            + ((r - rate_hi).clamp(min=0) ** 2).sum()
-        )
+        reg = reg + ((rate_lo - r).clamp(min=0) ** 2).sum() \
+                  + ((r - rate_hi).clamp(min=0) ** 2).sum()
 
     total = bce + margin_w * margin + spk_w * spk + 0.2 * reg
     return total, logit
 
 
 # ============================================================ ocena zdarzeniowa
-
 
 def _average_precision(y_true, score) -> float:
     """AP (pole pod krzywą precision-recall) — bezprogowa, odporna na niebalans."""
@@ -153,8 +143,8 @@ def genome_eval_events(model, win, lab, fidx, dev, k=1, bs=256):
     n = len(lab)
     nspk = np.zeros(n, dtype=np.float32)
     for lo in range(0, n, bs):
-        x = torch.from_numpy(win[lo : lo + bs]).float().to(dev)
-        nspk[lo : lo + x.shape[0]] = model(x)["so"].sum(dim=(1, 2)).cpu().numpy()
+        x = torch.from_numpy(win[lo:lo + bs]).float().to(dev)
+        nspk[lo:lo + x.shape[0]] = model(x)["so"].sum(dim=(1, 2)).cpu().numpy()
 
     files = np.unique(fidx)
     f_lab = np.array([lab[fidx == f].max() for f in files])
@@ -169,13 +159,6 @@ def genome_eval_events(model, win, lab, fidx, dev, k=1, bs=256):
     f1 = 2 * pre * rec / max(pre + rec, 1e-9)
     fa = fp / max(float((f_lab == 0).sum()), 1.0)
     ap = _average_precision(f_lab, f_spk)
-    return {
-        "clip_f1": f1,
-        "clip_recall": rec,
-        "clip_precision": pre,
-        "clip_fa_rate": fa,
-        "ap": ap,
-        "k": int(k),
-        "n_pos": int((f_lab == 1).sum()),
-        "n_neg": int((f_lab == 0).sum()),
-    }
+    return {"clip_f1": f1, "clip_recall": rec, "clip_precision": pre,
+            "clip_fa_rate": fa, "ap": ap, "k": int(k),
+            "n_pos": int((f_lab == 1).sum()), "n_neg": int((f_lab == 0).sum())}

@@ -1,0 +1,25 @@
+{
+  "version": "v2.0.0",
+  "created_utc": "2026-08-27T17:46:20+00:00",
+  "git_commit": "2a5a5e2f48e5d45e3f935a01b896cac20dc6bb8f",
+  "split": {
+    "val_frac": 0.15,
+    "test_frac": 0.15,
+    "seed": 42,
+    "grouped_by": "group_id, osobno per source",
+    "voice_official_split": true,
+    "voice_split_note": "VOICe: 69/69/69 z dataset/clean/source (33/33/33), pozostałe źródła wg val_frac/test_frac"
+  },
+  "counts": {
+    "records": 10853,
+    "groups": 4878,
+    "positive": 4593,
+    "hours": 20.799
+  },
+  "sources": {
+    "datasec": 3226,
+    "esc50": 2000,
+    "voice": 5627
+  },
+  "manifest_sha256": "b3dcc1101a6522ec567ff210e5a943f7aa606d4dc5b01e3e67de73ed70227cd3"
+}

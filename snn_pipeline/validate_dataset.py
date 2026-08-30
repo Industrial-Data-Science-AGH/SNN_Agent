@@ -59,6 +59,7 @@ from dataset_contract import (
 )
 
 MIN_POSITIVE_GROUPS_TEST = 12
+MIN_EFFECTIVE_GROUPS_TEST = 12   # min. grup niosących 90% pozytywów testu (K10, koncentracja)
 BALANCE_RANGE = (0.01, 0.60)     # dopuszczalny udział pozytywów w splicie
 
 
@@ -92,6 +93,8 @@ def main() -> None:
     ap.add_argument("--quick", action="store_true",
                     help="pomiń liczenie sha256 i czytanie nagłówków audio")
     ap.add_argument("--min-positive-groups-test", type=int, default=MIN_POSITIVE_GROUPS_TEST)
+    ap.add_argument("--min-effective-groups-test", type=int, default=MIN_EFFECTIVE_GROUPS_TEST,
+                    help="min. grup pokrywających 90%% pozytywów testu (kontrola koncentracji, K10)")
     args = ap.parse_args()
 
     if not is_valid_version(args.version):
@@ -162,6 +165,34 @@ def main() -> None:
     else:
         r.ok("K7", f"grupy pozytywne: train={len(pos_groups['train'])} "
                    f"val={len(pos_groups['val'])} test={n_test}")
+
+    # ------------------------------------------------- K10 KONCENTRACJA grup poz.
+    # Sama LICZBA grup (K7) przechodzi trywialnie, gdy garstka grup niesie prawie
+    # wszystkie pozytywy (np. 32/59 grup = 94% pozytywów). Liczymy EFEKTYWNĄ
+    # różnorodność: ile grup potrzeba, by pokryć 90% pozytywnych KLIPÓW testu.
+    pos_test_counts: Dict[str, int] = defaultdict(int)
+    for row in rows:
+        if row["split"] == "test" and row["label"] == "positive":
+            pos_test_counts[row["group_id"]] += 1
+    total_pos = sum(pos_test_counts.values())
+    if total_pos == 0:
+        r.error("K10", "brak pozytywnych klipów w teście — nie ma czego mierzyć")
+    else:
+        counts = sorted(pos_test_counts.values(), reverse=True)
+        cum, n_eff = 0, 0
+        for c in counts:
+            cum += c; n_eff += 1
+            if cum >= 0.90 * total_pos:
+                break
+        top_share = 100.0 * counts[0] / total_pos
+        if n_eff < args.min_effective_groups_test:
+            r.error("K10", f"koncentracja: 90% pozytywów testu niesie tylko {n_eff} "
+                           f"grup (min {args.min_effective_groups_test}; z "
+                           f"{len(pos_test_counts)} wszystkich), największa {top_share:.0f}% "
+                           f"— metryka rozstrzygana przez garstkę nagrań")
+        else:
+            r.ok("K10", f"rozproszenie grup OK: 90% pozytywów w {n_eff}/"
+                        f"{len(pos_test_counts)} grupach, największa {top_share:.0f}%")
 
     # k8 etykieta vs katalog
 

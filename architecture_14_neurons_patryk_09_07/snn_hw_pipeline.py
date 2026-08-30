@@ -643,6 +643,25 @@ def train(args):
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, args.epochs)
 
+    # selekcja checkpointu po recall @ budżet FA/h (metryka decyzyjna wg
+    # DATASET_CONTRACT). Wymaga katalogu val z files.csv (kind/group_id). Liczona
+    # tylko w QAT (checkpoint idzie na sprzęt), w HAT zostaje tanie F1.
+    stream_mod, stream_clips = None, None
+    if getattr(args, "select_metric", "f1") == "recall_fa" and args.val_data:
+        try:
+            _pipe = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                 "snn_pipeline")
+            if _pipe not in sys.path:
+                sys.path.insert(0, _pipe)
+            import stream_eval_torch as stream_mod
+            from stream_eval import primary_recall as _primary_recall
+            stream_clips = stream_mod.load_clip_spikes(args.val_data, CH_IN)
+            print(f"[select] checkpoint po recall @ {args.stream_budget:g} FA/h "
+                  f"(val {len(stream_clips)} klipów, QAT)", flush=True)
+        except Exception as e:
+            print(f"[select] recall_fa niedostępne ({e}) -> selekcja po F1", flush=True)
+            stream_mod = None
+
     hat_epochs = 0 if args.no_quant else int(round(args.hat_frac * args.epochs))
     freeze_ep = int(0.8 * args.epochs)
     print(f"[plan] HAT (pełna precyzja + szum sprzętowy): epoki 0..{hat_epochs-1}, "
@@ -688,12 +707,24 @@ def train(args):
         sched.step()
 
         m = evaluate(model, dl_va, dev)
-        # checkpoint po F1: recall+0.3*precision łapał się na zdegenerowanych
-        # wczesnych epokach ("zgłaszaj wszystko"). F1 karze to wprost.
-        if m["f1"] > best:
-            best, since_best, tag = m["f1"], 0, " *"
+        # metryka selekcji: w QAT recall @ budżet FA/h (decyzyjna wg
+        # DATASET_CONTRACT), w HAT/gdy brak strumienia — ramkowe F1 (tanie).
+        use_stream = stream_mod is not None and phase == "QAT"
+        sel_extra = ""
+        if use_stream:
+            rep = stream_mod.evaluate_stream(model, args.val_data, CH_IN, dev,
+                                             budgets=(args.stream_budget,), n_boot=0,
+                                             clips=stream_clips)
+            sel = _primary_recall(rep, args.stream_budget)
+            m["recall_fa"] = sel
+            sel_extra = f" recall@{args.stream_budget:g}FA/h {sel:.3f}"
+        else:
+            sel = m["f1"]
+        if sel > best:
+            best, since_best, tag = sel, 0, " *"
             torch.save({"model": model.state_dict(), "epoch": ep, "phase": phase,
-                        "metrics": m, "wide": args.wide}, args.ckpt)
+                        "metrics": m, "wide": args.wide,
+                        "select_metric": "recall_fa" if use_stream else "f1"}, args.ckpt)
         else:
             since_best += 1
             tag = ""
@@ -702,7 +733,8 @@ def train(args):
         log_f.write(f"{ep},{phase},{loss_sum/max(n_b,1):.4f},{m['recall']:.4f},"
                     f"{m['precision']:.4f},{m['f1']:.4f},{lr_now:.5f},{sec:.1f}\n")
         print(f"ep {ep:3d} [{phase}] loss {loss_sum/max(n_b,1):.4f}  rec {m['recall']:.3f} "
-              f"prec {m['precision']:.3f} f1 {m['f1']:.3f}  {sec:.0f}s{tag}", flush=True)
+              f"prec {m['precision']:.3f} f1 {m['f1']:.3f}{sel_extra}  {sec:.0f}s{tag}",
+              flush=True)
 
         # early stopping liczony osobno w każdej fazie (reset przy starcie QAT);
         # w HAT nie zatrzymuje treningu, tylko skraca fazę
@@ -756,6 +788,27 @@ def train(args):
         ev_te = evaluate_events(model, ds_te, np.arange(len(ds_te)), dev)
         extra["test_metrics"] = {k: round(v, 4) for k, v in te.items()}
         extra["test_events"] = ev_te
+
+    # === FINALNY raport metryki DECYZYJNEJ: recall @ 1 i 6 FA/h, per kind, z CI
+    #     bootstrap po group_id (wg docs/DATASET_CONTRACT). ZAPISYWANY do configu —
+    #     dotąd FA/h liczył tylko eval_stream i nigdzie nie trafiał. ===
+    try:
+        _pipe = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                             "snn_pipeline")
+        if _pipe not in sys.path:
+            sys.path.insert(0, _pipe)
+        import stream_eval_torch as _se
+        from stream_eval import format_report as _fmt, report_to_dict as _to_dict
+        for _name, _dir in (("val", args.val_data), ("test", args.test_data)):
+            if not _dir:
+                continue
+            _rep = _se.evaluate_stream(model, _dir, CH_IN, dev, budgets=(1.0, 6.0),
+                                       n_boot=500)
+            print(f"[recall @ FA/h — {_name} (per kind, CI po group_id)]")
+            print(_fmt(_rep), flush=True)
+            extra[f"{_name}_stream"] = _to_dict(_rep)
+    except Exception as e:
+        print(f"[recall @ FA/h] pominięto ({e})", flush=True)
 
     export_config(model, args.out, extra=extra)
 
@@ -831,6 +884,12 @@ def main():
     t.add_argument("--wide", action="store_true",
                    help="wariant szeroki 7→8→3→1 (H=8 płytek, do wykorzystania 15 płytek)")
     t.add_argument("--no-quant", action="store_true")
+    t.add_argument("--select-metric", choices=["f1", "recall_fa"], default="recall_fa",
+                   help="metryka selekcji checkpointu: recall_fa (recall @ budzet FA/h, "
+                        "decyzyjna wg DATASET_CONTRACT; wymaga --val-data z files.csv) "
+                        "lub f1 (ramkowe, stare)")
+    t.add_argument("--stream-budget", type=float, default=6.0,
+                   help="budzet FA/h dla select-metric=recall_fa (domyslnie 6/h)")
     t.set_defaults(func=train)
 
     c = sub.add_parser("compare")

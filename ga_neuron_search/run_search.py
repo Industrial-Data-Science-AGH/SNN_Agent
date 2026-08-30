@@ -45,6 +45,8 @@ def main():
     # tryb real:
     ap.add_argument("--data", default=None)
     ap.add_argument("--val-data", default=None)
+    ap.add_argument("--test-data", default=None,
+                    help="nietkniety split testowy — raport koncowy zwyciezcy (recall @ FA/h)")
     ap.add_argument("--arch-dir", default="../architecture_14_neurons_patryk_09_07")
     ap.add_argument("--limit", type=int, default=None,
                     help="max plikow/klase; wartosc != cache zmusza przebudowe "
@@ -52,8 +54,11 @@ def main():
     ap.add_argument("--epochs", type=int, default=4, help="epoki proxy-treningu w GA")
     ap.add_argument("--num-samples", type=int, default=6000)
     ap.add_argument("--k", type=int, default=1, help="dekoder: >=k spikow D = alarm (k=1 spojnie)")
-    ap.add_argument("--metric", choices=["ap", "clip_f1"], default="clip_f1",
-                    help="metryka fitness: clip_f1 (spojna z dekoderem k) lub ap (bezprogowa)")
+    ap.add_argument("--metric", choices=["ap", "clip_f1", "recall_fa"], default="clip_f1",
+                    help="metryka fitness: clip_f1 | ap | recall_fa (recall @ budzet FA/h, "
+                         "decyzyjna metryka z DATASET_CONTRACT)")
+    ap.add_argument("--stream-budget", type=float, default=6.0,
+                    help="budzet FA/h dla metric=recall_fa (domyslnie 6/h)")
     ap.add_argument("--fitness-seeds", type=int, default=1,
                     help="usrednij fitness po tylu seedach (mniejsza wariancja)")
     ap.add_argument("--feature-penalty", type=float, default=0.005,
@@ -76,11 +81,13 @@ def main():
             ap.error("--mode real wymaga --data")
         from fitness import RealFitness
         rf = RealFitness(arch_dir=args.arch_dir, data=args.data,
-                         val_data=args.val_data, limit=args.limit,
+                         val_data=args.val_data, test_data=args.test_data,
+                         limit=args.limit,
                          epochs=args.epochs, num_samples=args.num_samples,
                          k=args.k, metric=args.metric, fitness_seeds=args.fitness_seeds,
                          feature_penalty=args.feature_penalty,
                          channels_head=args.channels_head,
+                         stream_budget=args.stream_budget,
                          verbose=not args.quiet, seed=args.seed)
         fitness = rf
         # pula kanałów encodera = to, co jest w danych (nie zaszyte 7) — GA wybiera
@@ -142,6 +149,25 @@ def main():
           f"kanały={','.join(chosen.get('features_used', []))})")
     print(f"zapisano: {js} , {csv}")
 
+    # === RAPORT ZWYCIEZCY NA NIETKNIETYM TEST (fix trzeciego splitu) ===
+    # Selekcja szla na VAL; nagłówkowy wynik liczymy na TEST, którego nikt nie
+    # dotykał. Bez --train-winner robimy szybki proxy-trening zwyciezcy.
+    test_ready = rf is not None and args.test_data
+    if test_ready and not args.train_winner:
+        from genome import Genome
+        from stream_eval import format_report, primary_recall, report_to_dict
+        print(f"\n### ZWYCIEZCA N={chosen['n_total']} NA TEST "
+              f"(nietkniety split, proxy-trening) ###")
+        rep = rf.evaluate_on_test(Genome.from_dict(chosen["topology"]), epochs=args.epochs)
+        print(format_report(rep))
+        chosen["test_recall_at_budget"] = round(primary_recall(rep, args.stream_budget), 4)
+        chosen["test_budget_fa_h"] = args.stream_budget
+        chosen["test_stream"] = report_to_dict(rep)   # recall @1 i @6 FA/h, per kind, CI
+        with open(js, "w", encoding="utf-8") as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
+        print(f"[TEST] recall @ {args.stream_budget:g} FA/h = "
+              f"{chosen['test_recall_at_budget']:.3f}  <- nagłówkowy wynik (nietkniety split)")
+
     if args.train_winner:
         if args.mode != "real":
             print("\n[train-winner] pominieto: wymaga --mode real.")
@@ -162,6 +188,17 @@ def main():
                                  extra={"winner_val_metrics": m, "n_total": n,
                                         "sweep_fitness": w["fitness"]})
             print(f"[train-winner] N={n}: clip-F1={m.get('clip_f1', 0):.3f} -> {cfg_path}")
+            # nagłówkowy wynik na NIETKNIETYM tescie (z pełnego modelu, nie proxy)
+            if test_ready:
+                from stream_eval import format_report, primary_recall, report_to_dict
+                rep = rf.evaluate_on_test(g, model=model)
+                print(f"### N={n} NA TEST (nietkniety split, pełny trening) ###")
+                print(format_report(rep))
+                w["test_recall_at_budget"] = round(primary_recall(rep, args.stream_budget), 4)
+                w["test_budget_fa_h"] = args.stream_budget
+                w["test_stream"] = report_to_dict(rep)
+        with open(js, "w", encoding="utf-8") as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
 
 
 if __name__ == "__main__":

@@ -77,17 +77,24 @@ class RealFitness:
     """Proxy-trening GenomeNet -> metryka zdarzeniowa jako fitness."""
 
     def __init__(self, arch_dir: str, data: str, val_data: Optional[str] = None,
+                 test_data: Optional[str] = None,
                  limit: Optional[int] = None, epochs: int = 4, T: int = 200,
                  stride: int = 50, bs: int = 128, lr: float = 3e-3,
                  num_samples: int = 6000, val_cap: int = 3000, k: int = 1,
                  metric: str = "clip_f1", fitness_seeds: int = 1,
                  pos_weight: float = 3.0, fanout_penalty: float = 0.01,
                  feature_penalty: float = 0.005, channels_head: Optional[int] = None,
+                 stream_budget: float = 6.0, stream_boot: int = 0,
                  verbose: bool = True, seed: int = 0, device: Optional[str] = None):
-        assert metric in ("ap", "clip_f1"), "metric: 'ap' albo 'clip_f1'"
+        assert metric in ("ap", "clip_f1", "recall_fa"), \
+            "metric: 'ap' | 'clip_f1' | 'recall_fa' (recall @ budżet FA/h)"
         arch_dir = os.path.abspath(arch_dir)
         if arch_dir not in sys.path:
             sys.path.insert(0, arch_dir)
+        # wspólny moduł metryki strumieniowej (recall @ FA/h) z snn_pipeline
+        _pipe = os.path.join(os.path.dirname(arch_dir), "snn_pipeline")
+        if os.path.isdir(_pipe) and _pipe not in sys.path:
+            sys.path.insert(0, _pipe)
         import numpy as np
         import torch
         from snn_hw_pipeline import SpikeClips, split_by_file, make_sampler
@@ -103,6 +110,15 @@ class RealFitness:
         self.metric, self.fitness_seeds = metric, fitness_seeds
         self.verbose, self.seed, self.k = verbose, seed, k
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        # metryka strumieniowa (recall @ budżet FA/h): potrzebny katalog splitu
+        # z pełnymi klipami + files.csv (kind/group_id). Klipy val cache'owane.
+        self.val_dir, self.data_dir, self.test_dir = val_data, data, test_data
+        self.channels_head = channels_head
+        self.stream_budget, self.stream_boot = stream_budget, stream_boot
+        self._stream_clips = None      # cache klipów val (fitness)
+        self._test_clips = None        # cache klipów test (raport końcowy)
+        if metric == "recall_fa" and not val_data:
+            raise ValueError("metric=recall_fa wymaga --val-data (katalog splitu z files.csv)")
 
         ds = load_clips(data, T, stride, limit, SpikeClips)
         # A/B selekcji cech: ogranicz do pierwszych `channels_head` kanałów (w
@@ -142,8 +158,45 @@ class RealFitness:
         return net.genome_eval_events(model, self.va_win, self.va_lab,
                                       self.va_fidx, self.device, k or self.k)
 
-    def train_once(self, g: Genome, epochs: int, seed: int):
-        """Jeden trening (fresh init) + ocena. Zwraca (metrics, loss0, lossN)."""
+    def stream_recall(self, model, g):
+        """Recall @ budżet FA/h na splicie val (pełne klipy, kind/group z files.csv).
+        Klipy val ładowane raz i cache'owane. Zwraca (recall, report)."""
+        import stream_eval_torch as st
+        from stream_eval import primary_recall
+        ch_in = g.layer_sizes()[0]
+        if self._stream_clips is None:
+            self._stream_clips = st.load_clip_spikes(self.val_dir, ch_in)
+        rep = st.evaluate_stream(model, self.val_dir, ch_in, self.device,
+                                 budgets=(self.stream_budget,),
+                                 n_boot=self.stream_boot, clips=self._stream_clips)
+        return primary_recall(rep, self.stream_budget), rep
+
+    def stream_report_test(self, model, g, budgets=None, n_boot: int = 500):
+        """Pełny raport strumieniowy na NIETKNIĘTYM splicie test (recall @ 1 i budżet
+        FA/h, per kind, z CI po group_id). To jest liczba do nagłówka wyniku —
+        nie ta z val, na której selekcjonowaliśmy."""
+        import stream_eval_torch as st
+        if not self.test_dir:
+            raise ValueError("brak test_data — nie ma nietkniętego splitu do raportu")
+        ch_in = g.layer_sizes()[0]
+        if self._test_clips is None:
+            self._test_clips = st.load_clip_spikes(self.test_dir, ch_in)
+        budgets = budgets or (1.0, self.stream_budget)
+        return st.evaluate_stream(model, self.test_dir, ch_in, self.device,
+                                  budgets=tuple(budgets), n_boot=n_boot,
+                                  clips=self._test_clips)
+
+    def evaluate_on_test(self, g: Genome, epochs: Optional[int] = None,
+                         model=None, n_boot: int = 500):
+        """Wytrenuj genom (fresh) i policz jego raport na teście. Gdy `model` podany
+        (np. z pełnego treningu zwycięzcy), używa go zamiast trenować od nowa."""
+        if model is None:
+            _, _, _, model = self.train_once(g, epochs or self.epochs, self.seed,
+                                             return_model=True)
+        return self.stream_report_test(model, g, n_boot=n_boot)
+
+    def train_once(self, g: Genome, epochs: int, seed: int, return_model: bool = False):
+        """Jeden trening (fresh init) + ocena. Zwraca (metrics, loss0, lossN[, model])."""
         import net
         torch = self.torch
         torch.manual_seed(seed); self.np.random.seed(seed)
@@ -167,34 +220,46 @@ class RealFitness:
             if ep == 0:
                 loss0 = mean
             lossN = mean
-        return self.eval_events(model), loss0, lossN
+        metrics = self.eval_events(model)
+        if return_model:
+            return metrics, loss0, lossN, model
+        return metrics, loss0, lossN
 
     def __call__(self, g: Genome, budget: float = 1.0) -> float:
         epochs = max(1, round(self.epochs * budget))
-        aps, f1s, l0, lN = [], [], 0.0, 0.0
+        need_model = self.metric == "recall_fa"
+        aps, f1s, recs, l0, lN = [], [], [], 0.0, 0.0
         for si in range(self.fitness_seeds):
-            m, loss0, lossN = self.train_once(g, epochs, self.seed + si)
+            out = self.train_once(g, epochs, self.seed + si, return_model=need_model)
+            if need_model:
+                m, loss0, lossN, model = out
+                rec, _ = self.stream_recall(model, g)
+                recs.append(rec)
+            else:
+                m, loss0, lossN = out
             aps.append(m["ap"]); f1s.append(m["clip_f1"])
             l0, lN = loss0, lossN
         ap = sum(aps) / len(aps)
         f1 = sum(f1s) / len(f1s)
+        rec = sum(recs) / len(recs) if recs else 0.0
         n_feat = len(g.features_used())
         # kara parsymonii: drobny minus za okablowanie (fan-out) i za liczbę
         # użytych kanałów encodera — rozstrzyga remisy na korzyść MNIEJSZEGO
         # zestawu wejść (selekcja cech), nie przebijając realnych różnic jakości.
-        score = (ap if self.metric == "ap" else f1) \
-            - self.fanout_penalty * _avg_fanout(g) \
+        base = {"ap": ap, "clip_f1": f1, "recall_fa": rec}[self.metric]
+        score = base - self.fanout_penalty * _avg_fanout(g) \
             - self.feature_penalty * n_feat
         # GUARD anty-miraż: sieć, która przy progu k nic nie wykrywa (clipF1==0),
         # jest bezużyteczna — AP potrafi wtedy fałszywie wyjść 1.0 przy prawie
-        # milczącym neuronie. Takie rozwiązanie dostaje fitness ~0.
-        dead = f1 <= 1e-9
+        # milczącym neuronie. Dla recall_fa recall==0 już jest podłogą.
+        dead = f1 <= 1e-9 and self.metric != "recall_fa"
         if dead:
             score = 0.0
         if self.verbose:
             std = (sum((a - ap) ** 2 for a in aps) / len(aps)) ** 0.5
+            extra = f"  recall@{self.stream_budget:g}FA/h {rec:.3f}" if need_model else ""
             print(f"    [eval] {g.layer_sizes()} loss {l0:.3f}->{lN:.3f}  "
-                  f"AP {ap:.3f}±{std:.3f}  clipF1 {f1:.3f}  cechy {n_feat}"
+                  f"AP {ap:.3f}±{std:.3f}  clipF1 {f1:.3f}{extra}  cechy {n_feat}"
                   f"{'  [MARTWY->0]' if dead else ''} (ep{epochs}, "
                   f"seedy{self.fitness_seeds})", flush=True)
         return score

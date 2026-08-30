@@ -20,6 +20,12 @@ import torch
 
 from snn_hw_pipeline import LuiNet, DT, V_LEAK_MAX, _inv_map, CH_IN, infer_wide
 
+# wspólny moduł metryki strumieniowej (count_alarms + recall@budżet FA/h) —
+# jedno źródło logiki dla eval_stream / pipeline / GA
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from snn_pipeline.stream_eval import (  # noqa: E402
+    count_alarms, stream_report, format_report, load_files_meta)
+
 REFRAC_FRAMES = 500   # po alarmie system i tak budzi reaktor — 5 s martwej strefy
 
 
@@ -80,17 +86,21 @@ def clip_source(path):
     return "datasec"
 
 
-def count_alarms(s, k, w, refrac=REFRAC_FRAMES):
-    """Ile razy reguła 'k spików w oknie w ramek' odpala (z refrakcją po alarmie)."""
-    times = np.where(s)[0]
-    alarms, i = 0, 0
-    while i + k - 1 < len(times):
-        if times[i + k - 1] - times[i] < w:
-            alarms += 1
-            i = int(np.searchsorted(times, times[i + k - 1] + refrac))
-        else:
-            i += 1
-    return alarms
+def _clip_meta(data_dir, clips):
+    """Dla każdego klipu dołóż (kind, group_id) z files.csv (fallback: clip_source)."""
+    try:
+        meta = load_files_meta(data_dir)
+    except FileNotFoundError:
+        meta = {}
+    kinds, groups = [], []
+    for _, y, path in clips:
+        m = meta.get(os.path.basename(path))
+        if m is not None:
+            kinds.append(m.kind); groups.append(m.group_id)
+        else:                                   # stary artefakt bez files.csv
+            kinds.append("positive" if y == 1 else clip_source(path))
+            groups.append(os.path.basename(path))
+    return np.array(kinds, dtype=object), np.array(groups, dtype=object)
 
 
 def main():
@@ -100,6 +110,10 @@ def main():
     ap.add_argument("--rules", nargs="*", default=["1:1", "2:100", "2:250", "3:250", "3:500"],
                     help="reguły k:w — k spików D w oknie w ramek (1 ramka = 10 ms)")
     ap.add_argument("--no-quant", action="store_true")
+    ap.add_argument("--budgets", type=float, nargs="+", default=[1.0, 6.0],
+                    help="budżety FA/h do raportu recall (domyślnie 1 i 6)")
+    ap.add_argument("--boot", type=int, default=500,
+                    help="liczba próbek bootstrap po group_id (0 = bez CI)")
     ap.add_argument("--d-leak-delta", type=float, default=0.0,
                     help="obniż V_leak neuronu D o tyle (twardszy próg decyzji; "
                          "fizycznie = niższy pasek LED na płytce D, zero zmian w treningu)")
@@ -151,6 +165,16 @@ def main():
             m = (labels == 0) & (sources == s)
             line += f" {100*det[m].mean():15.1f}%"
         print(line)
+
+    # --- metryka DECYZYJNA: recall @ budżet FA/h, per kind, z CI (wspólny moduł) ---
+    kinds, groups = _clip_meta(args.data, clips)
+    n_frames = np.array([len(t) for t in trains], dtype=np.int64)
+    report = stream_report(trains, labels, kinds, groups, n_frames=n_frames,
+                           dt=DT, budgets=tuple(args.budgets), refrac=REFRAC_FRAMES,
+                           n_boot=args.boot)
+    print(f"\n[recall @ budżet FA/h  (per kind, CI bootstrap po group_id, "
+          f"{len(set(groups))} grup)]")
+    print(format_report(report))
 
     return results
 

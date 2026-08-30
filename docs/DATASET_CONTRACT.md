@@ -239,6 +239,47 @@ do `hw_config.json` bez potwierdzenia na zbiorze produkcyjnym.
 
 ---
 
+## Próg akceptacji modelu (funkcja celu)
+
+Dotąd repo nie miało ŻADNEJ liczby mówiącej, kiedy model jest gotowy. Wybór
+`k=1` vs `k=2`, sweep `pos_weight` i selekcja seeda były rozstrzygane bez
+zadeklarowanej funkcji celu (patrz `PRZEWODNIK_KOMPLETNY.md` §15 — kierunek bez
+progu). Ta sekcja to ustala.
+
+**Metryka:** recall przy ustalonym budżecie fałszywych alarmów na godzinę tła
+(**FA/h**), liczona na poziomie klipu regułą dekodera „≥ k spików neuronu D w
+oknie w ramek" (to samo, co zliczy Arduino na J4). Kod: [`snn_pipeline/stream_eval.py`](../snn_pipeline/stream_eval.py)
+— jedno źródło dla `eval_stream`, treningu (selekcja checkpointu) i fitnessu GA.
+
+**Zawsze raportujemy** (na splicie `test`, nietkniętym przez trening/selekcję):
+
+- recall **@ 6 FA/h** (bramka always-on: analog zgrubnie, reaktor weryfikuje) —
+  punkt główny,
+- recall **@ 1 FA/h** (punkt ostry),
+- **rozbicie po `kind`** (stationary / loud_event / speech / animal),
+- **przedział ufności** bootstrapem po `group_id` (nie po klipie — grupy dzielą
+  akustykę; patrz „Reguła grupy").
+
+**Próg „gotowe" (wartość startowa, do rewizji z zespołem):**
+
+> **recall ≥ 0.70 przy ≤ 6 FA/h na `test`, przy czym ŻADEN `kind` nie przekracza
+> 6 FA/h.**
+
+Zasady rozstrzygania:
+
+- Punkt pracy (`k`, `w`), a więc i spór **k=1 vs k=2**, wynika z tego progu —
+  nie z porównania F1.
+- Różnica **mniejsza niż zmierzony szum** (±0.060 clip-F1 wg
+  `ga_neuron_search/calibrate-results.txt`; dla recall@FA/h — szerokość CI
+  bootstrap) **nie jest opisywana jako poprawa**.
+- `spikes_ext` (poligon selekcji cech) nie służy do tej oceny — tylko zbiór
+  produkcyjny z zatwierdzonej wersji.
+
+> Wartości 0.70 / 6 FA/h są STARTOWE (uzgodnione na próbę, do przegadania).
+> Zmiana progu = zmiana tej sekcji + zgoda zespołu.
+
+---
+
 ## Kontrole walidatora
 
 Krytyczne — kończą się kodem błędu:

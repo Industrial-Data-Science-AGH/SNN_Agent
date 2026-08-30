@@ -310,7 +310,16 @@ szkle. Rozjazd tylko na jednej płytce → wróć do **tej jednej** (krok D), ni
 
 # CZĘŚĆ V — LICZBY
 
-## 12. TABELA NASTAW — wszystkie 8 płytek (aktualne, z `hw7_config.json`)
+## 12. TABELA NASTAW — wszystkie 8 płytek (z `hw7_config.json`)
+
+> ⚠️ **NIE LUTUJ Z TEJ TABELI (issue #36).** `hw7_config.json` pochodzi
+> z modelu uczonego na artefakcie `spikes_manifest7`, w którego klasie
+> pozytywnej było 40 nagrań tykającego zegara (ESC-50 target 38 zamiast 39),
+> a podział miał przeciek: 194 z 194 miksów VOICe z testu były też
+> w treningu. Te nastawy opisują model wyuczony częściowo na niewłaściwej
+> klasie i oceniony na danych, które widział. Aktualne nastawy powstaną
+> z modelu wytrenowanego na `spikes_v2`; do tego czasu tabela jest
+> materiałem historycznym.
 
 Format: `źródło, znak, trymer%, (n* = impulsów do odpalenia)`.
 Trymer: **RV1→J1, RV2→J2, RV3→J3**. Pasek LED ustawiasz **RV5**.
@@ -399,7 +408,16 @@ Fan-out (użyj kolejnych terminali wyjściowych): H0→2, H1→2, H2→2, H3→2
 
 Puść z głośnika: ciszę, mowę, muzykę, **nagranie tłuczenia szkła**.
 
-**Realne liczby z naszych testów (zbiór testowy, reguła k=1):**
+> ⚠️ **WYCOFANE (issue #36).** Liczby w tej sekcji pochodzą z artefaktu
+> `spikes_manifest7`, który ma dwie niezależne wady: 194 z 194 miksów VOICe
+> obecnych w teście są też w treningu (VOICe daje 95.6% klipów szkła, więc wynik
+> jest mierzony niemal wyłącznie na nagraniach, na których model się uczył), oraz
+> wszystkie 40 plików ESC-50 w klasie pozytywnej to target 38 = `clock_tick`,
+> nie 39 = `glass_breaking`. Nie cytuj ich. Przeliczenie na `spikes_v2`
+> (zbudowanym z `dataset/versions/v2.0.0`, podział grupowy, 0/69 wspólnych
+> miksów) jest w `models/WYNIKI_v2.md`.
+
+**Liczby z naszych testów (zbiór testowy, reguła k=1) — WYCOFANE:**
 - **~72% nagrań szkła** budzi system,
 - **~20% klipów tła** daje fałszywy alarm (głośne zdarzenia jak strzały/dzwony: ~19–23%; cisza: ~46%*),
 - to jest **zgrubna brama** — reaktor (LLM) ma odrzucać fałszywki. **Przeoczone szkło jest

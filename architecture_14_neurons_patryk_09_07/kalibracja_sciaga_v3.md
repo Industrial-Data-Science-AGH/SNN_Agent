@@ -1,5 +1,14 @@
 # Ściąga kalibracyjna v3 — sieć 15-neuronowa 7→4→3→1 (enkoder widmowy)
 
+> ⚠️ **WYCOFANE (issue #36).** Liczby w tej sekcji pochodzą z artefaktu
+> `spikes_manifest7`, który ma dwie niezależne wady: 194 z 194 miksów VOICe
+> obecnych w teście są też w treningu (VOICe daje 95.6% klipów szkła, więc wynik
+> jest mierzony niemal wyłącznie na nagraniach, na których model się uczył), oraz
+> wszystkie 40 plików ESC-50 w klasie pozytywnej to target 38 = `clock_tick`,
+> nie 39 = `glass_breaking`. Nie cytuj ich. Przeliczenie na `spikes_v2`
+> (zbudowanym z `dataset/versions/v2.0.0`, podział grupowy, 0/69 wspólnych
+> miksów) jest w `models/WYNIKI_v2.md`.
+
 Źródło prawdy: `hw7_config.json` (model seed 2). To ludzko-czytelna wersja + procedura.
 Wersja 14-neuronowa (6 kanałów) jest w `hw_config.json` / `kalibracja_sciaga.md` — patrz
 sekcja "Którą wersję składać jutro".
@@ -49,6 +58,10 @@ Uczciwie: to nadal zgrubna brama always-on; reaktor (LLM) weryfikuje i odrzuca f
 bezwzględny ORAZ ramka jest zdarzeniem (peak > 1.5×floor). Powód w `encoder_twin.py`.
 
 ## 3. Tabela nastaw (8 płytek, model seed 2)
+
+> ⚠️ **WYCOFANE (issue #36)** — patrz baner na górze pliku. Te nastawy
+> pochodzą z modelu uczonego z `clock_tick` w klasie pozytywnej i ocenionego
+> na przeciekającym podziale.
 
 Format synapsy: `wejście znak trymer% (test: n* impulsów do odpalenia)`.
 

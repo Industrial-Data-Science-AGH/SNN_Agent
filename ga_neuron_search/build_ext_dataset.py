@@ -343,17 +343,15 @@ def main():
     state, n_used = et._warmup_state(neg_train, args.warmup_seconds, gain)
     used = set(neg_train[:n_used])
 
-    stream = [(0, f) for f in neg if f not in used] + [(1, f) for f in glass]
-    rng.shuffle(stream)
-
-    """
-    strumień: najpierw pozostałe negatywy, potem glass (jak ciągła praca urządzenia)
+    # strumień: najpierw pozostałe negatywy, potem glass (jak ciągła praca urządzenia)
     # Stan enkodera jest CIĄGŁY, więc zakodowanie pliku zależy od tego, co było
     # przed nim. Przy układzie blokowym (wszystkie negatywy, potem wszystkie
     # pozytywy) ta zależność koreluje z etykietą i adaptacyjny floor kanałów
     # z-score dryfuje razem z klasą. Tasujemy, żeby historia była nieskorelowana
     # z etykietą — i żeby strumień przypominał ciągłą pracę urządzenia.
-    """
+
+    stream = [(0, f) for f in neg if f not in used] + [(1, f) for f in glass]
+    rng.shuffle(stream)
 
     stream = [(0, f) for f in neg if f not in used] + [(1, f) for f in glass]
     rng.shuffle(stream)

@@ -27,7 +27,7 @@ CLAUDE.md
 **/*.pt
 **/*.safetensors
 
-dataset/
+dataset/*
 notebooks/
 architecture_14_neurons_patryk_09_07/spikes_csv
 
@@ -38,3 +38,16 @@ architecture_14_neurons_patryk_09_07/spikes_csv
 # spikes_manifest/ i spikes_manifest7/ sa jeszcze sledzone historycznie (1,2 GB w .git),
 # nowe artefakty juz nie trafiaja do repo — pochodzenie zapisuje channels.json.
 architecture_14_neurons_patryk_09_07/spikes_v*/
+
+# Checkpointy (issue #36 pkt 5). Reguły **/models/ i **/*.pt powyżej sprawiły, że
+# na dysku nie ma ani jednego .pt: hw7_s2.pt i sweep_pw10_s1.pt z model_provenance
+# nie istnieją, więc żadnego wyniku nie da się ponownie ocenić, tylko przetrenować
+# od zera. Katalog models/ w korzeniu repo jest wyjęty spod obu reguł. Sieć ma
+# kilkanaście neuronów, więc checkpoint waży kilkadziesiąt kB.
+!/models/
+!/models/**
+
+# Zatwierdzone wersje zbioru SA sledzone: manifest.csv + dataset.json + stats.md
+# to caly kontrakt z docs/DATASET_CONTRACT.md, razem ~7 MB. Bez nich nikt poza
+# autorem nie moze odtworzyc artefaktu spike'owego. Audio nadal poza gitem.
+!dataset/versions/

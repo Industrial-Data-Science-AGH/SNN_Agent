@@ -1,0 +1,23 @@
+{
+  "version": "v1.0.0",
+  "created_utc": "2026-08-26T18:29:52+00:00",
+  "git_commit": "164e076232739f8a2450950bc93b354fc2e0c346",
+  "split": {
+    "val_frac": 0.15,
+    "test_frac": 0.15,
+    "seed": 42,
+    "grouped_by": "group_id, osobno per source"
+  },
+  "counts": {
+    "records": 14114,
+    "groups": 4878,
+    "positive": 3422,
+    "hours": 23.08
+  },
+  "sources": {
+    "datasec": 3226,
+    "esc50": 2000,
+    "voice": 8888
+  },
+  "manifest_sha256": "96f32902918bcd7b503cd82e1c288d6d47e9e956dc76f8497797fb69e917c1ea"
+}

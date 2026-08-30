@@ -33,6 +33,7 @@ Użycie:
 from __future__ import annotations
 
 import argparse, glob, json, math, os, sys, time
+from datetime import datetime, timezone
 import numpy as np
 import torch
 import torch.nn as nn
@@ -533,6 +534,33 @@ def pulses_to_fire(w, tau_syn, tau_mem, v_leak, rate_hz=100.0, max_n=60):
     return None
 
 
+def _data_provenance(data_dir):
+    """Pochodzenie artefaktu spike'owego, na którym trenowano.
+
+    hw7_config.json niósł ręcznie wpisane "trained_on": "spikes_manifest7" i nic
+    poza tym — ani wersji zbioru, ani sumy kontrolnej, ani informacji o tym, że
+    ten artefakt ma przeciek między splitami. Bierzemy to wprost z channels.json
+    artefaktu, żeby nikt nie musiał pamiętać.
+    """
+    p = os.path.join(data_dir, "channels.json")
+    if not os.path.exists(p):
+        return {"artifact_dir": data_dir,
+                "uwaga": "artefakt bez channels.json — pochodzenie nieznane"}
+    with open(p, encoding="utf-8") as fh:
+        prov = json.load(fh).get("provenance", {})
+    prov["artifact_dir"] = data_dir
+    return prov
+
+
+def _git_commit():
+    try:
+        import subprocess
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"],
+                                       stderr=subprocess.DEVNULL).decode().strip()
+    except Exception:
+        return None
+
+
 def export_config(model, path, extra=None):
     cfg = {"dt_s": DT, "v_th": V_TH, "channels": CHANNELS, "boards": {}}
     if extra:
@@ -772,6 +800,19 @@ def train(args):
     print("[zdarzenia] walidacja (poziom klipów):")
     ev_va = evaluate_events(model, va_base, va_indices, dev)
     extra = {
+        "model_provenance": {
+            "seed": args.seed,
+            "pos_weight": args.pos_weight,
+            "hat_frac": args.hat_frac,
+            "epochs": args.epochs,
+            "quantized": not args.no_quant,
+            "checkpoint": args.ckpt,
+            "train_data": _data_provenance(args.data),
+            "val_data": args.val_data,
+            "test_data": args.test_data,
+            "git_commit": _git_commit(),
+            "trained_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        },
         "val_metrics": {k: round(v, 4) for k, v in final.items()},
         "val_events": ev_va,
         "robustness": rob,

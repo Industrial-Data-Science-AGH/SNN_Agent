@@ -173,21 +173,55 @@ def compute_global_gain(paths, percentile: float = GAIN_PERCENTILE,
     if method not in ("all-files", "per-file"):
         raise ValueError(f"nieznana metoda gain: {method!r} (all-files/per-file)")
 GAIN_PERCENTILE = 99.9   # percentyl amplitudy trafiający w pełną skalę ADC
+GAIN_METHOD = "all-files"   # "all-files": percentyl z połączonego rozkładu próbek
+                            # (poprawny odpowiednik docstringu). "per-file": percentyl
+                            # z listy maksimów/percentyli per plik — używać z niższym
+                            # percentylem (mediana albo ~95), bo przy percentylu 99.9
+                            # i setkach plików to praktycznie maksimum z peaks, czyli
+                            # jeden najgłośniejszy plik dyktuje wzmocnienie całego zbioru.
 
 
 def compute_global_gain(paths, percentile: float = GAIN_PERCENTILE,
+                        method: str = GAIN_METHOD,
                         fs_hz: int = FS_HZ) -> float:
     """Liczy JEDNO globalne wzmocnienie z listy plików (percentyl amplitudy
     -> pełna skala ADC). WYWOŁYWAĆ WYŁĄCZNIE na zbiorze TRENINGOWYM i zamrozić
     wynik (np. zapisać do JSON obok datasetu) — patrz build_manifest().
     Zastępuje dawną normalizację `y = y / peak` per plik, która chowała
-    poziom bezwzględny (przesłankę niedostępną na płytce: sprzęt nie ma AGC)."""
-    peaks = []
-    for p in paths:
-        y, _ = librosa.load(p, sr=fs_hz, mono=True)
-        if len(y):
-            peaks.append(np.percentile(np.abs(y), percentile))
-    ref = float(np.percentile(peaks, percentile)) if peaks else 1.0
+    poziom bezwzględny (przesłankę niedostępną na płytce: sprzęt nie ma AGC).
+
+    `method="all-files"` (domyślny): zbiera |y| ze WSZYSTKICH plików do jednego
+    połączonego rozkładu próbek i liczy z niego jeden globalny percentyl —
+    to jest dosłowne odwzorowanie „percentyl amplitudy trafia w pełną skalę
+    ADC" z docstringu, bo percentyl liczony jest na rozkładzie próbek, nie
+    maksimów. Kosztowniejsze pamięciowo (trzyma wszystkie próbki naraz).
+
+    `method="per-file"`: liczy percentyl `percentile` osobno dla każdego pliku,
+    potem bierze `percentile` z tej listy per-plikowych wartości — czyli
+    percentyl z percentyli. Tańsze (jedna liczba na plik), ale przy wysokim
+    percentyle (99.9) i wielu plikach efektywnie wybiera najgłośniejszy plik
+    ze zbioru. Jeśli używasz tego wariantu, ustaw niższy `percentile`
+    (mediana = 50, albo ~95), NIE 99.9."""
+    if method not in ("all-files", "per-file"):
+        raise ValueError(f"nieznana metoda gain: {method!r} (all-files/per-file)")
+
+    if method == "all-files":
+        chunks = []
+        for p in paths:
+            y, _ = librosa.load(p, sr=fs_hz, mono=True)
+            if len(y):
+                chunks.append(np.abs(y))
+        if not chunks:
+            return 1.0
+        all_abs = np.concatenate(chunks)
+        ref = float(np.percentile(all_abs, percentile))
+    else:
+        peaks = []
+        for p in paths:
+            y, _ = librosa.load(p, sr=fs_hz, mono=True)
+            if len(y):
+                peaks.append(np.percentile(np.abs(y), percentile))
+        ref = float(np.percentile(peaks, percentile)) if peaks else 1.0
     return 1.0 / max(ref, 1e-9)
 
 
@@ -561,6 +595,41 @@ def _infer_version(manifest_path: str) -> Optional[str]:
     return parent.name if parent.name.startswith("v") else None
 
 
+def _load_or_compute_gain(train_paths, out_dir: str, percentile: float,
+                          method: str, gain_file: Optional[str] = None) -> float:
+    """Czyta zamrożone globalne wzmocnienie z JSON, jeśli plik istnieje i
+    zgadza się percentile+n_files (i metoda) — inaczej liczy je od nowa
+    (jeden librosa.load na plik train) i zapisuje. Unika podwójnego liczenia
+    przy kolejnych uruchomieniach na tym samym zbiorze, i sprawia, że dobudowa
+    kolejnej wersji datasetu nie dostaje po cichu innego wzmocnienia."""
+    gain_path = Path(gain_file) if gain_file else Path(out_dir) / "global_gain.json"
+    if gain_path.exists():
+        try:
+            cached = json.load(open(gain_path))
+            if (cached.get("percentile") == percentile
+                    and cached.get("method") == method
+                    and cached.get("n_files") == len(train_paths)):
+                print(f"[gain] wczytano zamrożone wzmocnienie {cached['gain']:.4f} "
+                      f"z {gain_path} (percentyl {percentile}, metoda {method})",
+                      flush=True)
+                return float(cached["gain"])
+            print(f"[gain] {gain_path} istnieje, ale percentile/method/n_files się "
+                  f"nie zgadzają — liczę od nowa", flush=True)
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"[gain] nie udało się odczytać {gain_path} ({e}) — liczę od nowa",
+                  flush=True)
+
+    gain = compute_global_gain(train_paths, percentile=percentile, method=method)
+    gain_path.parent.mkdir(parents=True, exist_ok=True)
+    json.dump({"gain": gain, "percentile": percentile, "method": method,
+              "computed_on": "split=train", "n_files": len(train_paths)},
+              open(gain_path, "w"), indent=2)
+    print(f"[gain] globalne wzmocnienie {gain:.4f} (z {len(train_paths)} "
+          f"plików train, percentyl {percentile}, metoda {method}) -> {gain_path}",
+          flush=True)
+    return gain
+
+
 def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
                    warmup_seconds: float = 30.0, seed: int = 0,
                    aug_gain_db: float = 12.0,
@@ -639,6 +708,8 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
         f"plików train, percentyl {GAIN_PERCENTILE}) -> {gain_path}",
         flush=True,
     )
+    gain = _load_or_compute_gain(train_paths, out_dir, gain_percentile,
+                                 gain_method, gain_file=gain_file)
 
     version = dataset_version or _infer_version(manifest_path)
     prov = {
@@ -761,6 +832,20 @@ def _cmd_preview(args) -> None:
               f"— podgląd BEZ wzmocnienia (gain=1.0). To NIE jest to, co enkoder "
               f"zrobi z tym plikiem w zbiorze (tam gain jest zamrożone z train) — "
               f"podaj --gain-file, żeby zobaczyć realny wynik.")
+    gain = compute_global_gain(
+        [args.wav]
+    )  # podgląd pojedynczego pliku — brak train do kalibracji
+    gain = 1.0
+    gain_path = Path(args.gain_file) if args.gain_file else None
+    if gain_path and gain_path.exists():
+        cached = json.load(open(gain_path))
+        gain = float(cached["gain"])
+        print(f"[gain] wczytano zamrożone wzmocnienie {gain:.4f} z {gain_path}")
+    else:
+        print(f"[!] brak pliku wzmocnienia ({gain_path or '--gain-file nie podano'}) "
+              f"— podgląd BEZ wzmocnienia (gain=1.0). To NIE jest to, co enkoder "
+              f"zrobi z tym plikiem w zbiorze (tam gain jest zamrożone z train) — "
+              f"podaj --gain-file, żeby zobaczyć realny wynik.")
     spikes = encode_file(args.wav, gain=gain)
     print(f"plik: {args.wav}")
     print(f"ramek po primingu: {spikes.shape[0]}")
@@ -773,50 +858,30 @@ def _cmd_preview(args) -> None:
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(
-        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
-    )
+    ap = argparse.ArgumentParser(description=__doc__,
+                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     b = sub.add_parser("build", help="Zbuduj CSV-y ze zbioru glass/negative")
-    b.add_argument(
-        "--glass",
-        required=True,
-        nargs="+",
-        help="jeden lub więcej folderów z .wav tłuczonego szkła",
-    )
-    b.add_argument(
-        "--negative",
-        required=True,
-        nargs="+",
-        help="jeden lub więcej folderów z .wav tła/negatywów",
-    )
+    b.add_argument("--glass", required=True, nargs="+",
+                   help="jeden lub więcej folderów z .wav tłuczonego szkła")
+    b.add_argument("--negative", required=True, nargs="+",
+                   help="jeden lub więcej folderów z .wav tła/negatywów")
     b.add_argument("--out", default="./spikes_csv")
-    b.add_argument(
-        "--warmup-seconds",
-        type=float,
-        default=30.0,
-        help="ile sekund realnego tła zużyć na rozgrzanie floor/MAD przed "
-        "zapisem jakichkolwiek CSV (patrz uwaga w docstringu modułu)",
-    )
-    b.add_argument(
-        "--warmup-dir",
-        default=None,
-        help="folder z PRAWDZIWIE stacjonarnym tłem do rozgrzewki "
-        "(domyślnie: pierwszy z --negative). Nie podawaj tu folderu "
-        "z krótkimi wycinkami zdarzeń (np. hard_negative z VOICe).",
-    )
+    b.add_argument("--warmup-seconds", type=float, default=30.0,
+                   help="ile sekund realnego tła zużyć na rozgrzanie floor/MAD przed "
+                        "zapisem jakichkolwiek CSV (patrz uwaga w docstringu modułu)")
+    b.add_argument("--warmup-dir", default=None,
+                   help="folder z PRAWDZIWIE stacjonarnym tłem do rozgrzewki "
+                        "(domyślnie: pierwszy z --negative). Nie podawaj tu folderu "
+                        "z krótkimi wycinkami zdarzeń (np. hard_negative z VOICe).")
     b.set_defaults(func=_cmd_build)
 
-    m = sub.add_parser(
-        "build-manifest", help="Zbuduj CSV-y wg manifestu (filepath,label,...,split)"
-    )
+    m = sub.add_parser("build-manifest",
+                       help="Zbuduj CSV-y wg manifestu (filepath,label,...,split)")
     m.add_argument("--manifest", required=True)
-    m.add_argument(
-        "--root",
-        default=".",
-        help="katalog, względem którego rozwiązywane są ścieżki z manifestu",
-    )
+    m.add_argument("--root", default=".",
+                   help="katalog, względem którego rozwiązywane są ścieżki z manifestu")
     m.add_argument("--out", default="./spikes_manifest")
     m.add_argument("--warmup-seconds", type=float, default=30.0)
     m.add_argument("--seed", type=int, default=0)
@@ -836,14 +901,22 @@ def main() -> None:
                         "katalogu manifestu (dataset/versions/vX.Y.Z/manifest.csv)")
     m.add_argument("--seed", type=int, default=0)
     m.add_argument("--aug-gain-db", type=float, default=12.0)
+    m.add_argument("--gain-percentile", type=float, default=GAIN_PERCENTILE,
+                   help="percentyl amplitudy trafiający w pełną skalę ADC")
+    m.add_argument("--gain-method", default=GAIN_METHOD, choices=["all-files", "per-file"],
+                   help="all-files: percentyl z połączonego rozkładu próbek (domyślne, "
+                        "poprawne dla percentile=99.9). per-file: percentyl z listy "
+                        "peaków per plik — użyj z niższym --gain-percentile (np. 50/95)")
+    m.add_argument("--gain-file", default=None,
+                   help="ścieżka do global_gain.json (domyślnie <out>/global_gain.json); "
+                        "jeśli istnieje i pasuje percentile/method/n_files, wczytywany "
+                        "zamiast liczony od nowa")
     m.set_defaults(func=lambda a: build_manifest(a.manifest, a.out, root=a.root,
                                                  warmup_seconds=a.warmup_seconds,
                                                  seed=a.seed, aug_gain_db=a.aug_gain_db,
                                                  gain_percentile=a.gain_percentile,
                                                  gain_method=a.gain_method,
-                                                 gain_file=a.gain_file,
-                                                 dataset_version=a.dataset_version,
-                                                ))
+                                                 gain_file=a.gain_file))
 
     p = sub.add_parser("preview", help="Podgląd spike-rate jednego pliku (debug)")
     p.add_argument("wav")

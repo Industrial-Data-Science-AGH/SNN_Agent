@@ -249,6 +249,15 @@ uczenia jest programowy: audio → cyfrowy bliźniak enkodera → CSV spików �
 
 ## Wynik końcowy (dowód liczbowy)
 
+> ⚠️ **WYCOFANE (issue #36).** Liczby w tej sekcji pochodzą z artefaktu
+> `spikes_manifest7`, który ma dwie niezależne wady: 194 z 194 miksów VOICe
+> obecnych w teście są też w treningu (VOICe daje 95.6% klipów szkła, więc wynik
+> jest mierzony niemal wyłącznie na nagraniach, na których model się uczył), oraz
+> wszystkie 40 plików ESC-50 w klasie pozytywnej to target 38 = `clock_tick`,
+> nie 39 = `glass_breaking`. Nie cytuj ich. Przeliczenie na `spikes_v2`
+> (zbudowanym z `dataset/versions/v2.0.0`, podział grupowy, 0/69 wspólnych
+> miksów) jest w `models/WYNIKI_v2.md`.
+
 | metryka (zbiór TESTOWY) | 14-neur. (v2) | 15-neur. widmowy (v3) |
 |---|---|---|
 | F1 okienkowe | 0.487 | **0.609** |

@@ -8,9 +8,23 @@ zbiorczej + opcjonalnie blok szczegółów pod spodem.
 > metryka)**. Nie porównuj `AP@k=2` z `clip_f1@k=1` ani `spikes_manifest7` ze
 > `spikes_ext`. Zawsze notuj te trzy rzeczy w wierszu. Patrz „Definicje" na dole.
 
+> ⚠️ **Wszystkie wiersze z kolumną `spikes_manifest7` są WYCOFANE (issue #36):**
+> ten artefakt ma przeciek między splitami (194/194 miksów VOICe z testu jest
+> w treningu) i `clock_tick` zamiast `glass_breaking` w klasie pozytywnej ESC-50.
+> Nowe przebiegi notuj z artefaktem `spikes_v2` i wersją zbioru `v2.0.0`.
+
 ---
 
 ## Punkt odniesienia — sieć oryginalna (ręczna, `snn_hw_pipeline.py`)
+
+> ⚠️ **WYCOFANE (issue #36).** Liczby w tej sekcji pochodzą z artefaktu
+> `spikes_manifest7`, który ma dwie niezależne wady: 194 z 194 miksów VOICe
+> obecnych w teście są też w treningu (VOICe daje 95.6% klipów szkła, więc wynik
+> jest mierzony niemal wyłącznie na nagraniach, na których model się uczył), oraz
+> wszystkie 40 plików ESC-50 w klasie pozytywnej to target 38 = `clock_tick`,
+> nie 39 = `glass_breaking`. Nie cytuj ich. Przeliczenie na `spikes_v2`
+> (zbudowanym z `dataset/versions/v2.0.0`, podział grupowy, 0/69 wspólnych
+> miksów) jest w `models/WYNIKI_v2.md`.
 
 Z `architecture_14_neurons_patryk_09_07/hw_config.json` (model 7→4/8→3→1,
 `spikes_manifest7`, pełny trening HAT→QAT, dekoder **k=1**):

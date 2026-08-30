@@ -753,47 +753,88 @@ def train(args):
     export_config(model, args.out, extra=extra)
 
 
-if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Trening SNN 6->4->3->1 z ograniczeniami sprzętowymi.")
+# ============================================================ sim vs hw
+
+def compare(args):
+    """Zgodność spike-trainów symulacji i sprzętu, per neuron (Faza D)."""
+    sim = np.load(args.sim)[args.layer]           # [T, n]
+    hw = np.genfromtxt(args.hw, delimiter=",", names=True)
+    cols = [c for c in hw.dtype.names if c != "frame"]
+    real = np.stack([hw[c] for c in cols], -1)
+    T = min(len(sim), len(real))
+    sim, real = sim[:T], real[:T]
+
+    print(f"{'neuron':8} {'sim Hz':>8} {'hw Hz':>8} {'zgodność':>10} {'vRossum':>9}")
+    for i, c in enumerate(cols):
+        agree = (sim[:, i] == real[:, i]).mean()
+        # van Rossum: wygładzenie eksponentą tau=50ms i L2
+        tau = 0.050 / DT
+        k = np.exp(-np.arange(0, 5 * tau) / tau)
+        d = np.linalg.norm(np.convolve(sim[:, i], k)[:T] - np.convolve(real[:, i], k)[:T])
+        print(f"{c:8} {sim[:,i].mean()/DT:7.1f} {real[:,i].mean()/DT:7.1f} "
+              f"{100*agree:9.1f}% {d:9.2f}")
+        if agree < 0.85:
+            print(f"    -> {c} rozjeżdża się. Wróć do Fazy C dla tej płytki.")
+
+
+# ============================================================ CLI
+
+def main():
+    ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    t = sub.add_parser("train", help="Trenuj model SNN")
-    t.add_argument("--data", required=True, help="ścieżka do spikes_csv")
-    t.add_argument("--val-data", default=None, help="ścieżka do walidacyjnego spikes_csv")
-    t.add_argument("--test-data", default=None, help="ścieżka do testowego spikes_csv")
-    t.add_argument("--hw-params", default=None, help="JSON ze zmierzonymi parametrami płytek")
-    t.add_argument("--out", default="hw_config.json", help="plik wyjściowy z konfiguracją")
-    t.add_argument("--limit", type=int, default=None, help="limit plików (szybki test)")
-    t.add_argument("--epochs", type=int, default=100)
-    t.add_argument("--bs", type=int, default=64)
-    t.add_argument("--lr", type=float, default=0.01)
-    t.add_argument("--T", type=int, default=200)
-    t.add_argument("--stride", type=int, default=50)
-    t.add_argument("--num-samples", type=int, default=10000)
-    t.add_argument("--val-cap", type=int, default=2000)
-    t.add_argument("--pos-weight", type=float, default=1.0,
-                   help="UWAGA: make_sampler() już balansuje klasy 50/50 w epoce "
-                        "(WeightedRandomSampler) — dodatkowy pos_weight>1 w BCE "
-                        "podwójnie waży klasę pozytywną. Zmierzone przy pos_weight=3.0: "
-                        "precyzja 0.22-0.26 @ recall 0.85-0.89 przez cały trening "
-                        "(sieć zgłasza wszystko). Zwycięskie biegi: pos_weight=1.0.")
-    t.add_argument("--margin-w", type=float, default=0.5)
-    t.add_argument("--spk-w", type=float, default=0.0)
-    t.add_argument("--no-quant", action="store_true", help="wyłącz fazę QAT")
-    t.add_argument("--hat-frac", type=float, default=0.5)
-    t.add_argument("--patience", type=int, default=20)
-    t.add_argument("--aug", action="store_true", help="augmentacja: gubienie spików, jitter")
-    t.add_argument("--wide", action="store_true", help="wariant SZEROKI: 8 płytek H")
-    t.add_argument("--log", default="train.log")
+    t = sub.add_parser("train")
+    t.add_argument("--data", required=True)
+    t.add_argument("--val-data", default=None,
+                   help="osobny katalog walidacyjny (podział z manifestu); "
+                        "bez niego: losowy podział po plikach 80/20")
+    t.add_argument("--test-data", default=None,
+                   help="osobny katalog testowy — ewaluowany raz, na końcu")
+    t.add_argument("--out", default="hw_config.json")
     t.add_argument("--ckpt", default="best.pt")
+    t.add_argument("--log", default="train_log.csv")
+    t.add_argument("--hw-params", default=None, help="zmierzone τ per płytka (Faza A)")
+    t.add_argument("--epochs", type=int, default=120)
+    t.add_argument("--bs", type=int, default=128)
+    t.add_argument("--lr", type=float, default=3e-3)
+    t.add_argument("--T", type=int, default=200, help="ramek na okno (200 = 2 s)")
+    t.add_argument("--stride", type=int, default=50)
+    t.add_argument("--pos-weight", type=float, default=3.0)
+    t.add_argument("--margin-w", type=float, default=0.5,
+                   help="waga marginesu na negatywach (tło ma nie podchodzić pod próg)")
+    t.add_argument("--spk-w", type=float, default=0.0,
+                   help="waga straty zliczania spików D: szkło >=2 spiki, tło 0 "
+                        "(potrzebna, żeby reguła dekodera 'k spików w oknie' działała)")
+    t.add_argument("--hat-frac", type=float, default=0.4,
+                   help="ułamek epok w fazie HAT (pełna precyzja + szum sprzętowy)")
+    t.add_argument("--patience", type=int, default=20,
+                   help="epoki bez poprawy F1: w HAT skraca fazę, w QAT kończy trening")
+    t.add_argument("--num-samples", type=int, default=12000,
+                   help="okien na epokę (stały budżet niezależny od rozmiaru zbioru)")
+    t.add_argument("--val-cap", type=int, default=4000,
+                   help="okien walidacyjnych per epokę (pełna walidacja na końcu)")
+    t.add_argument("--limit", type=int, default=None,
+                   help="max plików na klasę (smoke test)")
+    t.add_argument("--seed", type=int, default=0,
+                   help="seed inicjalizacji — mała sieć ma dużą wariancję od startu")
+    t.add_argument("--no-aug", dest="aug", action="store_false",
+                   help="wyłącz augmentację spike-trainów (dropout+jitter)")
+    t.add_argument("--wide", action="store_true",
+                   help="wariant szeroki 7→8→3→1 (H=8 płytek, do wykorzystania 15 płytek)")
+    t.add_argument("--no-quant", action="store_true")
     t.set_defaults(func=train)
 
-    c = sub.add_parser("compare", help="Porównaj model z symulacją (uruchom z parametrami: --sim, --hw, --layer)")
-    c.add_argument("--sim")
-    c.add_argument("--hw")
-    c.add_argument("--layer")
-    # c.set_defaults(func=compare_fn)  # compare_fn logic is assumed implemented elsewhere
+    c = sub.add_parser("compare")
+    c.add_argument("--sim", required=True)
+    c.add_argument("--hw", required=True)
+    c.add_argument("--layer", default="H", choices=["H", "G", "O"])
+    c.set_defaults(func=compare)
 
     args = ap.parse_args()
-    if hasattr(args, "func"):
-        args.func(args)
+    seed = getattr(args, "seed", 0)
+    torch.manual_seed(seed); np.random.seed(seed)
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

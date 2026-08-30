@@ -108,7 +108,7 @@ EPS_FLOOR = np.array([
     1.0 / HOP_SAMPLES,                     # cv
     1.0 / HOP_SAMPLES,                     # zcr
     1.0 / (1.0 + HOP_SAMPLES ** 0.5),       # flux
-    np.nan, np.nan,                        # hf_lo/hf_hi: próg bezwzględny, nieużywane tu
+    1.0, 1.0,                        # hf_lo/hf_hi: próg bezwzględny, nieużywane tu bo kanał na progu bezwzględnym
 ])
 
 REFRAC_FRAMES = 1

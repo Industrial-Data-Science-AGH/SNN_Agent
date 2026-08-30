@@ -158,6 +158,38 @@ Konwersja jest zadaniem czytającego, nie zbioru.
 
 ---
 
+## Co musisz mieć lokalnie, zanim cokolwiek zbudujesz
+
+W repo są **tylko** wersje zbioru (`dataset/versions/`, ~7 MB) i wycinki VOICe
+(`architecture_14_neurons_patryk_09_07/voice_extracted/`, 5627 plików). Audio
+pozostałych źródeł nie mieści się w gicie i trzeba je mieć osobno.
+
+Z 10853 rekordów manifestu v2.0.0:
+
+| źródło | plików | skąd wziąć |
+|---|---:|---|
+| `architecture_14_neurons_patryk_09_07/voice_extracted/` | 5627 | jest w repo |
+| `dataset/datasec/PT_DATASET_250314/` | 3226 | 4,6 GB, poza gitem — poproś o kopię |
+| `data/ESC-50-master/audio/` | 2000 | publiczne: `github.com/karoldvl/ESC-50` |
+
+Sprawdzenie przed budową, ile plików z manifestu faktycznie masz:
+
+```bash
+python - <<'EOF'
+import csv, os
+rows = list(csv.DictReader(open("dataset/versions/v2.0.0/manifest.csv")))
+brak = [r for r in rows if not os.path.exists(r["filepath"])]
+print(f"{len(rows)-len(brak)}/{len(rows)} plików na miejscu")
+for src in sorted({r["source"] for r in brak}):
+    print(f"  brakuje {sum(1 for r in brak if r['source']==src):5d} z {src}")
+EOF
+```
+
+`encoder_twin.py build-manifest` **nie przerwie** budowy przy brakujących
+plikach, tylko je pominie z ostrzeżeniem. Zbudujesz wtedy artefakt bez tła
+stacjonarnego i bez negatywów spoza VOICe, czyli bezużyteczny. Jeśli powyższy
+skrypt pokazuje cokolwiek innego niż `10853/10853`, nie buduj.
+
 ## Relacja: zbiór główny → artefakty spike'owe
 
 ```

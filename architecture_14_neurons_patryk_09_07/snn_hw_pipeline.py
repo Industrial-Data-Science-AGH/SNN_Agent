@@ -978,6 +978,12 @@ def main():
     t.add_argument("--wide", action="store_true",
                    help="wariant szeroki 7→8→3→1 (H=8 płytek, do wykorzystania 15 płytek)")
     t.add_argument("--no-quant", action="store_true")
+    t.add_argument("--select-metric", choices=["f1", "recall_fa"], default="recall_fa",
+                   help="metryka selekcji checkpointu: recall_fa (recall @ budzet FA/h, "
+                        "decyzyjna wg DATASET_CONTRACT; wymaga --val-data z files.csv) "
+                        "lub f1 (ramkowe, stare)")
+    t.add_argument("--stream-budget", type=float, default=6.0,
+                   help="budzet FA/h dla select-metric=recall_fa (domyslnie 6/h)")
     t.set_defaults(func=train)
 
     c = sub.add_parser("compare")

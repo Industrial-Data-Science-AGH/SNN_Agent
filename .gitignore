@@ -35,8 +35,7 @@ ga_neuron_search/spikes_ext/
 # pozostałości po równoległym zapisie cache
 **/_cache_*.npz.tmp*
 
-*.zip
-*.7z
+
 # Artefakty spikowe: w calosci odtwarzalne z audio przez encoder_twin.py build-manifest.
 # spikes_manifest/ i spikes_manifest7/ sa jeszcze sledzone historycznie (1,2 GB w .git),
 # nowe artefakty juz nie trafiaja do repo — pochodzenie zapisuje channels.json.

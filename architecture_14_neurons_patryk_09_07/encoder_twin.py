@@ -728,7 +728,7 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
 
     # Warmup floora tylko na tle stacjonarnym: krótkie zdarzenia nie są ciszą.
     warmup_files = sorted(r["abspath"] for r in rows
-            if r["label"] == "negative" and r["split"] == "train"
+                          if r["label"] == "negative" and r["split"] == "train"
                           and r.get("kind") == "stationary")
     if not warmup_files:
         print("[!] brak negatywów kind=stationary w train — warmup na dowolnym tle")
@@ -772,8 +772,8 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
             key = (split, label)
             counts[key] = counts.get(key, 0)
             stem = Path(r["abspath"]).stem[:40]
-            out_path = out / split / f"{tag}_{counts[key]:05d}_{stem}.csv"
-            with open(out_path, "w", encoding="utf-8") as fh:
+            name = f"{tag}_{counts[key]:05d}_{stem}.csv"
+            with open(out / split / name, "w", encoding="utf-8") as fh:
                 fh.write("frame," + ",".join(f"s{c}" for c in range(N_CH)) + ",label\n")
                 for frame_idx, row_bits in enumerate(spikes):
                     fh.write(

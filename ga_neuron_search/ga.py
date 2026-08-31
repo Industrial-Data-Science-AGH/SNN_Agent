@@ -92,16 +92,31 @@ def run_ga(fitness: FitnessFn, cfg: GAConfig,
         """
         nonlocal evaluated
         keys = [f"{g.key()}@{budget:.2f}" for g in genomes]
-        fresh = [(key, g) for key, g in zip(keys, genomes) if key not in cache]
-        for key, _ in fresh:
-            cache[key] = None  # in-flight (dedup w obrębie partii)
+        fresh = []
+        # POPRAWKA 1: Natychmiastowe oznaczanie w cache, co naprawia dedup wewnątrz partii
+        for key, g in zip(keys, genomes):
+            if key not in cache:
+                cache[key] = None  # in-flight (dedup natychmiastowy)
+                fresh.append((key, g))
+
         if fresh:
-            if hasattr(fitness, "batch"):
-                vals = fitness.batch([g for _, g in fresh], budget)
-            else:
-                vals = [_call(g, budget) for _, g in fresh]
-            for (key, _), v in zip(fresh, vals):
-                cache[key], evaluated = v, evaluated + 1
+            try:
+                if hasattr(fitness, "batch"):
+                    vals = fitness.batch([g for _, g in fresh], budget)
+                else:
+                    vals = [_call(g, budget) for _, g in fresh]
+                    
+                for (key, _), v in zip(fresh, vals):
+                    cache[key], evaluated = v, evaluated + 1
+                    
+            except Exception:
+                # POPRAWKA 2: Czyszczenie wpisów in-flight (None) z cache w razie błędu ewaluacji,
+                # aby uniknąć TypeError przy późniejszym sortowaniu.
+                for key, _ in fresh:
+                    if cache.get(key) is None:
+                        del cache[key]
+                raise
+            
         return [cache[k] for k in keys]
 
     def evaluate(g: Genome, budget: float = 1.0) -> float:

@@ -46,7 +46,7 @@ def main():
                     help="cuda | cpu; domyślnie cuda-jak-dostępne, inaczej cpu "
                          "(na Macu CPU — MPS zmierzone ~3x wolniejsze)")
     # successive-halving (#4):
-    ap.add_argument("--screen-mult", type=int, default=3,
+    ap.add_argument("--screen-mult", type=int, default=1,
                     help="oceń screen_mult*pop losowych osobników tanim budżetem, "
                          "zatrzymaj najlepsze pop (1 = wyłączone)")
     ap.add_argument("--screen-budget", type=float, default=0.34,
@@ -72,7 +72,7 @@ def main():
                     help="budzet FA/h dla metric=recall_fa (domyslnie 6/h)")
     ap.add_argument("--fitness-seeds", type=int, default=1,
                     help="usrednij fitness po tylu seedach (mniejsza wariancja)")
-    ap.add_argument("--pos-weight", type=float, default=3.0,
+    ap.add_argument("--pos-weight", type=float, default=1.0,
                         help="waga klasy pozytywnej w BCE proxy-treningu i dotrenowania")
     ap.add_argument("--feature-penalty", type=float, default=0.005,
                     help="kara za liczbe uzytych kanalow encodera (selekcja cech; 0 = wylaczona)")

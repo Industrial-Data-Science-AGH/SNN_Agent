@@ -206,27 +206,33 @@ def main():
             g = Genome.from_dict(w["topology"])
             print(g.pretty())
             grid = args.pos_weight_grid or [args.pos_weight]
-            best_model, best_m, best_pw = None, None, None
+            best_model, best_m_val, best_m_test, best_pw = None, None, None, None
             for pw in grid:
                 print(f"\n----- pos_weight={pw} (HAT->QAT, {args.winner_epochs} ep) -----")
                 ckpt = (f"{args.out}_winner_N{n}.pt" if len(grid) == 1
                         else f"{args.out}_winner_N{n}_pw{pw}.pt")
-                model, m = train_full(rf, g, epochs=args.winner_epochs,
-                                      pos_weight=pw, ckpt=ckpt)
-                print(f"[pos-weight] pw={pw}: clipF1 {m.get('clip_f1', 0):.3f} "
-                      f"FA {m.get('clip_fa_rate', 0):.3f} -> {ckpt}")
-                if best_m is None or m.get("clip_f1", 0) > best_m.get("clip_f1", 0):
-                    best_model, best_m, best_pw = model, m, pw
-            model, m, pw = best_model, best_m, best_pw
+                model, m_val, m_test = train_full(rf, g, epochs=args.winner_epochs,
+                                                  pos_weight=pw, ckpt=ckpt)
+                print(f"[pos-weight] pw={pw}: val clipF1 {m_val.get('clip_f1', 0):.3f} "
+                      f"val FA {m_val.get('clip_fa_rate', 0):.3f} -> {ckpt}")
+                if best_m_val is None or m_val.get("clip_f1", 0) > best_m_val.get("clip_f1", 0):
+                    best_model, best_m_val, best_m_test, best_pw = model, m_val, m_test, pw
+            model, m_val, m_test, pw = best_model, best_m_val, best_m_test, best_pw
 
-            extra = {"winner_val_metrics": m, "n_total": n,
-                     "sweep_fitness": w["fitness"], "pos_weight": pw}
+            extra = {
+                "winner_val_metrics": m_val,
+                "winner_test_metrics": m_test,
+                "n_total": n,
+                "sweep_fitness": w["fitness"],
+                "pos_weight": pw
+            }
             if len(grid) > 1:
                 tuned_ckpt = f"{args.out}_tuned_winner_N{n}.pt"
-                torch.save({"model": model.state_dict(), "metrics": m,
-                            "topology": g.to_dict(), "pos_weight": pw}, tuned_ckpt)
+                torch.save({"model": model.state_dict(), "val_metrics": m_val,
+                            "test_metrics": m_test, "topology": g.to_dict(),
+                            "pos_weight": pw}, tuned_ckpt)
                 cfg_path = f"{args.out}_tuned_hw_config_N{n}.json"
-                print(f"[pos-weight] wybor pw={pw} (clipF1 {m.get('clip_f1', 0):.3f}) "
+                print(f"[pos-weight] wybor pw={pw} (val clipF1 {m_val.get('clip_f1', 0):.3f}) "
                       f"-> {tuned_ckpt}")
             else:
                 cfg_path = f"{args.out}_hw_config_N{n}.json"
@@ -235,11 +241,11 @@ def main():
                 best_k, km, table = tune_k(model, rf, k_range=args.tune_k)
                 extra["tuned_k"] = best_k
                 extra["tune_k_table"] = table
-                print(f"[tune-k] N={n}: wybor k={best_k} (clipF1 {km['clip_f1']:.3f}, "
+                print(f"[tune-k] N={n}: wybor k={best_k} (val clipF1 {km['clip_f1']:.3f}, "
                       f"FA {km['clip_fa_rate']:.3f})")
 
-            export_genome_config(model, cfg_path, extra=extra)
-            print(f"[train-winner] N={n}: clip-F1={m.get('clip_f1', 0):.3f} -> {cfg_path}")
+            export_genome_config(model, cfg_path, channels=rf.channel_names, extra=extra)
+            print(f"[train-winner] N={n}: val clip-F1={m_val.get('clip_f1', 0):.3f} -> {cfg_path}")
             # nagłówkowy wynik na NIETKNIETYM tescie (z pełnego modelu, nie proxy)
             if test_ready:
                 from stream_eval import format_report, primary_recall, report_to_dict

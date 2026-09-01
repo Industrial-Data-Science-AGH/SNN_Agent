@@ -121,7 +121,7 @@ def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
     log(f"-> clip-F1: {median_m['clip_f1']:.3f} | AP: {median_m['ap']:.3f} | rec: {median_m['clip_recall']:.3f} | prec: {median_m['clip_precision']:.3f} | FA: {median_m['clip_fa_rate']:.3f}")
     log("=" * 65 + "\n")
 
-    return best_model, final_m
+    return best_model, median_m, final_m
 
 
 # ============================================================ strojenie dekodera

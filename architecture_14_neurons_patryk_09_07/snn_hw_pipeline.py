@@ -931,59 +931,6 @@ def main():
                         "lub f1 (ramkowe, stare)")
     t.add_argument("--stream-budget", type=float, default=6.0,
                    help="budzet FA/h dla select-metric=recall_fa (domyslnie 6/h)")
-    t.add_argument("--num-samples", type=int, default=10000)
-    t.add_argument("--val-cap", type=int, default=2000)
-    t.add_argument("--pos-weight", type=float, default=1.0,
-                   help="UWAGA: make_sampler() już balansuje klasy 50/50 w epoce "
-                        "(WeightedRandomSampler) — dodatkowy pos_weight>1 w BCE "
-                        "podwójnie waży klasę pozytywną. Zmierzone przy pos_weight=3.0: "
-                        "precyzja 0.22-0.26 @ recall 0.85-0.89 przez cały trening "
-                        "(sieć zgłasza wszystko). Zwycięskie biegi: pos_weight=1.0.")
-    t.add_argument("--margin-w", type=float, default=0.5)
-    t.add_argument("--spk-w", type=float, default=0.0)
-    t.add_argument("--no-quant", action="store_true", help="wyłącz fazę QAT")
-    t.add_argument("--hat-frac", type=float, default=0.5)
-    t.add_argument("--patience", type=int, default=20)
-    t.add_argument("--aug", action="store_true", help="augmentacja: gubienie spików, jitter")
-    t.add_argument("--wide", action="store_true", help="wariant SZEROKI: 8 płytek H")
-    t.add_argument("--log", default="train.log")
-    t.add_argument("--ckpt", default="best.pt")
-    t.add_argument("--log", default="train_log.csv")
-    t.add_argument("--hw-params", default=None, help="zmierzone τ per płytka (Faza A)")
-    t.add_argument("--epochs", type=int, default=120)
-    t.add_argument("--bs", type=int, default=128)
-    t.add_argument("--lr", type=float, default=3e-3)
-    t.add_argument("--T", type=int, default=200, help="ramek na okno (200 = 2 s)")
-    t.add_argument("--stride", type=int, default=50)
-    t.add_argument("--pos-weight", type=float, default=3.0)
-    t.add_argument("--margin-w", type=float, default=0.5,
-                   help="waga marginesu na negatywach (tło ma nie podchodzić pod próg)")
-    t.add_argument("--spk-w", type=float, default=0.0,
-                   help="waga straty zliczania spików D: szkło >=2 spiki, tło 0 "
-                        "(potrzebna, żeby reguła dekodera 'k spików w oknie' działała)")
-    t.add_argument("--hat-frac", type=float, default=0.4,
-                   help="ułamek epok w fazie HAT (pełna precyzja + szum sprzętowy)")
-    t.add_argument("--patience", type=int, default=20,
-                   help="epoki bez poprawy F1: w HAT skraca fazę, w QAT kończy trening")
-    t.add_argument("--num-samples", type=int, default=12000,
-                   help="okien na epokę (stały budżet niezależny od rozmiaru zbioru)")
-    t.add_argument("--val-cap", type=int, default=4000,
-                   help="okien walidacyjnych per epokę (pełna walidacja na końcu)")
-    t.add_argument("--limit", type=int, default=None,
-                   help="max plików na klasę (smoke test)")
-    t.add_argument("--seed", type=int, default=0,
-                   help="seed inicjalizacji — mała sieć ma dużą wariancję od startu")
-    t.add_argument("--no-aug", dest="aug", action="store_false",
-                   help="wyłącz augmentację spike-trainów (dropout+jitter)")
-    t.add_argument("--wide", action="store_true",
-                   help="wariant szeroki 7→8→3→1 (H=8 płytek, do wykorzystania 15 płytek)")
-    t.add_argument("--no-quant", action="store_true")
-    t.add_argument("--select-metric", choices=["f1", "recall_fa"], default="recall_fa",
-                   help="metryka selekcji checkpointu: recall_fa (recall @ budzet FA/h, "
-                        "decyzyjna wg DATASET_CONTRACT; wymaga --val-data z files.csv) "
-                        "lub f1 (ramkowe, stare)")
-    t.add_argument("--stream-budget", type=float, default=6.0,
-                   help="budzet FA/h dla select-metric=recall_fa (domyslnie 6/h)")
     t.set_defaults(func=train)
 
     c = sub.add_parser("compare")
@@ -993,5 +940,10 @@ def main():
     c.set_defaults(func=compare)
 
     args = ap.parse_args()
-    if hasattr(args, "func"):
-        args.func(args)
+    seed = getattr(args, "seed", 0)
+    torch.manual_seed(seed); np.random.seed(seed)
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

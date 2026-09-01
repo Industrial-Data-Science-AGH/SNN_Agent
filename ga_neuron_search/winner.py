@@ -109,17 +109,17 @@ def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
 
     # Ewaluacja na TEŚCIE - wyłącznie dla wybranego, finałowego modelu
     final_m = rf.eval_events(best_model, split="test")
-    eval_split = "test"
 
     if ckpt:
         torch.save({"model": best_state, "metrics": median_m,
                     "topology": genome.to_dict()}, ckpt)
         
-    log("\n" + "=" * 65)
-    log(f"[RAPORT WYNIKÓW] ZBIÓR: {eval_split.upper()} | k={rf.k} | METRYKA: MEDIANA Z {seeds} SEEDÓW")
-    log("-" * 65)
-    log(f"-> clip-F1: {median_m['clip_f1']:.3f} | AP: {median_m['ap']:.3f} | rec: {median_m['clip_recall']:.3f} | prec: {median_m['clip_precision']:.3f} | FA: {median_m['clip_fa_rate']:.3f}")
-    log("=" * 65 + "\n")
+    log("\n" + "=" * 90)
+    log(f"[RAPORT WYNIKÓW] k={rf.k} | PORÓWNANIE WALIDACJA vs TEST")
+    log("-" * 90)
+    log(f"[RAPORT] VAL (mediana z {seeds} seedów) : clip-F1: {median_m['clip_f1']:.3f} | AP: {median_m['ap']:.3f} | rec: {median_m['clip_recall']:.3f} | prec: {median_m['clip_precision']:.3f} | FA: {median_m['clip_fa_rate']:.3f}")
+    log(f"[RAPORT] TEST (wybrany model, 1 odczyt): clip-F1: {final_m['clip_f1']:.3f} | AP: {final_m['ap']:.3f} | rec: {final_m['clip_recall']:.3f} | prec: {final_m['clip_precision']:.3f} | FA: {final_m['clip_fa_rate']:.3f}")
+    log("=" * 90 + "\n")
 
     return best_model, median_m, final_m
 

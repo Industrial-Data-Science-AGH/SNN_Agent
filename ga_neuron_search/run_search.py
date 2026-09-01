@@ -91,6 +91,9 @@ def main():
                          "(np. --tune-k 1 2 3 4 5 6)")
     args = ap.parse_args()
 
+    if args.train_winner and not args.test_data:
+        ap.error("--train-winner wymaga --test-data (raport końcowy jest liczony na teście)")
+
     # determinizm + brak thrasha: małe SNN nie korzystają z wielu wątków matmul,
     # a jeden wątek w procesie głównym == jeden wątek w workerach puli (porównywalne
     # wyniki sekwencyjne i równoległe).

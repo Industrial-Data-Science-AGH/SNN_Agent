@@ -900,7 +900,9 @@ def main():
     t.add_argument("--lr", type=float, default=3e-3)
     t.add_argument("--T", type=int, default=200, help="ramek na okno (200 = 2 s)")
     t.add_argument("--stride", type=int, default=50)
-    t.add_argument("--pos-weight", type=float, default=3.0)
+    t.add_argument("--pos-weight", type=float, default=1.0,
+                   help="waga klasy pozytywnej w stracie (>1 podbija recall kosztem "
+                        "precyzji) — realny podwójny balans klas")
     t.add_argument("--margin-w", type=float, default=0.5,
                    help="waga marginesu na negatywach (tło ma nie podchodzić pod próg)")
     t.add_argument("--spk-w", type=float, default=0.0,

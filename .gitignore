@@ -30,9 +30,11 @@ CLAUDE.md
 dataset/*
 notebooks/
 architecture_14_neurons_patryk_09_07/spikes_csv
+ga_neuron_search/spikes_ext/
 
 # pozostałości po równoległym zapisie cache
 **/_cache_*.npz.tmp*
+
 
 # Artefakty spikowe: w calosci odtwarzalne z audio przez encoder_twin.py build-manifest.
 # spikes_manifest/ i spikes_manifest7/ sa jeszcze sledzone historycznie (1,2 GB w .git),
@@ -51,3 +53,7 @@ architecture_14_neurons_patryk_09_07/spikes_v*/
 # to caly kontrakt z docs/DATASET_CONTRACT.md, razem ~7 MB. Bez nich nikt poza
 # autorem nie moze odtworzyc artefaktu spike'owego. Audio nadal poza gitem.
 !dataset/versions/
+
+# zipy itp
+*.zip
+*.7z

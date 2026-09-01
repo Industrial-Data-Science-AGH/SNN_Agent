@@ -56,6 +56,7 @@ from __future__ import annotations
 import argparse
 import csv
 import glob
+import json
 import hashlib
 import json
 import os
@@ -63,6 +64,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple
+import csv as _csv
+import copy, random
 
 import librosa
 import numpy as np
@@ -93,9 +96,34 @@ THR_Z = np.array([4.0, 3.5, 3.0, 2.5, 3.5, np.nan, np.nan])
 # progi bezwzględne (nan = kanał używa z-score). hf_lo czuły, hf_hi specyficzny.
 ABS_THR = np.array([np.nan, np.nan, np.nan, np.nan, np.nan, 0.28, 0.35])
 
-A_UP, A_DN, A_MAD, EPS = 0.0015, 0.0300, 0.0100, 1e-6
+A_UP, A_DN, A_MAD = 0.0015, 0.0300, 0.0100
+EPS = 1e-6   # ogólny epsilon (dzielenia poza z-score: hf_ratio, cv, spike_thr, bramka HF)
+
+# EPS PER KANAŁ dla mianownika z-score w _update_floor — każdy kanał ma inną
+# jednostkę, więc jeden wspólny EPS=1e-6 kolapsuje przy cyfrowej ciszy (mad->0,
+# mianownik->EPS, dowolne drgnięcie = spike). Wartości to przybliżona
+# rozdzielczość kwantyzacji KAŻDEGO kanału, żeby EPS odpowiadał "1 LSB ADC":
+#   peak      : 1 LSB kodu ADC wprost                    -> 1.0
+#   peak_cnt  : rozdzielczość to 1 próbka/ramkę (int)     -> 1.0
+#   cv, zcr   : ułamek jednej próbki na HOP_SAMPLES próbek statystyki ramki -> 1/HOP_SAMPLES
+#   flux      : rozdzielczość log1p(rms) przy najmniejszej mierzalnej zmianie
+#               rms (rząd 1 LSB / sqrt(HOP_SAMPLES), tłumione przez log1p)
+EPS_FLOOR = np.array([
+    1.0,                                   # peak
+    1.0,                                   # peak_cnt
+    1.0 / HOP_SAMPLES,                     # cv
+    1.0 / HOP_SAMPLES,                     # zcr
+    1.0 / (1.0 + HOP_SAMPLES ** 0.5),       # flux
+    1.0, 1.0,                        # hf_lo/hf_hi: próg bezwzględny, nieużywane tu bo kanał na progu bezwzględnym
+])
+
 REFRAC_FRAMES = 1
 PRIME_FRAMES = 50        # ~0.5 s przy 100 Hz ramek
+
+# stały offset per split zamiast hash(split) — hash() na stringach jest solony
+# per-proces (PYTHONHASHSEED), więc dawało inny RNG przy każdym uruchomieniu
+# mimo tego samego seed. Determinizm wymaga stałej, jawnej mapy.
+SPLIT_OFFSET = {"train": 0, "val": 1, "test": 2}
 
 # 1-pole highpass pasma górnego: lp += (x-lp)>>HF_HP_SHIFT, hf = x - lp.
 # SHIFT=1 => a=0.5 => cutoff ~2.2 kHz @19231 Hz. Kaskada nie poprawiała separacji
@@ -112,15 +140,76 @@ DC_EMA_SHIFT = 9          # dc_est += (raw<<4 - dc_est) >> 9  =>  k = 1/512
 SPIKE_THR_INIT = 40.0
 SPIKE_THR_MIN, SPIKE_THR_MAX = 8.0, ADC_FULL_SCALE
 
+GAIN_PERCENTILE = 99.9   # percentyl amplitudy trafiający w pełną skalę ADC
+GAIN_METHOD = "all-files"   # "all-files": percentyl z połączonego rozkładu próbek
+                            # (poprawny odpowiednik docstringu). "per-file": percentyl
+                            # z listy maksimów/percentyli per plik — używać z niższym
+                            # percentylem (mediana albo ~95), bo przy percentylu 99.9
+                            # i setkach plików to praktycznie maksimum z peaks, czyli
+                            # jeden najgłośniejszy plik dyktuje wzmocnienie całego zbioru.
 
-def wav_to_adc_codes(path: str, fs_hz: int = FS_HZ) -> np.ndarray:
+
+def compute_global_gain(paths, percentile: float = GAIN_PERCENTILE,
+                        method: str = GAIN_METHOD,
+                        fs_hz: int = FS_HZ) -> float:
+    """Liczy JEDNO globalne wzmocnienie z listy plików (percentyl amplitudy
+    -> pełna skala ADC). WYWOŁYWAĆ WYŁĄCZNIE na zbiorze TRENINGOWYM i zamrozić
+    wynik (np. zapisać do JSON obok datasetu) — patrz build_manifest().
+    Zastępuje dawną normalizację `y = y / peak` per plik, która chowała
+    poziom bezwzględny (przesłankę niedostępną na płytce: sprzęt nie ma AGC).
+
+    `method="all-files"` (domyślny): zbiera |y| ze WSZYSTKICH plików do jednego
+    połączonego rozkładu próbek i liczy z niego jeden globalny percentyl —
+    to jest dosłowne odwzorowanie „percentyl amplitudy trafia w pełną skalę
+    ADC" z docstringu, bo percentyl liczony jest na rozkładzie próbek, nie
+    maksimów. Kosztowniejsze pamięciowo (trzyma wszystkie próbki naraz).
+
+    `method="per-file"`: liczy percentyl `percentile` osobno dla każdego pliku,
+    potem bierze `percentile` z tej listy per-plikowych wartości — czyli
+    percentyl z percentyli. Tańsze (jedna liczba na plik), ale przy wysokim
+    percentyle (99.9) i wielu plikach efektywnie wybiera najgłośniejszy plik
+    ze zbioru. Jeśli używasz tego wariantu, ustaw niższy `percentile`
+    (mediana = 50, albo ~95), NIE 99.9."""
+    if method not in ("all-files", "per-file"):
+        raise ValueError(f"nieznana metoda gain: {method!r} (all-files/per-file)")
+
+    if method == "all-files":
+        chunks = []
+        for p in paths:
+            y, _ = librosa.load(p, sr=fs_hz, mono=True)
+            if len(y):
+                chunks.append(np.abs(y))
+        if not chunks:
+            return 1.0
+        all_abs = np.concatenate(chunks)
+        ref = float(np.percentile(all_abs, percentile))
+    else:
+        peaks = []
+        for p in paths:
+            y, _ = librosa.load(p, sr=fs_hz, mono=True)
+            if len(y):
+                peaks.append(np.percentile(np.abs(y), percentile))
+        ref = float(np.percentile(peaks, percentile)) if peaks else 1.0
+    return 1.0 / max(ref, 1e-9)
+
+
+def wav_to_adc_codes(path: str, gain: float, fs_hz: int = FS_HZ,
+                     aug_gain_db: float = 0.0, rng=None) -> np.ndarray:
     """Wczytuje audio i odtwarza to, co widziałby ADC Arduino: resample do FS_HZ
-    (żeby HOP_SAMPLES nadal znaczyło 10 ms) + rekwantyzacja do 10-bit kodów
-    wyśrodkowanych na ADC_BIAS."""
+    + rekwantyzacja do 10-bit kodów wyśrodkowanych na ADC_BIAS.
+
+    `gain`: globalne, ZAMROŻONE wzmocnienie z compute_global_gain() (liczone
+    raz na train) — zastępuje normalizację per-plik, więc poziom bezwzględny
+    (głośność) zostaje zachowany jako przesłanka, tak jak widzi go sprzęt.
+    `aug_gain_db`: augmentacja treningowa — losowe dodatkowe wzmocnienie w
+    zakresie ±aug_gain_db dB, stosowane PRZED rekwantyzacją do kodów ADC (żeby
+    modelować rozrzut poziomu wejściowego, a nie chować go jak stara normalizacja).
+    Zostaw 0.0 dla val/test/produkcji."""
     y, _ = librosa.load(path, sr=fs_hz, mono=True)
-    peak = np.max(np.abs(y))
-    if peak > 0:
-        y = y / peak
+    y = y * gain
+    if aug_gain_db:
+        r = rng if rng is not None else np.random
+        y = y * (10.0 ** (r.uniform(-aug_gain_db, aug_gain_db) / 20.0))
     codes = ADC_BIAS + y * (ADC_FULL_SCALE / 2.0)
     return np.clip(codes, 0.0, ADC_FULL_SCALE)
 
@@ -152,6 +241,7 @@ def _high_band(x: np.ndarray) -> np.ndarray:
 class EncoderState:
     """Stan enkodera przenoszony między ramkami — odpowiednik zmiennych
     `static`/`volatile` w encoder_v2.ino."""
+
     floor_v: np.ndarray = field(default_factory=lambda: np.zeros(N_CH))
     mad_v: np.ndarray = field(default_factory=lambda: np.zeros(N_CH))
     refrac: np.ndarray = field(default_factory=lambda: np.zeros(N_CH, dtype=int))
@@ -169,13 +259,14 @@ def _update_floor(state: EncoderState, c: int, v: float) -> float:
     state.floor_v[c] += a * (v - state.floor_v[c])
     d = abs(v - state.floor_v[c])
     state.mad_v[c] += A_MAD * (d - state.mad_v[c])
-    return (v - state.floor_v[c]) / (state.mad_v[c] + EPS)
+    return (v - state.floor_v[c]) / (state.mad_v[c] + EPS_FLOOR[c])
 
 
-def encode_file(path: str, state: Optional[EncoderState] = None) -> np.ndarray:
+def encode_file(path: str, gain: float, state: Optional[EncoderState] = None,
+                aug_gain_db: float = 0.0, rng=None) -> np.ndarray:
     """Zwraca macierz [n_frames_po_primingu, 7] spike'ów (0/1) dla jednego pliku
     audio — dokładnie to, co encoder_v2.ino wypisałby na Serial jako s0..s6."""
-    codes = wav_to_adc_codes(path)
+    codes = wav_to_adc_codes(path, gain=gain, aug_gain_db=aug_gain_db, rng=rng)
     x = _remove_dc(codes)
     hf = _high_band(x)                       # pasmo górne (~>2.2 kHz) — cechy widmowe
     ax = np.abs(x)
@@ -269,7 +360,8 @@ def encode_file(path: str, state: Optional[EncoderState] = None) -> np.ndarray:
 # BUDOWA DATASETU CSV — wejście dla snn_hw_pipeline.py train --data ...
 # =============================================================================
 
-def _warmup_state(negative_files: list, warmup_seconds: float) -> Tuple[EncoderState, int]:
+def _warmup_state(negative_files: list, warmup_seconds: float,
+                  gain: float) -> Tuple[EncoderState, int]:
     """Rozgrzewa jeden EncoderState na kolejnych plikach tła, aż zbierze co
     najmniej `warmup_seconds` sekund audio PO fazie primingu (floors_primed).
     Wyjście tych plików jest odrzucane — służą wyłącznie do ustabilizowania
@@ -283,7 +375,7 @@ def _warmup_state(negative_files: list, warmup_seconds: float) -> Tuple[EncoderS
     warmed_frames = 0
     used = 0
     for f in negative_files:
-        spikes = encode_file(f, state=state)
+        spikes = encode_file(f, gain=gain, state=state)
         used += 1
         warmed_frames += spikes.shape[0]
         if state.floors_primed and warmed_frames * frame_dt >= warmup_seconds:
@@ -327,10 +419,13 @@ def build_dataset(glass_dirs, negative_dirs, out_dir: str,
     if not glass_files or not negative_files:
         return
 
+    gain = compute_global_gain(glass_files + negative_files)
+    print(f"[gain] globalne wzmocnienie {gain:.4f}", flush=True)
+
     warmup_dir = warmup_dir or (negative_dirs[0] if isinstance(negative_dirs, list) else negative_dirs)
     warmup_files = sorted(glob.glob(os.path.join(warmup_dir, "**", "*.wav"), recursive=True))
 
-    state, n_warmup_used = _warmup_state(warmup_files, warmup_seconds)
+    state, n_warmup_used = _warmup_state(warmup_files, warmup_seconds, gain=gain)
     used_for_warmup = set(warmup_files[:n_warmup_used])
     remaining_negative = [f for f in negative_files if f not in used_for_warmup]
 
@@ -341,7 +436,7 @@ def build_dataset(glass_dirs, negative_dirs, out_dir: str,
 
     counts = {0: 0, 1: 0}
     for i, (label, f) in enumerate(tasks):
-        spikes = encode_file(f, state=state)
+        spikes = encode_file(f, gain=gain, state=state)
         if spikes.shape[0] == 0:
             print(f"[!] {f}: plik za krótki na choćby jedną ramkę — pomijam")
             continue
@@ -358,6 +453,41 @@ def build_dataset(glass_dirs, negative_dirs, out_dir: str,
     print(f"[ok] glass: {counts[1]}/{len(glass_files)} plików -> CSV w {out_dir}")
     print(f"[ok] negative: {counts[0]}/{len(remaining_negative)} plików "
           f"(+ {n_warmup_used} zużytych na warmup) -> CSV w {out_dir}")
+
+
+def _load_or_compute_gain(train_paths, out_dir: str, percentile: float,
+                          method: str, gain_file: Optional[str] = None) -> float:
+    """Czyta zamrożone globalne wzmocnienie z JSON, jeśli plik istnieje i
+    zgadza się percentile+n_files (i metoda) — inaczej liczy je od nowa
+    (jeden librosa.load na plik train) i zapisuje. Unika podwójnego liczenia
+    przy kolejnych uruchomieniach na tym samym zbiorze, i sprawia, że dobudowa
+    kolejnej wersji datasetu nie dostaje po cichu innego wzmocnienia."""
+    gain_path = Path(gain_file) if gain_file else Path(out_dir) / "global_gain.json"
+    if gain_path.exists():
+        try:
+            cached = json.load(open(gain_path))
+            if (cached.get("percentile") == percentile
+                    and cached.get("method") == method
+                    and cached.get("n_files") == len(train_paths)):
+                print(f"[gain] wczytano zamrożone wzmocnienie {cached['gain']:.4f} "
+                      f"z {gain_path} (percentyl {percentile}, metoda {method})",
+                      flush=True)
+                return float(cached["gain"])
+            print(f"[gain] {gain_path} istnieje, ale percentile/method/n_files się "
+                  f"nie zgadzają — liczę od nowa", flush=True)
+        except (json.JSONDecodeError, KeyError) as e:
+            print(f"[gain] nie udało się odczytać {gain_path} ({e}) — liczę od nowa",
+                  flush=True)
+
+    gain = compute_global_gain(train_paths, percentile=percentile, method=method)
+    gain_path.parent.mkdir(parents=True, exist_ok=True)
+    json.dump({"gain": gain, "percentile": percentile, "method": method,
+              "computed_on": "split=train", "n_files": len(train_paths)},
+              open(gain_path, "w"), indent=2)
+    print(f"[gain] globalne wzmocnienie {gain:.4f} (z {len(train_paths)} "
+          f"plików train, percentyl {percentile}, metoda {method}) -> {gain_path}",
+          flush=True)
+    return gain
 
 
 def _sha256_file(path: str) -> Optional[str]:
@@ -434,9 +564,27 @@ def _infer_version(manifest_path: str) -> Optional[str]:
 
 
 def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
-                   warmup_seconds: float = 30.0,
-                   dataset_version: Optional[str] = None) -> None:
+                   warmup_seconds: float = 30.0, seed: int = 0,
+                   aug_gain_db: float = 12.0,
+                   gain_percentile: float = GAIN_PERCENTILE,
+                   gain_method: str = GAIN_METHOD,
+                   gain_file: Optional[str] = None) -> None:
+
     """Buduje CSV-y wg wersjonowanego manifestu (dataset/versions/<ver>/manifest.csv).
+
+    Stan enkodera per split: WSPÓLNY rozgrzany stan bazowy (na tle treningowym)
+    jest KOPIOWANY niezależnie dla train/val/test — więc kodowanie pliku w val
+    nie zależy od tego, co wcześniej przeszło przez train, ani przez jaki
+    kolejny plik w val. W obrębie jednego splitu pliki są przeplatane
+    (seedowany shuffle) zamiast sortowane po etykiecie, żeby historia stanu
+    nie korelowała z klasą (patrz pomiar w zadaniu: negatywy zawsze przed
+    pozytywami psuło floor). To NIE jest pełna niezależność od kolejności
+    wewnątrz splitu (stan wciąż akumuluje się między kolejnymi plikami tego
+    samego splitu) — tylko usunięcie korelacji stanu z etykietą i determinizm
+    przez seed.
+    Globalne wzmocnienie (gain) liczone RAZ na negatywach+pozytywach splitu
+    train i zamrożone: używane identycznie dla train/val/test. Augmentacja
+    losowym wzmocnieniem (domyślnie ±12 dB) stosowana TYLKO na splicie train.
 
     Zachowuje podział train/val/test z manifestu jako podkatalogi wyjścia, więc
     trener dostaje --data out/train --val-data out/val, czyli split zrobiony raz,
@@ -467,9 +615,15 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
               f"{missing[0]['abspath']} — pomijam je")
         rows = [r for r in rows if os.path.exists(r["abspath"])]
 
+    # --- globalne wzmocnienie: liczone WYŁĄCZNIE na train, potem zamrożone ---
+    train_paths = [r["abspath"] for r in rows if r["split"] == "train"]
+    gain = _load_or_compute_gain(train_paths, out_dir, gain_percentile,
+                                 gain_method, gain_file=gain_file)
+
     _assert_groups_disjoint(rows)
 
-    version = dataset_version or _infer_version(manifest_path)
+    # inferencja zamiast podania wprost
+    version = _infer_version(manifest_path)
     prov = {
         "dataset_version": version,
         "manifest_path": os.path.relpath(os.path.abspath(manifest_path),
@@ -492,7 +646,7 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
         print("[!] brak negatywów kind=stationary w train — warmup na dowolnym tle")
         warmup_files = sorted(r["abspath"] for r in rows
                               if r["label"] == "negative" and r["split"] == "train")
-    state, n_used = _warmup_state(warmup_files, warmup_seconds)
+    base_state, n_used = _warmup_state(warmup_files, warmup_seconds, gain=gain)
     used_for_warmup = set(warmup_files[:n_used])
 
     out = Path(out_dir)
@@ -500,14 +654,21 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
     written: dict = {"train": [], "val": [], "test": []}
     for split in ("train", "val", "test"):
         (out / split).mkdir(parents=True, exist_ok=True)
-        split_rows = _interleave_by_class([r for r in rows if r["split"] == split])
+        split_state = copy.deepcopy(base_state)  # niezależny stan per split
+        split_aug = aug_gain_db if split == "train" else 0.0
+        split_rng = np.random.default_rng(seed * 10 + SPLIT_OFFSET[split])
+        split_rows = _interleave_by_class([r for r in rows if r["split"] == split and r["abspath"] not in used_for_warmup])
         print(f"[{split}] średnia pozycja w strumieniu: {_stream_balance(split_rows)}",
               flush=True)
         for r in split_rows:
-            if r["abspath"] in used_for_warmup:
-                continue
             label = 1 if r["label"] == "positive" else 0
-            spikes = encode_file(r["abspath"], state=state)
+            spikes = encode_file(
+                r["abspath"],
+                gain=gain,
+                state=split_state,
+                aug_gain_db=split_aug,
+                rng=split_rng,
+            )
             if spikes.shape[0] == 0:
                 print(f"[!] {r['abspath']}: za krótki na choćby jedną ramkę — pomijam")
                 continue
@@ -519,8 +680,11 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
             with open(out / split / name, "w", encoding="utf-8") as fh:
                 fh.write("frame," + ",".join(f"s{c}" for c in range(N_CH)) + ",label\n")
                 for frame_idx, row_bits in enumerate(spikes):
-                    fh.write(f"{frame_idx},"
-                             + ",".join(str(int(v)) for v in row_bits) + f",{label}\n")
+                    fh.write(
+                        f"{frame_idx},"
+                        + ",".join(str(int(v)) for v in row_bits)
+                        + f",{label}\n"
+                    )
             counts[key] += 1
             written[split].append((r, name))
             done = sum(counts.values())
@@ -538,21 +702,43 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
                             r.get("source", ""), r.get("group_id", ""), name])
 
     for split in ("train", "val", "test"):
-        print(f"[ok] {split}: glass {counts.get((split, 1), 0)}, "
-              f"negative {counts.get((split, 0), 0)} -> {out / split}", flush=True)
+        print(
+            f"[ok] {split}: glass {counts.get((split, 1), 0)}, "
+            f"negative {counts.get((split, 0), 0)} -> {out / split}",
+            flush=True,
+        )
 
 
 # =============================================================================
 # CLI
 # =============================================================================
 
+
 def _cmd_build(args) -> None:
-    build_dataset(args.glass, args.negative, args.out,
-                  warmup_seconds=args.warmup_seconds, warmup_dir=args.warmup_dir)
+    build_dataset(
+        args.glass,
+        args.negative,
+        args.out,
+        warmup_seconds=args.warmup_seconds,
+        warmup_dir=args.warmup_dir,
+    )
 
 
 def _cmd_preview(args) -> None:
-    spikes = encode_file(args.wav)
+    gain_path = Path(args.gain_file) if args.gain_file else None
+    if gain_path and gain_path.exists():
+        cached = json.load(open(gain_path))
+        gain = float(cached["gain"])
+        print(f"[gain] wczytano zamrożone wzmocnienie {gain:.4f} z {gain_path}")
+    else:
+        print(f"[!] brak pliku wzmocnienia ({gain_path or '--gain-file nie podano'}) "
+              f"— podgląd BEZ wzmocnienia (gain=1.0). To NIE jest to, co enkoder "
+              f"zrobi z tym plikiem w zbiorze (tam gain jest zamrożone z train) — "
+              f"podaj --gain-file, żeby zobaczyć realny wynik.")
+    gain = compute_global_gain(
+        [args.wav]
+    )  # podgląd pojedynczego pliku — brak train do kalibracji
+    spikes = encode_file(args.wav, gain=gain)
     print(f"plik: {args.wav}")
     print(f"ramek po primingu: {spikes.shape[0]}")
     if spikes.shape[0] == 0:
@@ -590,15 +776,33 @@ def main() -> None:
                    help="katalog, względem którego rozwiązywane są ścieżki z manifestu")
     m.add_argument("--out", default="./spikes_manifest")
     m.add_argument("--warmup-seconds", type=float, default=30.0)
+    m.add_argument("--seed", type=int, default=0)
+    m.add_argument("--aug-gain-db", type=float, default=12.0)
+    m.add_argument("--gain-percentile", type=float, default=GAIN_PERCENTILE,
+                   help="percentyl amplitudy trafiający w pełną skalę ADC")
+    m.add_argument("--gain-method", default=GAIN_METHOD, choices=["all-files", "per-file"],
+                   help="all-files: percentyl z połączonego rozkładu próbek (domyślne, "
+                        "poprawne dla percentile=99.9). per-file: percentyl z listy "
+                        "peaków per plik — użyj z niższym --gain-percentile (np. 50/95)")
+    m.add_argument("--gain-file", default=None,
+                   help="ścieżka do global_gain.json (domyślnie <out>/global_gain.json); "
+                        "jeśli istnieje i pasuje percentile/method/n_files, wczytywany "
+                        "zamiast liczony od nowa")
     m.add_argument("--dataset-version", default=None,
                    help="etykieta wersji do channels.json; domyślnie z nazwy "
                         "katalogu manifestu (dataset/versions/vX.Y.Z/manifest.csv)")
     m.set_defaults(func=lambda a: build_manifest(a.manifest, a.out, root=a.root,
                                                  warmup_seconds=a.warmup_seconds,
-                                                 dataset_version=a.dataset_version))
+                                                 seed=a.seed, aug_gain_db=a.aug_gain_db,
+                                                 gain_percentile=a.gain_percentile,
+                                                 gain_method=a.gain_method,
+                                                 gain_file=a.gain_file))
 
     p = sub.add_parser("preview", help="Podgląd spike-rate jednego pliku (debug)")
     p.add_argument("wav")
+    p.add_argument("--gain-file", default=None,
+                   help="global_gain.json z zamrożonym wzmocnieniem (z build-manifest); "
+                        "bez niego podgląd używa gain=1.0 i wypisuje ostrzeżenie")
     p.set_defaults(func=_cmd_preview)
 
     args = ap.parse_args()

@@ -651,7 +651,6 @@ def build_manifest(manifest_path: str, out_dir: str, root: str = ".",
 
     out = Path(out_dir)
     counts: dict = {}
-    rng = random.Random(seed)
     written: dict = {"train": [], "val": [], "test": []}
     for split in ("train", "val", "test"):
         (out / split).mkdir(parents=True, exist_ok=True)
@@ -726,7 +725,6 @@ def _cmd_build(args) -> None:
 
 
 def _cmd_preview(args) -> None:
-    gain = 1.0
     gain_path = Path(args.gain_file) if args.gain_file else None
     if gain_path and gain_path.exists():
         cached = json.load(open(gain_path))
@@ -740,17 +738,6 @@ def _cmd_preview(args) -> None:
     gain = compute_global_gain(
         [args.wav]
     )  # podgląd pojedynczego pliku — brak train do kalibracji
-    gain = 1.0
-    gain_path = Path(args.gain_file) if args.gain_file else None
-    if gain_path and gain_path.exists():
-        cached = json.load(open(gain_path))
-        gain = float(cached["gain"])
-        print(f"[gain] wczytano zamrożone wzmocnienie {gain:.4f} z {gain_path}")
-    else:
-        print(f"[!] brak pliku wzmocnienia ({gain_path or '--gain-file nie podano'}) "
-              f"— podgląd BEZ wzmocnienia (gain=1.0). To NIE jest to, co enkoder "
-              f"zrobi z tym plikiem w zbiorze (tam gain jest zamrożone z train) — "
-              f"podaj --gain-file, żeby zobaczyć realny wynik.")
     spikes = encode_file(args.wav, gain=gain)
     print(f"plik: {args.wav}")
     print(f"ramek po primingu: {spikes.shape[0]}")

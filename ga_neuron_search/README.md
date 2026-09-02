@@ -125,6 +125,11 @@ python run_search.py --neurons 4 6 8 10 --mode real ... --workers 18 --out wynik
 - `--device cpu|cuda` (domyślnie cuda-jak-dostępne, inaczej cpu). Na Macu trzymaj
   **cpu** — MPS zmierzone ~3× wolniejsze dla tego rozmiaru sieci.
 
+### Algorytm szukania architektury (GA) jest **w 100% deterministyczny** i niezależny od liczby procesów roboczych (`--workers`).
+
+* **Gwarancja powtarzalności:** Uruchomienie ewaluacji sekwencyjnie (`--workers 1`) oraz równolegle (`--workers 4`) przy tym samym `--seed` daje **identyczne wyniki** (metryki, wygenerowane struktury JSON oraz topology). Jedyną różnicą jest skrócony czas wykonania.
+* **Mechanizm:** Każdy worker przed oceną osobnika w `fitness.py` twardo resetuje globalny stan generatorów losowych (`torch.manual_seed(seed); self.np.random.seed(seed)`). Zapobiega to dryfowi RNG i wyklucza wpływ kolejności wykonywania zadań przez procesy.
+
 ## Status i dalsze kroki
 
 - `genome.py`, `ga.py`, `run_search.py`, `test_genome.py` — przetestowane

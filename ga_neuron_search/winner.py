@@ -4,6 +4,9 @@ winner.py — pełny trening zwycięskiej topologii i eksport nastaw płytek Lu.
 
   * train_full(rf, genome, ...) — pełny harmonogram HAT->QAT (jak
     snn_hw_pipeline.train), checkpoint po ocenie ZDARZENIOWEJ (clip-F1).
+    ZMIANA odnośnie train_full(Marcel)
+    train_full(rf, genome, ...) — ZMIENIONE: wykonuje trening na 'seeds' seedach
+
   * export_genome_config(model, path, ...) — uogólnienie export_config na dowolną
     liczbę warstw: per płytka trymer% + znak +/-, pasek LED (V_leak),
     tau_syn/tau_mem, pulses_to_fire do weryfikacji sim<->hw.
@@ -27,16 +30,12 @@ from snn_hw_pipeline import (DT, V_TH, W_DEADZONE, W_MAX, CHANNELS,
 
 def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
                lr: float = 3e-3, pos_weight: float = 3.0, patience: int = 20,
-               ckpt: Optional[str] = None, log=print):
+               ckpt: Optional[str] = None, log=print, seeds: int = 5):
     """Pełny cykl HAT->QAT dla zadanej topologii. rf = instancja RealFitness
     (dane + urządzenie + ocena zdarzeniowa)."""
     torch_, np = rf.torch, rf.np
     dev = rf.device
     torch_.manual_seed(0); np.random.seed(0)
-
-    model = net.GenomeNet(genome, hw=None, quantize=False).to(dev)
-    opt = torch_.optim.Adam(model.parameters(), lr=lr)
-    sched = torch_.optim.lr_scheduler.CosineAnnealingLR(opt, epochs)
 
     dl_tr = rf.DataLoader(rf.tr_ds, batch_size=128,
                           sampler=rf.make_sampler(rf.tr_lab, 12000))
@@ -44,55 +43,109 @@ def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
     hat_epochs = int(round(hat_frac * epochs))
     freeze_ep = int(0.8 * epochs)
     log(f"[winner] plan: HAT 0..{hat_epochs-1}, QAT {hat_epochs}..{epochs-1}, "
-        f"znaki zamrozone od {freeze_ep}")
+            f"znaki zamrozone od {freeze_ep}")
+    
+    all_runs = []
 
-    best, since, best_state, best_m = -1.0, 0, None, {}
-    for ep in range(epochs):
-        t0 = time.time()
-        phase = "HAT" if ep < hat_epochs else "QAT"
-        if ep == hat_epochs:
-            model.set_quantize(True)
-            best, since = -1.0, 0
-            log(f"[winner ep {ep}] start QAT: kwantyzacja on, reset best")
-        if ep == freeze_ep:
-            model.freeze_signs()
-            log(f"[winner ep {ep}] znaki wag zamrozone")
+    for seed_idx in range(seeds):
+        log(f"\n--- Trening Zwycięzcy: Seed {seed_idx + 1}/{seeds} ---")
+        torch_.manual_seed(seed_idx); np.random.seed(seed_idx)
 
-        model.train(); model.set_mismatch(True)
-        loss_sum, nb = 0.0, 0
-        for x, y in dl_tr:
-            x, y = x.to(dev), y.to(dev)
-            loss, _ = net.genome_loss(model(x), y, pos_weight, k_ref=rf.k)
-            opt.zero_grad(); loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            opt.step()
-            loss_sum += loss.item(); nb += 1
-        model.set_mismatch(False)
-        sched.step()
+        model = net.GenomeNet(genome, hw=None, quantize=False).to(dev)
+        opt = torch_.optim.Adam(model.parameters(), lr=lr)
+        sched = torch_.optim.lr_scheduler.CosineAnnealingLR(opt, epochs)
 
-        m = rf.eval_events(model)
-        tag = ""
-        if m["clip_f1"] > best:
-            best, since, tag = m["clip_f1"], 0, " *"
-            best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
-            best_m = m
-        else:
-            since += 1
-        log(f"[winner ep {ep:3d} {phase}] loss {loss_sum/max(nb,1):.4f} "
-            f"clipF1 {m['clip_f1']:.3f} AP {m['ap']:.3f} rec {m['clip_recall']:.3f} "
-            f"FA {m['clip_fa_rate']:.3f} {time.time()-t0:.0f}s{tag}")
-        if since >= patience and phase == "QAT":
-            log(f"[winner] early stop (QAT, brak poprawy {patience})")
-            break
+        best, since, best_state, best_m = -1.0, 0, None, {}
+        for ep in range(epochs):
+            t0 = time.time()
+            phase = "HAT" if ep < hat_epochs else "QAT"
+            if ep == hat_epochs:
+                model.set_quantize(True)
+                best, since = -1.0, 0
+                log(f"[winner ep {ep}] start QAT: kwantyzacja on, reset best")
+            if ep == freeze_ep:
+                model.freeze_signs()
+                log(f"[winner ep {ep}] znaki wag zamrozone")
 
-    if best_state is not None:
-        model.load_state_dict(best_state)
+            model.train(); model.set_mismatch(True)
+            loss_sum, nb = 0.0, 0
+            for x, y in dl_tr:
+                x, y = x.to(dev), y.to(dev)
+                loss, _ = net.genome_loss(model(x), y, pos_weight, k_ref=rf.k)
+                opt.zero_grad(); loss.backward()
+                nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                opt.step()
+                loss_sum += loss.item(); nb += 1
+            model.set_mismatch(False)
+            sched.step()
+
+            m = rf.eval_events(model, split="val")
+            tag = ""
+            if m["clip_f1"] > best:
+                best, since, tag = m["clip_f1"], 0, " *"
+                best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+                best_m = m
+            else:
+                since += 1
+
+            # Ograniczenie spamu w konsoli (co 10 epok lub przy biciu rekordu)
+            if tag or ep % 10 == 0:
+                log(f"[winner ep {ep:3d} {phase}] loss {loss_sum/max(nb,1):.4f} "
+                    f"clipF1 {m['clip_f1']:.3f} AP {m['ap']:.3f} rec {m['clip_recall']:.3f} "
+                    f"FA {m['clip_fa_rate']:.3f} {time.time()-t0:.0f}s{tag}")
+                
+            if since >= patience and phase == "QAT":
+                log(f"[winner] early stop (QAT, brak poprawy {patience})")
+                break
+
+        if best_state is not None:
+            model.load_state_dict(best_state)
+        
+        all_runs.append((model, best_state, best_m))
+
+    all_runs.sort(key=lambda x: x[2]["clip_f1"])
+    median_idx = len(all_runs) // 2
+    best_model, best_state, median_m = all_runs[median_idx]
+
+    # Ewaluacja na TEŚCIE - wyłącznie dla wybranego, finałowego modelu
+    final_m = rf.eval_events(best_model, split="test")
+
     if ckpt:
-        torch.save({"model": model.state_dict(), "metrics": best_m,
+        torch.save({"model": best_state, "metrics": median_m,
                     "topology": genome.to_dict()}, ckpt)
-    log(f"[winner] najlepszy clip-F1={best_m.get('clip_f1', 0):.3f} "
-        f"(AP {best_m.get('ap', 0):.3f})")
-    return model, best_m
+        
+    log("\n" + "=" * 90)
+    log(f"[RAPORT WYNIKÓW] k={rf.k} | PORÓWNANIE WALIDACJA vs TEST")
+    log("-" * 90)
+    log(f"[RAPORT] VAL (mediana z {seeds} seedów) : clip-F1: {median_m['clip_f1']:.3f} | AP: {median_m['ap']:.3f} | rec: {median_m['clip_recall']:.3f} | prec: {median_m['clip_precision']:.3f} | FA: {median_m['clip_fa_rate']:.3f}")
+    log(f"[RAPORT] TEST (wybrany model, 1 odczyt): clip-F1: {final_m['clip_f1']:.3f} | AP: {final_m['ap']:.3f} | rec: {final_m['clip_recall']:.3f} | prec: {final_m['clip_precision']:.3f} | FA: {final_m['clip_fa_rate']:.3f}")
+    log("=" * 90 + "\n")
+
+    return best_model, median_m, final_m
+
+
+# ============================================================ strojenie dekodera
+
+def tune_k(model, rf, k_range=(1, 2, 3, 4, 5, 6)):
+    """Przebieg progu dekodera k (>= k spików D w oknie = alarm) na wytrenowanym
+    modelu. Nie dotyka wag — tylko metryki na zbiorze walidacyjnym, więc tanie.
+    Zwraca (najlepsze_k, jego metryki, tabela wszystkich k)."""
+    best, best_k, table = None, k_range[0], []    
+
+    for k in k_range:
+        m = rf.eval_events(model, k=k, split="val")
+        table.append({"k": int(k),
+                      "clip_f1": m["clip_f1"], "clip_recall": m["clip_recall"],
+                      "clip_precision": m["clip_precision"],
+                      "clip_fa_rate": m["clip_fa_rate"], "ap": m["ap"]})
+        print(f"[tune-k] k={k}: clipF1 {m['clip_f1']:.3f} rec {m['clip_recall']:.3f} "
+              f"prec {m['clip_precision']:.3f} FA {m['clip_fa_rate']:.3f} "
+              f"AP {m['ap']:.3f}")
+        if best is None or m["clip_f1"] > best["clip_f1"]:
+            best, best_k = m, k
+    print(f"[tune-k] wybor k={best_k} (clipF1 {best['clip_f1']:.3f}, "
+          f"FA {best['clip_fa_rate']:.3f})")
+    return best_k, best, table
 
 
 # ============================================================ eksport nastaw

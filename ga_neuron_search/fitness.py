@@ -17,6 +17,7 @@ from __future__ import annotations
 import math
 import os
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from typing import Optional
 
 from genome import Genome, N_FEATURES
@@ -143,6 +144,13 @@ class RealFitness:
             vw, vl, vf = vw[sub], vl[sub], vf[sub]
         self.va_win, self.va_lab, self.va_fidx = vw, vl.astype(np.float32), vf
 
+        if test_data:
+            te = load_clips(test_data, T, stride, None, SpikeClips)
+            self.te_win, self.te_lab, self.te_fidx = te.win, te.lab.astype(np.float32), te.fidx
+            print(f"[test] {len(self.te_lab)} okien (dla raportu winner.py)", flush=True)
+        else:
+            self.te_win, self.te_lab, self.te_fidx = None, None, None
+
         # liczba kanałów encodera bierze się z danych (nie zaszyta na 7) — GA
         # selekcjonuje spośród nich. Nazwy: najpierw sidecar channels.json obok
         # danych (rozszerzone zbiory 14-kanałowe), potem pipeline, na końcu ch{i}.
@@ -152,11 +160,16 @@ class RealFitness:
         print(f"[val] {len(self.va_lab)} okien / {len(np.unique(self.va_fidx))} klipów "
               f"(dekoder k={k}, metryka={metric}, seedy={fitness_seeds}, "
               f"kanały={self.n_channels})", flush=True)
-
-    def eval_events(self, model, k: Optional[int] = None):
+                    
+    def eval_events(self, model, k: Optional[int] = None, split: str = "val"):
         import net
-        return net.genome_eval_events(model, self.va_win, self.va_lab,
-                                      self.va_fidx, self.device, k or self.k)
+        if split == "test":
+            assert self.te_win is not None, "Brak test_data! Dodaj --test-data do argumentów CLI."
+            win, lab, fidx = self.te_win, self.te_lab, self.te_fidx
+        else:
+            win, lab, fidx = self.va_win, self.va_lab, self.va_fidx
+
+        return net.genome_eval_events(model, win, lab, fidx, self.device, k or self.k)
 
     def stream_recall(self, model, g):
         """Recall @ budżet FA/h na splicie val (pełne klipy, kind/group z files.csv).
@@ -220,7 +233,7 @@ class RealFitness:
             if ep == 0:
                 loss0 = mean
             lossN = mean
-        metrics = self.eval_events(model)
+        metrics = self.eval_events(model, split="val")
         if return_model:
             return metrics, loss0, lossN, model
         return metrics, loss0, lossN
@@ -298,3 +311,61 @@ def _avg_fanout(g: Genome) -> float:
     for k in range(len(g.layers)):
         counts += [c for c in g.fanout_counts(k) if c > 0]
     return sum(counts) / max(len(counts), 1)
+
+
+# ------------------------------------------------------------------ równolegle
+
+_POOL_RF = None  # per-worker RealFitness
+
+
+def _pool_worker_init(rf_kwargs: dict):
+    """Inicjalizacja pracownika puli: własny RealFitness + 1 wątek torch.
+
+    Kluczowy detal: każdy worker dostaje SWOJĄ instancję RealFitness (dane +
+    trener) i `torch.set_num_threads(1)` — inaczej 18 procesów x domyślna liczba
+    wątków torch by się wzajemnie dusiły (threading thrash). CPU, bo MPS jest
+    dla tak małego SNN ~3x wolniejszy (pomierzone 2026-08-24).
+    """
+    global _POOL_RF
+    import torch
+    torch.set_num_threads(1)
+    _POOL_RF = RealFitness(**rf_kwargs)
+
+
+def _pool_worker_eval(arg):
+    g, budget = arg
+    return _POOL_RF(g, budget)
+
+
+class ParallelFitness:
+    """Procesowa pula wokół RealFitness — ewaluacja osobników na wielu rdzeniach.
+
+    Pracownicy budują RealFitness raz (koszt: wczytanie cache danych ~sekunda),
+    po czym oceniają genomy niezależnie. `batch` zachowuje kolejność — GA może
+    ewaluować generację hurtem i wyjdzie z tym samym cache-mapa topologii.
+    """
+
+    def __init__(self, rf_kwargs: dict, max_workers: Optional[int] = None):
+        self.rf_kwargs = dict(rf_kwargs)
+        self.rf_kwargs["verbose"] = False
+        self.max_workers = max_workers or os.cpu_count() or 1
+        self._pool = ProcessPoolExecutor(
+            max_workers=self.max_workers,
+            initializer=_pool_worker_init,
+            initargs=(self.rf_kwargs,),
+        )
+
+    def batch(self, genomes, budget: float = 1.0) -> list:
+        if not genomes:
+            return []
+        # chunksize=1: ocena jednego osobnika trwa ~5 s, więc IPC jest bez znaczenia —
+        # a grupowanie w chunki (4) zostawiałoby tylko 2/18 workerów zajętych przy
+        # partii rzędu 24 genomów. Kolejność wyników jest zachowana (map).
+        return list(self._pool.map(_pool_worker_eval,
+                                   [(g, budget) for g in genomes], chunksize=1))
+
+    def __call__(self, g: Genome, budget: float = 1.0) -> float:
+        return self.batch([g], budget)[0]
+
+    def close(self):
+        self._pool.shutdown(wait=True)

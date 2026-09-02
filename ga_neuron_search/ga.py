@@ -88,7 +88,7 @@ def run_ga(fitness: FitnessFn, cfg: GAConfig,
         Dedup przez cache topologii `key@budget`. Wewnątrz partii powtórzony
         genom jest oznaczany jako "w trakcie" (None) i nie jest liczony 2x.
         Kolejność wyników = kolejność wejścia — GA pozostaje deterministyczny:
-        te same genomy -> te same fitnessy co w wersji sekwencyjnej.
+        te same genomy -> te same fitnessy co w wersji sekwencyjnej (szczegóły w README).
         """
         nonlocal evaluated
         keys = [f"{g.key()}@{budget:.2f}" for g in genomes]

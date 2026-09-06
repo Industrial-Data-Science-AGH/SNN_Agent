@@ -54,6 +54,9 @@ architecture_14_neurons_patryk_09_07/spikes_v*/
 # autorem nie moze odtworzyc artefaktu spike'owego. Audio nadal poza gitem.
 !dataset/versions/
 
+# generowanie datasetu ciągłego
+!dataset/continuous
+
 # zipy itp
 *.zip
 *.7z

@@ -1,8 +1,7 @@
 # continuous_eval — generator ciągłego datasetu ewaluacyjnego
 
 Generator deterministycznego strumienia audio z **dokładnie 5 zdarzeniami
-rozbicia szkła** w losowych, nienachodzących pozycjach. Etap 3 master
-pipeline'u Marcela.
+rozbicia szkła** w losowych, nienachodzących pozycjach.
 
 ## Szybki start
 
@@ -26,7 +25,7 @@ python -m dataset.continuous.eval.cli \
     --out-dir dataset/continuous/out
 ```
 
-Wynik: `continuous_eval_seed42.wav` + `continuous_eval_seed42.manifest.json`.
+Wynik dla seed 42: `continuous_eval_seed42.wav` + `continuous_eval_seed42.manifest.json`.
 
 ## Testy automatyczne
 
@@ -37,23 +36,6 @@ python -m pytest dataset/continuous/tests/ -v
 
 ---
 
-## Architektura (4 moduły)
-
-```
-continuous_eval/
-  annotations.py    — parsowanie synthetic_XXX.txt, ekstrakcja klipów glassbreak
-  audio_io.py       — I/O: mono, resampling do 44100 Hz, zapis PCM_16
-  stream_builder.py — losowanie pozycji, budowa miksu, antyaliasing clippingu
-  manifest.py       — kontrakt JSON (patrz niżej)
-  validate.py       — weryfikacja pary (wav, manifest) — używane przez testy i CI
-  cli.py            — entry point CLI
-tests/
-  test_annotations.py    — parsowanie, tryby clean/background
-  test_positioning.py    — losowanie pozycji (czyste, bez I/O)
-  test_stream_builder.py — integracyjne z syntetycznym audio w pamięci
-```
-
----
 
 ## Decyzje implementacyjne
 

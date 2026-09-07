@@ -77,16 +77,16 @@ def load_clips(data: str, T: int, stride: int, limit: Optional[int], SpikeClips)
 class RealFitness:
     """Proxy-trening GenomeNet -> metryka zdarzeniowa jako fitness."""
 
-    def __init__(self, arch_dir: str, data: str, val_data: Optional[str] = None,
-                 test_data: Optional[str] = None,
+    def __init__(self, arch_dir: str, data: str, stream_budget: float,
+                 val_data: Optional[str] = None, test_data: Optional[str] = None,
                  limit: Optional[int] = None, epochs: int = 4, T: int = 200,
                  stride: int = 50, bs: int = 128, lr: float = 3e-3,
                  num_samples: int = 6000, val_cap: int = 3000, k: int = 1,
                  metric: str = "clip_f1", fitness_seeds: int = 1,
                  pos_weight: float = 3.0, fanout_penalty: float = 0.01,
                  feature_penalty: float = 0.005, channels_head: Optional[int] = None,
-                 stream_budget: float = 6.0, stream_boot: int = 0,
-                 verbose: bool = True, seed: int = 0, device: Optional[str] = None):
+                 stream_boot: int = 0, verbose: bool = True, seed: int = 0,
+                 device: Optional[str] = None):
         assert metric in ("ap", "clip_f1", "recall_fa"), \
             "metric: 'ap' | 'clip_f1' | 'recall_fa' (recall @ budżet FA/h)"
         arch_dir = os.path.abspath(arch_dir)

@@ -112,8 +112,10 @@ def main():
                          val_data=args.val_data, test_data=args.test_data, limit=args.limit,
                          epochs=args.epochs, num_samples=args.num_samples,
                          k=args.k, metric=args.metric, fitness_seeds=args.fitness_seeds,
-                         pos_weight=args.pos_weight,
-                         verbose=not args.quiet, seed=args.seed, device=args.device)
+                         pos_weight=args.pos_weight, feature_penalty=args.feature_penalty,
+                         channels_head=args.channels_head, stream_budget=args.stream_budget,
+                         stream_boot = args.stream_boot,verbose=not args.quiet, seed=args.seed, 
+                         device=args.device)
         rf = RealFitness(**rf_kwargs)
         if args.workers == 1:
             fitness = rf

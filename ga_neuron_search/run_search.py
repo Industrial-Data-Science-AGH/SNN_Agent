@@ -70,7 +70,7 @@ def main():
                          "decyzyjna metryka z DATASET_CONTRACT)")
     ap.add_argument("--stream-budget", type=float, default=6.0,
                     help="budzet FA/h dla metric=recall_fa (domyslnie 6/h)")
-    ap.add_argument("--fitness-seeds", type=int, default=1,
+    ap.add_argument("--fitness-seeds", type=int, default=3,
                     help="usrednij fitness po tylu seedach (mniejsza wariancja)")
     ap.add_argument("--pos-weight", type=float, default=1.0,
                         help="waga klasy pozytywnej w BCE proxy-treningu i dotrenowania")

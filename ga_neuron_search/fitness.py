@@ -164,7 +164,8 @@ class RealFitness:
     def eval_events(self, model, k: Optional[int] = None, split: str = "val"):
         import net
         if split == "test":
-            assert self.te_win is not None, "Brak test_data! Dodaj --test-data do argumentów CLI."
+            if self.te_win is None:
+                raise ValueError("Brak test_data! Dodaj --test-data do argumentów CLI.")
             win, lab, fidx = self.te_win, self.te_lab, self.te_fidx
         else:
             win, lab, fidx = self.va_win, self.va_lab, self.va_fidx

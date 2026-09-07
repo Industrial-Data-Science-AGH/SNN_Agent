@@ -30,7 +30,8 @@ from snn_hw_pipeline import (DT, V_TH, W_DEADZONE, W_MAX, CHANNELS,
 
 def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
                lr: float = 3e-3, pos_weight: float = 1.0, patience: int = 20,
-               ckpt: Optional[str] = None, log=print, seeds: int = 5):
+               ckpt: Optional[str] = None, log=print, seeds: int = 5,
+               select_metric: str = "clip_f1"):
     """Pełny cykl HAT->QAT dla zadanej topologii. rf = instancja RealFitness
     (dane + urządzenie + ocena zdarzeniowa)."""
     torch_, np = rf.torch, rf.np
@@ -80,9 +81,17 @@ def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
             sched.step()
 
             m = rf.eval_events(model, split="val")
+            current_score = m.get(select_metric, m.get("clip_f1", 0))
+            # DODANE: Jeśli wybraliśmy recall_fa, i jesteśmy w fazie QAT, 
+            # nadpisz score metryką strumieniową
+            if select_metric == "recall_fa" and phase == "QAT":
+                rec, _ = rf.stream_recall(model, genome)
+                m["recall_fa"] = rec  # Zapisujemy do słownika, by móc posortować
+                current_score = rec
+
             tag = ""
-            if m["clip_f1"] > best:
-                best, since, tag = m["clip_f1"], 0, " *"
+            if current_score > best:
+                best, since, tag = current_score, 0, " *"
                 best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
                 best_m = m
             else:
@@ -103,7 +112,7 @@ def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
         
         all_runs.append((model, best_state, best_m))
 
-    all_runs.sort(key=lambda x: x[2]["clip_f1"])
+    all_runs.sort(key=lambda x: x[2].get(select_metric, x[2].get("clip_f1", 0)))
     median_idx = len(all_runs) // 2
     best_model, best_state, median_m = all_runs[median_idx]
 
@@ -117,8 +126,8 @@ def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
     log("\n" + "=" * 90)
     log(f"[RAPORT WYNIKÓW] k={rf.k} | PORÓWNANIE WALIDACJA vs TEST")
     log("-" * 90)
-    log(f"[RAPORT] VAL (mediana z {seeds} seedów) : clip-F1: {median_m['clip_f1']:.3f} | AP: {median_m['ap']:.3f} | rec: {median_m['clip_recall']:.3f} | prec: {median_m['clip_precision']:.3f} | FA: {median_m['clip_fa_rate']:.3f}")
-    log(f"[RAPORT] TEST (wybrany model, 1 odczyt): clip-F1: {final_m['clip_f1']:.3f} | AP: {final_m['ap']:.3f} | rec: {final_m['clip_recall']:.3f} | prec: {final_m['clip_precision']:.3f} | FA: {final_m['clip_fa_rate']:.3f}")
+    log(f"[RAPORT] VAL (mediana z {seeds} seedów) : {select_metric}: {median_m.get(select_metric, median_m.get('clip_f1', 0)):.3f} | AP: {median_m['ap']:.3f} | rec: {median_m['clip_recall']:.3f} | prec: {median_m['clip_precision']:.3f} | FA: {median_m['clip_fa_rate']:.3f}")
+    log(f"[RAPORT] TEST (wybrany model, 1 odczyt): {select_metric}: {final_m.get(select_metric, final_m.get('clip_f1', 0)):.3f} | AP: {final_m['ap']:.3f} | rec: {final_m['clip_recall']:.3f} | prec: {final_m['clip_precision']:.3f} | FA: {final_m['clip_fa_rate']:.3f}")
     log("=" * 90 + "\n")
 
     return best_model, median_m, final_m

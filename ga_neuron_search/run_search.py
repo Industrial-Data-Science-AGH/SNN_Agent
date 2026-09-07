@@ -217,7 +217,8 @@ def main():
                 ckpt = (f"{args.out}_winner_N{n}.pt" if len(grid) == 1
                         else f"{args.out}_winner_N{n}_pw{pw}.pt")
                 model, m_val, m_test = train_full(rf, g, epochs=args.winner_epochs,
-                                                  pos_weight=pw, ckpt=ckpt)
+                                                  pos_weight=pw, ckpt=ckpt,
+                                                  select_metric=args.metric)
                 print(f"[pos-weight] pw={pw}: val clipF1 {m_val.get('clip_f1', 0):.3f} "
                       f"val FA {m_val.get('clip_fa_rate', 0):.3f} -> {ckpt}")
                 if best_m_val is None or m_val.get("clip_f1", 0) > best_m_val.get("clip_f1", 0):
@@ -250,7 +251,7 @@ def main():
                       f"FA {km['clip_fa_rate']:.3f})")
 
             export_genome_config(model, cfg_path, channels=rf.channel_names, extra=extra)
-            print(f"[train-winner] N={n}: val clip-F1={m_val.get('clip_f1', 0):.3f} -> {cfg_path}")
+            print(f"[train-winner] N={n}: val {args.metric}={m_val.get(args.metric, m_val.get('clip_f1', 0)):.3f} -> {cfg_path}")
             # nagłówkowy wynik na NIETKNIETYM tescie (z pełnego modelu, nie proxy)
             if test_ready:
                 from stream_eval import format_report, primary_recall, report_to_dict

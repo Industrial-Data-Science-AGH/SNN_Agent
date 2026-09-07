@@ -40,7 +40,7 @@ def main():
     ap.add_argument("--workers", type=int, default=None,
                     help="Liczba procesów do równoległej oceny (domyślnie liczba rdzeni CPU). "
                         "Uwaga: Każdy worker ładuje własną kopię cache'u danych w RAM "
-                        "(architektura N+1 kopii w pamięci głównej). Na maszynach z małą ilością "
+                        "(N kopii + N kopii cache okien). Na maszynach z małą ilością "
                         "RAM-u ustawienie dużej wartości (np. 18) może spowodować błąd OOM.")
     ap.add_argument("--device", default=None,
                     help="cuda | cpu; domyślnie cuda-jak-dostępne, inaczej cpu "

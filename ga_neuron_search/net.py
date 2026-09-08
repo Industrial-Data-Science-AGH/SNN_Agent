@@ -99,7 +99,7 @@ def genome_loss(out, y, pos_weight, rate_lo=0.02, rate_hi=0.30, margin_w=0.5,
     neg = 1.0 - pos
     margin = ((vmax - 0.80).clamp(min=0) ** 2 * neg).sum() / neg.sum().clamp(min=1)
 
-    nspk = out["so"].sum(dim=(1, 2)).clamp(max=5.0)  # liczba spików D w oknie [B]
+    nspk = out["so"].sum(dim=(1, 2))  # liczba spików D w oknie [B]
     spk = ((k_ref - nspk).clamp(min=0) * pos).sum() / pos.sum().clamp(min=1) \
         + (nspk * neg).sum() / neg.sum().clamp(min=1)
 

@@ -255,7 +255,7 @@ def build_stream(
     audio_root_for_glass: str,
     background_pool: BackgroundPool,
     seed: int,
-    min_gap_s: float = 2.0,
+    min_gap_s: float,
     warmup_s: float,
     end_margin_s: float,
     event_gain_db_range: tuple[float, float] = (-3.0, 3.0),

@@ -1,11 +1,11 @@
 import argparse
 import sys
 import time
-
-# Zależnie od tego, jak nazwałeś pliki, importujemy nasze klocki:
-from config import PipelineConfig
+import multiprocessing
+from pipeline_config import PipelineConfig
 from hardware import get_device, resolve_workers
 from tracker import RunTracker
+from ga_runner import run_ga_stage, run_ext_evaluation_stage, run_final_evaluation_stage
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Master Pipeline dla optymalizacji SNN (Lu.i)")
@@ -53,23 +53,25 @@ def main():
 
     # 4. Routing komend (tutaj w przyszłości podepniesz logikę ML)
     if args.command == "run-all":
-        print(f"\n>>> [ETAP 1/3] Startuję pełny eksperyment GA...")
-        # Symulacja pracy...
-        time.sleep(1)
-        tracker.log_stage_time("GA_search", 125.4)
+        # ETAP 1: Trening i poszukiwanie struktury (GA)
+        best_topology = run_ga_stage(config, tracker)
         
-        print(f">>> [ETAP 2/3] Ewaluacja spikes_ext...")
-        tracker.log_metrics("spikes_ext", {"clip_f1": 0.88, "precision": 0.91})
+        # ETAP 2: Ewaluacja na rozszerzonym zbiorze spikes_ext
+        run_ext_evaluation_stage(config, tracker, best_topology)
+        
+        # ETAP 3: Ewaluacja ciągła / testowa
+        run_final_evaluation_stage(config, tracker, best_topology)
         
     elif args.command == "train-ga":
-        print(f"\n>>> Startuję tylko etap algorytmu genetycznego...")
+        best_topology = run_ga_stage(config, tracker)
         
     elif args.command == "evaluate":
-        print(f"\n>>> Startuję ciągłą ewaluację...")
+        print(f"\n>>> Startuję ciągłą ewaluację na gotowym modelu...")
 
     # Zakończenie
     tracker.update_manifest(status="COMPLETED")
     print(f"\n[SUKCES] Pipeline zakończył pracę. Raport zapisano w: {tracker.get_run_dir()}")
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method("spawn", force=True)  # Dla kompatybilności z macOS i Windows
     main()

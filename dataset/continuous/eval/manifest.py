@@ -71,6 +71,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime, timezone
+#from lib2to3.fixes import fix_has_key
 from typing import Sequence
 
 from .stream_builder import GENERATOR_VERSION, GeneratedStream, git_commit_short, sha256_of_file
@@ -85,7 +86,8 @@ def build_manifest_dict(
     seed: int,
     glassbreak_mode: str,
     min_gap_s: float,
-    edge_margin_s: float,
+    warmup_s: float,
+    end_margin_s: float,
     event_gain_db_range: tuple[float, float],
     background_dirs: Sequence[str],
     glass_audio_root: str,
@@ -113,7 +115,9 @@ def build_manifest_dict(
         "config": {
             "glassbreak_mode": glassbreak_mode,
             "min_gap_s": min_gap_s,
-            "edge_margin_s": edge_margin_s,
+            "end_margin_s": end_margin_s,
+            "warmup_s": warmup_s,
+            "warmup_excluded_from_fa": True,
             "event_gain_db_range": list(event_gain_db_range),
             "background_gain_db": round(stream.background_gain_db, 3),
             "background_dirs": [os.path.relpath(d) for d in background_dirs],

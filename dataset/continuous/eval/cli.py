@@ -64,11 +64,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
                          "wielokrotnie, np. ESC-50 i DataSEC naraz)")
     p.add_argument("--duration-s", type=float, default=600.0,
                     help="długość strumienia w sekundach (domyślnie 600 = 10 min)")
-    p.add_argument("--min-gap-s", type=float, default=2.0,
+    p.add_argument("--min-gap-s", type=float, default=10.0,
                     help="minimalny odstęp między zdarzeniami szkła")
-    p.add_argument("--edge-margin-s", type=float, default=1.0,
-                    help="margines od początku/końca strumienia, w którym "
-                         "zdarzenia nie mogą się zaczynać/kończyć")
+    p.add_argument("--end-margin-s", type=float, default=10.0,
+                    help="margines od końca strumienia, w którym "
+                         "zdarzenia nie mogą się kończyć")
+    p.add_argument("--warmup-s", type=float, default=30.0,
+                   help="czas rozgrzewki (samo tło) na początku strumienia, "
+                        "wykluczony z liczenia FA/h")
     p.add_argument("--event-gain-db-min", type=float, default=-3.0)
     p.add_argument("--event-gain-db-max", type=float, default=3.0)
     p.add_argument("--out-dir", required=True, help="katalog wyjściowy")
@@ -110,7 +113,8 @@ def generate_one(args, seed: int) -> tuple[str, str]:
         background_pool=background_pool,
         seed=seed,
         min_gap_s=args.min_gap_s,
-        edge_margin_s=args.edge_margin_s,
+        warmup_s=args.warmup_s,
+        end_margin_s=args.end_margin_s,
         event_gain_db_range=(args.event_gain_db_min, args.event_gain_db_max),
         standard=standard,
     )
@@ -129,7 +133,8 @@ def generate_one(args, seed: int) -> tuple[str, str]:
         seed=seed,
         glassbreak_mode=args.glassbreak_mode,
         min_gap_s=args.min_gap_s,
-        edge_margin_s=args.edge_margin_s,
+        warmup_s=args.warmup_s,
+        end_margin_s=args.end_margin_s,
         event_gain_db_range=(args.event_gain_db_min, args.event_gain_db_max),
         background_dirs=args.background_dirs,
         glass_audio_root=args.glass_audio_root,

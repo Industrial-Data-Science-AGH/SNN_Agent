@@ -66,7 +66,8 @@ def sample_event_positions(
     stream_duration_s: float,
     event_durations_s: Sequence[float],
     min_gap_s: float,
-    edge_margin_s: float,
+    start_margin_s: float,
+    end_margin_s: float,
     max_attempts: int = 20_000,
 ) -> list[float]:
     """Losuje start każdego zdarzenia tak, by:
@@ -81,12 +82,12 @@ def sample_event_positions(
     Deterministyczne przy tym samym rng (przekaż random.Random(seed)).
     """
     n = len(event_durations_s)
-    usable = stream_duration_s - 2 * edge_margin_s
+    usable = stream_duration_s - start_margin_s - end_margin_s
     total_needed = sum(event_durations_s) + min_gap_s * (n + 1)
     if usable <= 0 or total_needed > usable:
         raise PlacementError(
             f"strumień {stream_duration_s:.1f}s za krótki na {n} zdarzeń "
-            f"(potrzeba >= {total_needed + 2*edge_margin_s:.1f}s z marginesami)"
+            f"(potrzeba >= {total_needed + start_margin_s + end_margin_s:.1f}s z marginesami)"
         )
 
     for _attempt in range(max_attempts):
@@ -97,7 +98,7 @@ def sample_event_positions(
         ok = True
         for idx in order:
             dur = event_durations_s[idx]
-            lo, hi = edge_margin_s, stream_duration_s - edge_margin_s - dur
+            lo, hi = start_margin_s, stream_duration_s - end_margin_s - dur
             if hi < lo:
                 ok = False
                 break
@@ -128,35 +129,62 @@ def sample_event_positions(
 
 # ============================================================ budowa strumienia
 
+# NOWE — kind z metadanych ESC-50, wyklucza glass breaking (target=39)
+_ESC50_KIND = {
+    **{i: "animal"      for i in range(0,  10)},
+    **{i: "stationary"  for i in range(10, 20)},
+    **{i: "speech"      for i in range(20, 30)},
+    **{i: "stationary"  for i in range(30, 40)},
+    **{i: "loud_event"  for i in range(40, 50)},
+}
+_ESC50_GLASS_TARGET = 39  # "glass breaking" — nie może być tłem
+
+
+def _load_esc50_kind_map(esc50_root: str) -> dict[str, str]:
+    """Czyta meta/esc50.csv i zwraca {filename: kind}. Pomija glass breaking."""
+    import csv
+    candidate = os.path.join(esc50_root, "meta", "esc50.csv")
+    if not os.path.exists(candidate):
+        candidate = os.path.join(os.path.dirname(esc50_root), "meta", "esc50.csv")
+    meta_path = candidate
+
+    if not os.path.exists(meta_path):
+        raise FileNotFoundError(f"brak metadanych ESC-50: {meta_path}")
+    kind_map = {}
+    with open(meta_path, encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            target = int(row["target"])
+            if target == _ESC50_GLASS_TARGET:
+                continue  # wyklucz szkło z tła
+            kind_map[row["filename"]] = _ESC50_KIND[target]
+    return kind_map
+
+
 @dataclass
 class BackgroundPool:
-    """Pula plików tła. Każdy wpis to (ścieżka, źródło_nazwa) dla provenance."""
-    files: list[tuple[str, str]] = field(default_factory=list)
+    files: list[tuple[str, str, str]] = field(default_factory=list)  # path, source, kind
 
     def is_empty(self) -> bool:
         return len(self.files) == 0
 
 
 def collect_background_pool(background_dirs: Sequence[str]) -> BackgroundPool:
-    """Zbiera pliki .wav z podanych katalogów (rekurencyjnie). Twardy fail,
-    jeśli którykolwiek katalog nie istnieje lub pula końcowa jest pusta —
-    świadomie odwrotnie niż znany bug build-manifest, które po cichu pomija
-    braki."""
     pool = BackgroundPool()
     for d in background_dirs:
         if not os.path.isdir(d):
             raise FileNotFoundError(f"katalog tła nie istnieje: {d}")
-        found = sorted(glob.glob(os.path.join(d, "**", "*.wav"), recursive=True))
-        if not found:
-            raise FileNotFoundError(f"0 plików .wav w katalogu tła: {d}")
-        source_name = os.path.basename(os.path.normpath(d))
-        pool.files.extend((f, source_name) for f in found)
+        kind_map = _load_esc50_kind_map(d)  # twardy fail gdy brak meta/esc50.csv
+        found = sorted(glob.glob(os.path.join(d, "*.wav")))
+        included = [(f, "ESC-50", kind_map[os.path.basename(f)])
+                    for f in found if os.path.basename(f) in kind_map]
+        if not included:
+            raise FileNotFoundError(
+                f"0 plików .wav po wykluczeniu glass breaking w: {d}"
+            )
+        pool.files.extend(included)
 
     if pool.is_empty():
-        raise FileNotFoundError(
-            "pula tła jest pusta po przejrzeniu wszystkich --background-dir; "
-            "generator wymaga niepustego tła (twardy fail zamiast cichego pominięcia)"
-        )
+        raise FileNotFoundError("pula tła jest pusta — twardy fail")
     return pool
 
 
@@ -188,7 +216,7 @@ def _fill_background(
         guard += 1
         if guard > 100_000:
             raise RuntimeError("nie udało się wypełnić tła — pula plików prawdopodobnie pusta/zbyt krótka")
-        path, source_name = files[fi % len(files)]
+        path, source_name, kind = files[fi % len(files)]
         fi += 1
         samples = load_audio_mono(path, standard)
         if samples.size == 0:
@@ -196,12 +224,14 @@ def _fill_background(
         # losowy offset startu wewnątrz pliku, żeby te same pliki brzmiały
         # różnie przy różnych seedach nawet gdy kolejność się powtórzy
         offset = rng.randrange(0, samples.size) if samples.size > 1 else 0
-        rotated = np.concatenate([samples[offset:], samples[:offset]])
+        # zacznij od offsetu, nie zawijaj
+        rotated = samples[offset:]
         take = min(rotated.size, total_samples - pos)
         buf[pos:pos + take] = rotated[:take]
         used.append({
             "path": os.path.relpath(path),
             "source": source_name,
+            "kind": kind,
             "stream_start_s": round(pos / sample_rate, 6),
             "stream_end_s": round((pos + take) / sample_rate, 6),
         })
@@ -226,7 +256,8 @@ def build_stream(
     background_pool: BackgroundPool,
     seed: int,
     min_gap_s: float = 2.0,
-    edge_margin_s: float = 1.0,
+    warmup_s: float = 30.0,
+    end_margin_s: float = 15.0,
     event_gain_db_range: tuple[float, float] = (-3.0, 3.0),
     standard: AudioStandard = AudioStandard(),
     clip_guard_peak: float = 0.97,
@@ -269,7 +300,8 @@ def build_stream(
 
     # 3) losowanie pozycji (nienachodzące, w granicach strumienia)
     starts = sample_event_positions(
-        rng, duration_s, event_durations_s, min_gap_s=min_gap_s, edge_margin_s=edge_margin_s
+        rng, duration_s, event_durations_s, min_gap_s=min_gap_s,
+        start_margin_s=warmup_s, end_margin_s=end_margin_s
     )
 
     # 4) losowanie skal głośności per zdarzenie

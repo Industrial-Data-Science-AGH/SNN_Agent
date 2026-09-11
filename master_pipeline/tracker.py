@@ -15,6 +15,17 @@ def get_git_sha() -> str:
         print(f"[OSTRZEŻENIE] Nie udało się pobrać Git SHA: {e}")
         return "unknown"
 
+class SetEncoder(json.JSONEncoder):
+    """Pozwala na serializację obiektów typu 'set' jako listy (posortowane, jeśli to możliwe)."""
+    def default(self, obj):
+        if isinstance(obj, set):
+            try:
+                return sorted(obj)
+            except TypeError:
+                # elementy nieporównywalne (np. mieszane typy) — fallback bez sortowania
+                return list(obj)
+        return super().default(obj)
+
 @dataclass
 class RunTracker:
     """Odpowiada za tworzenie folderu eksperymentu i zarządzanie manifestem."""
@@ -46,7 +57,7 @@ class RunTracker:
         
         config_path = os.path.join(self.run_dir, "config.json")
         with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(asdict(self.config), f, indent=4)
+            json.dump(asdict(self.config), f, indent=4, cls=SetEncoder)
             
         self.update_manifest(status="RUNNING")
         print(f"[TRACKER] Rozpoczęto eksperyment. Katalog: {self.run_dir}")
@@ -80,7 +91,7 @@ class RunTracker:
             manifest["total_wall_time_sec"] = round(time.time() - self.start_time, 2)
 
         with open(os.path.join(self.run_dir, "manifest.json"), "w", encoding="utf-8") as f:
-            json.dump(manifest, f, indent=4)
+            json.dump(manifest, f, indent=4, cls=SetEncoder)
             
     def get_run_dir(self) -> str:
         return self.run_dir

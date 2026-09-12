@@ -190,3 +190,26 @@ def read_stem_list(path: str) -> set[str]:
     if not stems:
         raise ValueError(f"{path}: lista jest pusta")
     return stems
+
+def check_eval_train_overlap(
+    eval_stems: set[str],
+    train_stem_files: list[str],
+) -> dict[str, list[str]]:
+    """Sprawdza rozłączność eval vs train. Zwraca {plik_listy: [nakładające_się_stemy]}.
+    Rzuca ValueError jeśli cokolwiek się nakłada."""
+    report: dict[str, list[str]] = {}
+    for path in train_stem_files:
+        train_stems = read_stem_list(path)
+        overlap = sorted(eval_stems & train_stems)
+        report[path] = overlap
+
+    violations = {p: stems for p, stems in report.items() if stems}
+    if violations:
+        lines = []
+        for p, stems in violations.items():
+            lines.append(f"  {p}: {stems}")
+        raise ValueError(
+            f"overlap eval/train — te same pliki w datasecie ewaluacyjnym i treningowym:\n"
+            + "\n".join(lines)
+        )
+    return report  # pusty overlap per plik = OK

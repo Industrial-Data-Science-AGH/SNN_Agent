@@ -1,31 +1,25 @@
 # continuous_eval — generator ciągłego datasetu ewaluacyjnego
 
 Generator deterministycznego strumienia audio z **dokładnie 5 zdarzeniami
-rozbicia szkła** w losowych, nienachodzących pozycjach.
+rozbicia szkła** w losowych, nienachodzących pozycjach. Etap 3 master
+pipeline'u Marcela.
 
 ## Szybki start
 
 ```bash
-# jeden 10-minutowy strumień
+# 3 warianty z różnymi seedami
 python -m dataset.continuous.eval.cli \
     --glass-annotation-dir dataset/clean/clean/annotation \
     --glass-audio-root     dataset/clean/clean/audio \
     --glass-allowed-stems  dataset/clean/clean/target/synthetic_target_test.txt \
-    --background-dir       data/ESC-50-master/audio \
-    --seed 42 \
-    --out-dir dataset/continuous/out
-
-# 3 warianty (kryterium akceptacji: >=3 warianty z różnymi seedami)
-python -m dataset.continuous.eval.cli \
-    --glass-annotation-dir dataset/clean/clean/annotation \
-    --glass-audio-root     dataset/clean/clean/audio \
-    --glass-allowed-stems  dataset/clean/clean/target/synthetic_target_test.txt \
+    --train-stems-files    dataset/clean/clean/source/synthetic_source_training.txt \
+                           dataset/clean/clean/source/synthetic_source_validation.txt \
     --background-dir       data/ESC-50-master/audio \
     --seeds 42 43 44 \
     --out-dir dataset/continuous/out
 ```
 
-Wynik dla seed 42: `continuous_eval_seed42.wav` + `continuous_eval_seed42.manifest.json`.
+Wynik dla każdego seeda: `continuous_eval_seedXX.wav` + `continuous_eval_seedXX.manifest.json`.
 
 ## Testy automatyczne
 
@@ -36,6 +30,25 @@ python -m pytest dataset/continuous/tests/ -v
 
 ---
 
+## Skąd pochodzą dźwięki
+
+| rola | źródło | ścieżka |
+|---|---|---|
+| **tło** | ESC-50 | `data/ESC-50-master/audio/*.wav` |
+| **szkło** | VOICe | `dataset/clean/clean/audio/synthetic_XXX.wav` |
+
+**Tło (ESC-50):** losowe nagrania z 50 kategorii (psy, deszcz, silniki itd.).
+Kategoria 39 (`glass_breaking`) jest automatycznie wykluczona na podstawie
+`meta/esc50.csv`. Każdy segment tła dostaje `kind` z metadanych ESC-50
+(`animal`, `stationary`, `speech`, `loud_event`) — potrzebne do liczenia FA/h
+per kind przez Marcela.
+
+**Szkło (VOICe):** pliki `synthetic_XXX.wav` to wielominutowe miksy wielu
+zdarzeń naraz. Z pliku adnotacji (`annotation/synthetic_XXX.txt`) wiemy
+dokładnie w których sekundach brzmi szkło i wycinamy tylko te fragmenty.
+`--glass-allowed-stems` ogranicza, z których miksów wolno korzystać.
+
+---
 
 ## Decyzje implementacyjne
 
@@ -47,69 +60,74 @@ VOICe to miksy — glassbreak prawie zawsze nachodzi na gunshot lub babycry
 | tryb | co zwraca | kiedy używać |
 |---|---|---|
 | `clean` (domyślny) | tylko glassbreak bez nakładki na inne klasy | mierzysz odpowiedź sieci czysto na szkło |
-| `background` | wszystkie glassbreak, niezależnie od nakładek | bardziej realistyczny, trudniejszy wariant |
+| `background` | wszystkie glassbreak, niezależnie od nakładek | trudniejszy, bardziej realistyczny wariant |
 
 W trybie `background` manifest odnotowuje `is_contaminated: true` i listę
-`overlapping_labels` — konsument może filtrować wyniki.
+`overlapping_labels` — konsument może filtrować wyniki po zdarzeniu.
 
-W trybie `clean` pula kandydatów jest znacznie mniejsza. Przy < 5 kandydatach
-generator failuje z komunikatem zamiast cicho duplikować klipy.
+### 2. Warm-up 30 sekund
 
-### 2. Standard audio: 44100 Hz / mono / PCM_16
+Pierwsze 30 sekund strumienia to samo tło — brak zdarzeń szkła. Cel: dać
+enkoderowi czas na ustabilizowanie się przed pierwszym zdarzeniem, analogicznie
+do realnego deploymentu. Parametr `--warmup-s` (domyślnie 30).
 
-Przyjęty za `dataset/versions/v2.0.0/stats.md` (wszystkie 10 853 nagrań).
-Każdy plik źródłowy jest jawnie resamplowany przez `scipy.signal.resample_poly`
-z GCD-redukcją stosunku próbkowań, niezależnie od natywnego SR.
+Warmup jest zapisany w manifeście (`config.warmup_s`) i **wyłączony z liczenia
+FA/h** (`warmup_excluded_from_fa: true`). Marcel liczy FA/h na odcinku
+`[warmup_s, duration_s]`, nie na całym pliku.
 
-**Wymaga potwierdzenia przez Patryka** jako kryterium akceptacji zadania.
+### 3. Brak skoku amplitudy w tle
 
-### 3. Tło jako argument CLI
+Tło budowane jest z losowego offsetu wewnątrz każdego pliku ESC-50, ale
+**bez zawijania** (nie sklejamy końca z początkiem). Zawijanie powodowało skok
+amplitudy, który enkoder rozpoznawał jako zdarzenie uderzeniowe i generował
+fałszywe alarmy.
+
+### 4. Kind w segmentach tła
+
+Każdy segment tła ma pole `kind` z metadanych ESC-50 (`animal`, `stationary`,
+`speech`, `loud_event`). Bez tego nie dało się policzyć FA/h per kind —
+nie wiadomo ile godzin każdego rodzaju tła jest w strumieniu.
+
+### 5. Sprawdzanie rozłączności eval/train
 
 ```bash
---background-dir data/ESC-50-master/audio        # można podać wielokrotnie
---background-dir dataset/datasec/PT_DATASET_250314
+--train-stems-files dataset/clean/clean/source/synthetic_source_training.txt \
+                    dataset/clean/clean/source/synthetic_source_validation.txt
 ```
 
-Tło jest konkatenacją losowo wybranych plików z podanych katalogów, z losowym
-offsetem startu wewnątrz każdego pliku (seed determinuje kolejność).
+Przed wygenerowaniem skrypt porównuje stemmy plików szkła w puli eval
+z każdą podaną listą treningową. Jeśli cokolwiek się pokrywa — `ValueError`
+z listą nakładających się plików. Wynik (pusta lista = brak overlap) trafia
+do manifestu w `config.overlap_check`.
 
-**Twardy fail przy brakach** — jeśli katalog nie istnieje lub jest pusty,
-generator zatrzymuje się z błędem. Świadome odwrócenie zachowania `build-manifest`,
-które po cichu pomijało brakujące pliki.
+ESC-50 (tło) **nie jest sprawdzane** — model trenował na ESC-50 jako
+negatywach, więc jego obecność w tle eval jest oczekiwana i poprawna.
 
-### 4. Zabezpieczenie przed clippingiem
+### 6. Standard audio: 44100 Hz / mono / PCM_16
 
-Po zmiksowaniu tła ze zdarzeniami, jeśli szczyt > `clip_guard_peak=0.97`,
-**cały miks skalowany proporcjonalnie w dół**. Nie per-sample `np.clip` —
-to zniekształciłoby kształt fali w oknach zdarzeń glassbreak, czyli
-w najgorszym możliwym miejscu dla metryk detekcji.
+Przyjęty z `dataset/versions/v2.0.0/stats.md`. Każdy plik źródłowy
+resamplowany przez `scipy.signal.resample_poly` niezależnie od natywnego SR.
+**Wymaga potwierdzenia przez Patryka.**
 
-### 5. Losowanie pozycji — algorytm
+### 7. Zabezpieczenie przed clippingiem
 
-Retry-loop (max 20 000 prób): losuj kolejność zdarzeń, dla każdego losuj start
-w `[edge_margin, stream_duration - edge_margin - duration]`, odrzuć jeśli
-nakłada lub jest za blisko już rozmieszczonych. Rzuca `PlacementError` ze
-zrozumiałym komunikatem gdy strumień jest za krótki.
+Po zmiksowaniu, jeśli szczyt > 0.97, **cały miks skalowany proporcjonalnie
+w dół**. Nie per-sample clip — to zniekształciłoby kształt fali dokładnie
+w oknach zdarzeń szkła.
 
-Prościej do weryfikacji niż analityczny rozkład. Typowo < 100 prób dla 5
-zdarzeń w 10-minutowym strumieniu.
-
-### 6. Deterministyczność
+### 8. Deterministyczność
 
 Cała losowość przez jeden `random.Random(seed)` w ustalonej kolejności:
 wybór klipów → pozycje → skale głośności → kolejność tła → offsety w plikach.
-Ten sam seed + te same pliki = identyczny WAV (test: `test_build_stream_deterministic`).
+Ten sam seed + te same pliki = identyczny WAV.
 
 ---
 
-## Kontrakt manifestu — do akceptacji przez Marcela i Patryka
-
-Format: `*.manifest.json` obok WAV, schema version `1.0.0`.
+## Kontrakt manifestu (schema 1.1.0) — do akceptacji przez Marcela i Patryka
 
 ```json
 {
-  "manifest_schema_version": "1.0.0",
-  "generator_version": "1.0.0",
+  "manifest_schema_version": "1.1.0",
   "seed": 42,
   "audio": {
     "path": "continuous_eval_seed42.wav",
@@ -121,9 +139,12 @@ Format: `*.manifest.json` obok WAV, schema version `1.0.0`.
   },
   "config": {
     "glassbreak_mode": "clean",
-    "min_gap_s": 2.0,
-    "edge_margin_s": 1.0,
-    "background_dirs": ["data/ESC-50-master/audio"]
+    "warmup_s": 30.0,
+    "warmup_excluded_from_fa": true,
+    "overlap_check": {
+      "train_stems_files": ["...source_training.txt"],
+      "result": {"source_training.txt": []}
+    }
   },
   "events": [
     {
@@ -132,18 +153,22 @@ Format: `*.manifest.json` obok WAV, schema version `1.0.0`.
       "end_s": 48.09,
       "duration_s": 0.86,
       "source_stem": "synthetic_014",
-      "source_start_s": 4.0,
-      "source_end_s": 5.36,
       "is_contaminated": false,
       "overlapping_labels": [],
       "gain_db": 1.2
     }
   ],
-  "background_segments": [...]
+  "background_segments": [
+    {
+      "path": "data/ESC-50-master/audio/1-100032-A-0.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "stream_start_s": 0.0,
+      "stream_end_s": 5.02
+    }
+  ]
 }
 ```
-
-`events` zawiera zawsze dokładnie 5 wpisów, posortowane rosnąco po `start_s`.
 
 **Jak Marcel liczy metryki z manifestu:**
 
@@ -151,24 +176,9 @@ Format: `*.manifest.json` obok WAV, schema version `1.0.0`.
 |---|---|
 | detected / 5 | dla każdego `[start_s, end_s]` — czy detektor podniósł alarm (+tolerancja) |
 | event recall | `detected / 5` |
-| false alarms/h | alarmy poza wszystkimi oknami `[start_s, end_s]` / `duration_s` × 3600 |
-| latency | czas pierwszego alarmu w oknie minus `start_s` |
-
-**To jest projekt roboczy.** Przed integracją wymagana akceptacja Marcela
-(nazwy pól, tolerancja okna detekcji) i Patryka (standard audio). Zmiana
-formatu manifestu = tylko `manifest.py`, generator bez zmian.
-
----
-
-## Co generator świadomie NIE robi
-
-**Nie sprawdza rozłączności z danymi treningowymi.** Oryginalny task wymagał
-"zapewnić osobność lub automatycznie zaraportować overlap". Decyzja: rozłączność
-to odpowiedzialność wywołującego przez wybór ścieżki w `--glass-allowed-stems`
-(np. `synthetic_target_test.txt` zamiast `source_training.txt`) i
-`--background-dir`. Dodanie automatycznego sprawdzania wymagałoby wczytania
-manifestu treningowego jako zależności, co komplikuje moduł bez proporcjonalnej
-korzyści wobec prostszego mechanizmu — list plików.
+| false alarms/h | alarmy poza oknami zdarzeń, na odcinku `[warmup_s, duration_s]` / `(duration_s - warmup_s)` × 3600 |
+| FA/h per kind | jak wyżej, ale tylko segmenty tła z danym `kind` |
+| latency | czas pierwszego alarmu w oknie zdarzenia minus `start_s` |
 
 ---
 

@@ -55,6 +55,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
                          "(np. dataset/clean/clean/target/synthetic_target_test.txt). "
                          "Bez tej flagi używane są WSZYSTKIE pliki w "
                          "--glass-annotation-dir — patrz README o rozłączności danych.")
+    p.add_argument("--train-stems-files", nargs="+", default=None,
+                   help="listy plików treningowych do sprawdzenia rozłączności "
+                        "(np. source_training.txt source_validation.txt). "
+                        "Jeśli którykolwiek stem wystąpi też w puli szkła — ValueError.")
     p.add_argument("--glassbreak-mode", choices=["clean", "background"], default="clean",
                     help="clean (domyślnie): tylko zdarzenia glassbreak bez nakładki "
                          "na gunshot/babycry. background: dopuszcza nakładki "
@@ -103,6 +107,13 @@ def generate_one(args, seed: int) -> tuple[str, str]:
         )
         sys.exit(1)
 
+    if args.train_stems_files:
+        from .annotations import check_eval_train_overlap
+        eval_stems = {c.source_stem for c in glass_clips}
+        overlap_check = check_eval_train_overlap(eval_stems, args.train_stems_files)
+    else:
+        overlap_check = {}
+
     background_pool = collect_background_pool(args.background_dirs)
 
     standard = AudioStandard()
@@ -138,7 +149,8 @@ def generate_one(args, seed: int) -> tuple[str, str]:
         event_gain_db_range=(args.event_gain_db_min, args.event_gain_db_max),
         background_dirs=args.background_dirs,
         glass_audio_root=args.glass_audio_root,
-        glass_allowed_stems_file=args.glass_allowed_stems,
+        glass_allowed_stems_files=args.glass_allowed_stems,
+        overlap_check=overlap_check
     )
     write_manifest(manifest, manifest_path)
 

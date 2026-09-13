@@ -51,7 +51,7 @@ def main():
         hw_benchmark=hw_benchmark
     )
 
-    # 4. Routing komend (tutaj w przyszłości podepniesz logikę ML)
+    # 4. Routing komend
     if args.command == "run-all":
         # ETAP 1: Trening i poszukiwanie struktury (GA)
         best_topology = run_ga_stage(config, tracker)

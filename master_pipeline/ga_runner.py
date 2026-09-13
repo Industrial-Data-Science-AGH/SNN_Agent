@@ -111,22 +111,66 @@ def run_ga_stage(config: Any, tracker: Any) -> Dict[str, Any]:
 def run_ext_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[str, Any]):
     """
     Etap 2: Ewaluacja najlepszej topologii na rozszerzonym zbiorze (spikes_ext).
-    Pozwala sprawdzić wybór cech (np. 7 vs 14 kanałów).
     """
+    import os
+    import time
+    from ga_neuron_search.genome import Genome
+    from ga_neuron_search.fitness import RealFitness
+
     print(f"\n>>> [ETAP 2/3] Uruchamianie ewaluacji spikes_ext...")
     
+    # 1. Obliczanie ścieżek bezwzględnych i podfolderów
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    train_abs = os.path.join(project_root, config.data.train)
+    spikes_ext_abs = os.path.join(project_root, config.data.spikes_ext)
+    arch_dir = os.path.dirname(os.path.dirname(train_abs))
+    
+    spikes_ext_val = os.path.join(spikes_ext_abs, "val")
+    spikes_ext_test = os.path.join(spikes_ext_abs, "test")
     
     g = Genome.from_dict(best_topology)
     features_used = g.features_used()
     n_features = len(features_used)
+    print(f"[EXT] Wybrane cechy przez GA ({n_features}): {sorted(list(features_used))}")
     
-    print(f"[EXT] Wybrane cechy przez GA ({n_features}): {features_used}")
+    # 2. Inicjalizacja środowiska dla spikes_ext
+    rf_kwargs = dict(
+        arch_dir=arch_dir,
+        data=train_abs,
+        val_data=spikes_ext_val,    # Wskazanie na podfolder walidacyjny
+        test_data=spikes_ext_test,  # Wskazanie na podfolder testowy
+        limit=None,
+        epochs=config.train.proxy_epochs,
+        num_samples=6000, 
+        k=2,
+        metric=config.ga.fitness_metric,
+        fitness_seeds=3,
+        pos_weight=1.0,
+        feature_penalty=config.ga.feature_penalty,
+        channels_head=7,
+        stream_budget=6.0,
+        stream_boot=0,
+        verbose=False,
+        seed=config.seed,
+        device=tracker.device
+    )
     
-    # Logujemy metryki z tego etapu do trackera
+    print("[EXT] Ewaluowanie znalezionej topologii...")
+    start_time = time.time()
+    
+    # 3. Uruchomienie pojedynczego testu
+    rf_ext = RealFitness(**rf_kwargs)
+    ext_score = rf_ext(g, budget=6.0) 
+    
+    # 4. Logowanie do trackera (bezpieczne rzutowanie na listę)
+    tracker.log_stage_time("ext_eval_stage", time.time() - start_time)
     tracker.log_metrics("spikes_ext_eval", {
         "n_features_used": n_features,
-        "features_used": sorted(features_used)
+        "features_used": list(features_used),
+        f"ext_{config.ga.fitness_metric}": ext_score
     })
+    
+    print(f"[EXT] Wynik na spikes_ext ({config.ga.fitness_metric}): {ext_score:.4f}")
     print(f"[ETAP 2/3] Zakończono pomyślnie.")
 
 

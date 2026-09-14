@@ -1,0 +1,32 @@
+[manifest] 10853 plików
+[gain] globalne wzmocnienie 1.2339 (z 7120 plików train, percentyl 99.9, metoda all-files) -> architecture_14_neurons_patryk_09_07\spikes_v2\global_gain.json
+[ok] rozlacznosc grup: 4878 grup, kazda w jednym splicie
+[pochodzenie] audio=v2.0.0  manifest=b3dcc1101a65  enkoder=1be666b59b91
+[warmup] rozgrzano stan enkodera na 7 plikach tła (34.4s realnego audio, odrzucone)
+[train] średnia pozycja w strumieniu: pozytywy 0.500, negatywy 0.500
+[postęp] 500 plików zakodowanych
+[postęp] 1000 plików zakodowanych
+[postęp] 1500 plików zakodowanych
+[postęp] 2000 plików zakodowanych
+[postęp] 2500 plików zakodowanych
+[postęp] 3000 plików zakodowanych
+[postęp] 3500 plików zakodowanych
+[postęp] 4000 plików zakodowanych
+[postęp] 4500 plików zakodowanych
+[postęp] 5000 plików zakodowanych
+[postęp] 5500 plików zakodowanych
+[postęp] 6000 plików zakodowanych
+[postęp] 6500 plików zakodowanych
+[postęp] 7000 plików zakodowanych
+[val] średnia pozycja w strumieniu: pozytywy 0.500, negatywy 0.500
+[postęp] 7500 plików zakodowanych
+[postęp] 8000 plików zakodowanych
+[postęp] 8500 plików zakodowanych
+[test] średnia pozycja w strumieniu: pozytywy 0.500, negatywy 0.500
+[postęp] 9000 plików zakodowanych
+[postęp] 9500 plików zakodowanych
+[postęp] 10000 plików zakodowanych
+[postęp] 10500 plików zakodowanych
+[ok] train: glass 2846, negative 4267 -> architecture_14_neurons_patryk_09_07\spikes_v2\train
+[ok] val: glass 863, negative 1003 -> architecture_14_neurons_patryk_09_07\spikes_v2\val
+[ok] test: glass 884, negative 983 -> architecture_14_neurons_patryk_09_07\spikes_v2\test

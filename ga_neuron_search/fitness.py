@@ -173,17 +173,18 @@ class RealFitness:
         return net.genome_eval_events(model, win, lab, fidx, self.device, k or self.k)
 
     def stream_recall(self, model, g):
-        """Recall @ budżet FA/h na splicie val (pełne klipy, kind/group z files.csv).
-        Klipy val ładowane raz i cache'owane. Zwraca (recall, report)."""
+        """Skalar do fitnessu = `primary_score` @ budżet FA/h na val (recall, gdy
+        feasible; inaczej surogat w (-1,0), by dać gradient gdy budżet nieosiągalny).
+        Klipy val ładowane raz i cache'owane. Zwraca (score, report)."""
         import stream_eval_torch as st
-        from stream_eval import primary_recall
+        from stream_eval import primary_score
         ch_in = g.layer_sizes()[0]
         if self._stream_clips is None:
             self._stream_clips = st.load_clip_spikes(self.val_dir, ch_in)
         rep = st.evaluate_stream(model, self.val_dir, ch_in, self.device,
                                  budgets=(self.stream_budget,),
                                  n_boot=self.stream_boot, clips=self._stream_clips)
-        return primary_recall(rep, self.stream_budget), rep
+        return primary_score(rep, self.stream_budget), rep
 
     def stream_report_test(self, model, g, budgets=None, n_boot: int = 500):
         """Pełny raport strumieniowy na NIETKNIĘTYM splicie test (recall @ 1 i budżet
@@ -271,7 +272,7 @@ class RealFitness:
             score = 0.0
         if self.verbose:
             std = (sum((a - ap) ** 2 for a in aps) / len(aps)) ** 0.5
-            extra = f"  recall@{self.stream_budget:g}FA/h {rec:.3f}" if need_model else ""
+            extra = f"  score@{self.stream_budget:g}FA/h {rec:+.3f}" if need_model else ""
             print(f"    [eval] {g.layer_sizes()} loss {l0:.3f}->{lN:.3f}  "
                   f"AP {ap:.3f}±{std:.3f}  clipF1 {f1:.3f}{extra}  cechy {n_feat}"
                   f"{'  [MARTWY->0]' if dead else ''} (ep{epochs}, "

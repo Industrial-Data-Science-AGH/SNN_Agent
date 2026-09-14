@@ -11,6 +11,78 @@ Metryka decyzyjna: **recall @ budżet FA/h** (`snn_pipeline/stream_eval.py`), de
 
 ---
 
+## Wiersz 3 — 2026-09-14 — spk_w=0.3, pos_weight=1.0, seed 0
+
+- **Zmiana vs Wiersz 2:** łagodniejszy `--spk-w 0.3` (było 0.5), `--pos-weight 1.0`
+  (było 1.5) — próba odzyskania recall.
+- **Pliki:** `models/v2_spk03_pw10_s0.{pt,csv,out}`, `models/hw_v2_spk03_pw10_s0.json`.
+
+### Front recall↔FA/h wzdłuż spk_w (test, k=1)
+
+| run | spk_w | recall | FA/h | speech FA/h |
+|---|---|---|---|---|
+| Wiersz 1 | 0.0 | **86,3%** | 219 | — |
+| Wiersz 3 | 0.3 | 67,3% | 139 | **376** |
+| Wiersz 2 | 0.5 | 62,0% | 113 | 298 |
+
+`spk_w` **przesuwa po froncie** (mniejszy → wyższy recall + wyższe FA/h), ale **cały
+front siedzi na ~110–220 FA/h** — wszędzie ~20–35× ponad budżet 6/h. recall @ 6 FA/h
+= 0 w każdym przypadku (najbliżej ~124 FA/h tu).
+
+### Wniosek (twardnieje)
+- **`spk_w` sam nie przełamie bariery** — tylko wymienia recall na FA/h wzdłuż tego
+  samego, złego frontu.
+- **Ścianą jest `speech`: 298–376 FA/h**, rośnie mimo strojenia. To **problem
+  rozróżnialności** (model nie odróżnia mowy od szkła), nie progu — dlatego żadne
+  `spk_w`/`k` tego nie ruszy.
+
+### Rekomendacje — następne treningi
+1. **Uderzyć w speech wprost:** doważyć `kind=speech` w samplerze (hard-negative
+   mining) — celuje w dominujące ~350 FA/h. (Mała zmiana kodu w samplerze.)
+2. **Rozdzielność widmowa mowa vs szkło:** szkło = wysokie pasmo/nieregularne, mowa =
+   formanty/pasmo średnie. Cechy `spectral_flatness`/`spectral_centroid` (bank
+   14-kanałowy) mogą to rozdzielić — GA `--metric recall_fa` na `spikes_ext`/pełnym.
+3. Dopiero po tym wracać do strojenia `spk_w` (optymalny wyszedł ~0.3–0.5).
+
+---
+
+## Wiersz 2 — 2026-09-14 — spk_w=0.5, pos_weight=1.5, seed 0
+
+- **Zmiana vs Wiersz 1:** `--spk-w 0.5` (kara za spiki D na tle, dziś było 0) i
+  `--pos-weight 1.5` (było 1.0). Selekcja checkpointu po nowym **surogacie**
+  `primary_score` (gradient, gdy budżet nieosiągalny).
+- **Pliki:** `models/v2_spk05_pw15_s0.{pt,csv,out}`, `models/hw_v2_spk05_pw15_s0.json`.
+
+| metryka (test, k=1) | Wiersz 1 (spk_w 0) | **Wiersz 2 (spk_w 0.5)** |
+|---|---|---|
+| recall (szkło) | 86,3% | **62,0%** ↓ |
+| FA/h | 219 | **113** ↓ (~2×) |
+| najlepsze FA/h (k=3) | 139 | 106 |
+| frame f1 / prec | 0,60 / 0,53 | **0,72 / 0,60** ↑ |
+| spiki D na tle /klip | 8,9 | 19,6 |
+
+**recall @ 6 FA/h = 0 (dalej nieosiągalny; najbliżej ~102 FA/h, surogat −0,98).**
+
+**FA/h per kind (test, najostrzej):** speech **298** ≫ animal 130 · stationary 104 ·
+loud_event 62. → **speech to dominujące źródło fałszywek** (model myli mowę ze szkłem).
+
+### Wnioski
+- `spk_w` **skutecznie ściąga FA/h** (2×) i podnosi precyzję — ale `spk_w=0.5` jest
+  **za agresywny**: recall spadł 86→62. Trzeba łagodniej lub skompensować.
+- Do 6 FA/h brakuje ~17× — **sam spk_w nie wystarczy**.
+- **Nowy priorytet: speech** (298 FA/h). Bez zaadresowania mowy budżet nieosiągalny.
+
+### Rekomendacje — następne treningi
+1. **Złagodzić spk_w:** `--spk-w 0.2 / 0.3` — odzyskać recall, utrzymać spadek FA/h.
+2. **Doważyć speech** w samplerze (hard-negative mining na `kind=speech`) — celuje
+   w dominujące 298 FA/h.
+3. **Sweep** `spk_w ∈ {0.2,0.3,0.5} × pos_weight ∈ {0.8,1.0,1.5}` — znaleźć front
+   recall↔FA/h; szukać punktu z recall ≥ 0.70 i najniższym FA/h.
+4. Jeśli utknie > ~50 FA/h: **cechy/topologia** (GA `--metric recall_fa`) — mowa vs
+   szkło może wymagać lepszego rozdzielenia widmowego (spectral_*).
+
+---
+
 ## Wiersz 1 — 2026-09-08 — baseline recall_fa, seed 0
 
 - **Artefakt:** `spikes_v2` (manifest `b3dcc110…`, enkoder `1be666b5…`, v2.0.0,

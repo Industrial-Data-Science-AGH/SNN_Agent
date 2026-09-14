@@ -114,6 +114,11 @@ class OperatingPoint:
     fa_h_by_kind: Dict[str, float] = field(default_factory=dict)
     feasible: bool = True               # czy jakakolwiek reguła zmieściła się w budżecie
     recall_ci: Optional[Tuple[float, float]] = None   # bootstrap po group_id
+    # skalar do OPTYMALIZACJI (GA / selekcja checkpointu): recall gdy feasible,
+    # inaczej SUROGAT w (-1,0) — im bliżej budżetu (mniejszy nadmiar FA/h), tym
+    # wyżej. Bez tego przy budżecie nieosiągalnym recall=0 dla wszystkich i
+    # selekcja/fitness nie mają sygnału (spamujący i milczący dostają to samo 0).
+    score: float = 0.0
 
 
 def _alarms_matrix(trains: Sequence[np.ndarray], rules, refrac) -> np.ndarray:
@@ -141,18 +146,30 @@ def _rates_for_rule(alarms_col, labels, kinds, hours_by_kind, neg_hours):
 
 def _recall_at_budget(alarms, labels, kinds, hours_by_kind, neg_hours, rules,
                       budget) -> OperatingPoint:
-    """Najwyższy recall spośród reguł, przy których KAŻDY kind tła <= budget."""
+    """Najwyższy recall spośród reguł, przy których KAŻDY kind tła <= budget.
+
+    Gdy ŻADNA reguła się nie mieści (budżet nieosiągalny) — zwraca punkt najbliższy
+    (najmniejszy nadmiar FA/h) z SUROGATEM `score` w (-1,0), żeby selekcja/fitness
+    miały gradient „ściągaj FA/h w dół" zamiast płaskiego 0.
+    """
     best = OperatingPoint(budget_fa_h=budget, rule=None, recall=0.0,
-                          fa_h_total=0.0, feasible=False)
+                          fa_h_total=0.0, feasible=False, score=-1.0)
+    min_binding, closest = float("inf"), None
     for ri, rule in enumerate(rules):
         rec, fa_h_tot, fa_h_kind = _rates_for_rule(
             alarms[:, ri], labels, kinds, hours_by_kind, neg_hours)
-        within = fa_h_tot <= budget and all(v <= budget for v in fa_h_kind.values())
-        if within and rec >= best.recall:
+        binding = max(fa_h_tot, max(fa_h_kind.values(), default=0.0))  # wiążące FA/h
+        if binding <= budget and rec >= best.recall:                  # mieści się
             best = OperatingPoint(budget_fa_h=budget, rule=rule, recall=rec,
                                   fa_h_total=fa_h_tot, fa_h_by_kind=fa_h_kind,
-                                  feasible=True)
-    return best
+                                  feasible=True, score=rec)
+        if binding < min_binding:                                     # najbliższy budżetu
+            min_binding = binding
+            closest = OperatingPoint(
+                budget_fa_h=budget, rule=rule, recall=0.0, fa_h_total=fa_h_tot,
+                fa_h_by_kind=fa_h_kind, feasible=False,
+                score=budget / max(binding, 1e-9) - 1.0)              # (-1,0): 0 = przy budżecie
+    return best if best.feasible else (closest if closest is not None else best)
 
 
 def stream_report(trains: Sequence[np.ndarray], labels, kinds, groups,
@@ -215,9 +232,16 @@ def stream_report(trains: Sequence[np.ndarray], labels, kinds, groups,
 
 
 def primary_recall(report: Dict[float, OperatingPoint], budget: float) -> float:
-    """Skalar do maksymalizacji przez GA / do selekcji checkpointu."""
+    """PRAWDZIWY recall @ budżet (do RAPORTU): 0, gdy budżet nieosiągalny."""
     op = report.get(budget)
     return op.recall if op is not None else 0.0
+
+
+def primary_score(report: Dict[float, OperatingPoint], budget: float) -> float:
+    """Skalar do OPTYMALIZACJI (GA / selekcja checkpointu): recall, gdy feasible,
+    inaczej surogat w (-1,0). NIE używać do raportu — do raportu jest primary_recall."""
+    op = report.get(budget)
+    return op.score if op is not None else -1.0
 
 
 def report_to_dict(report: Dict[float, OperatingPoint]) -> dict:
@@ -232,6 +256,7 @@ def report_to_dict(report: Dict[float, OperatingPoint]) -> dict:
             "fa_h_total": round(op.fa_h_total, 3),
             "fa_h_by_kind": {k: round(v, 3) for k, v in op.fa_h_by_kind.items()},
             "feasible": op.feasible,
+            "score": round(op.score, 4),   # surogat optymalizacji (recall lub -; patrz primary_score)
         }
     return out
 
@@ -241,10 +266,11 @@ def format_report(report: Dict[float, OperatingPoint]) -> str:
     for B in sorted(report):
         op = report[B]
         ci = f" CI[{op.recall_ci[0]:.3f},{op.recall_ci[1]:.3f}]" if op.recall_ci else ""
-        rule = f"k={op.rule[0]} w={op.rule[1]}" if op.rule else "BRAK (niewykonalne)"
+        rule = f"k={op.rule[0]} w={op.rule[1]}" if op.rule else "BRAK"
+        tail = "" if op.feasible else (f"  (budzet nieosiagalny; najblizej "
+                                       f"{op.fa_h_total:.1f} FA/h, surogat {op.score:+.3f})")
         lines.append(f"  @ {B:g} FA/h: recall {op.recall:.3f}{ci}  "
-                     f"[{rule}]  FA/h_total {op.fa_h_total:.2f}"
-                     f"{'' if op.feasible else '  (budzet nieosiagalny)'}")
+                     f"[{rule}]  FA/h_total {op.fa_h_total:.2f}{tail}")
         for kk, v in sorted(op.fa_h_by_kind.items()):
             lines.append(f"        {kk:12s} FA/h {v:.2f}")
     return "\n".join(lines)

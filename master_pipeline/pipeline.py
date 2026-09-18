@@ -5,7 +5,7 @@ import multiprocessing
 from pipeline_config import PipelineConfig
 from hardware import get_device, resolve_workers
 from tracker import RunTracker
-from ga_runner import run_ga_stage, run_ext_evaluation_stage, run_final_evaluation_stage
+from ga_runner import run_ga_stage, run_ext_evaluation_stage, run_final_evaluation_stage, run_hardware_export_stage
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Master Pipeline dla optymalizacji SNN (Lu.i)")
@@ -61,6 +61,9 @@ def main():
         
         # ETAP 3: Ewaluacja ciągła / testowa
         run_final_evaluation_stage(config, tracker, best_topology)
+
+        # ETAP 4: Eksport konfiguracji sprzętowej LUI
+        run_hardware_export_stage(config, tracker, best_topology)
         
     elif args.command == "train-ga":
         best_topology = run_ga_stage(config, tracker)

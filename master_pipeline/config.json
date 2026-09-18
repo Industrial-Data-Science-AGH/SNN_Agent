@@ -1,0 +1,49 @@
+{
+    "data": {
+        "train": "architecture_14_neurons_patryk_09_07/spikes_v2/train",
+        "val": "architecture_14_neurons_patryk_09_07/spikes_v2/val",
+        "test": "architecture_14_neurons_patryk_09_07/spikes_v2/test",
+        "spikes_ext": "ga_neuron_search/spikes_ext",
+        "continuous_eval": ""
+    },
+    "ga": {
+        "neurons_range": [
+            4,
+            6,
+            8,
+            10
+        ],
+        "pop_size": 30,
+        "generations": 20,
+        "elite": 3,
+        "screen_mult": 1,
+        "screen_budget": 0.34,
+        "fitness_metric": "clip_f1",
+        "feature_penalty": 0.005,
+        "parsimony_eps": 0.02
+    },
+    "train": {
+        "proxy_epochs": 4,
+        "winner_epochs": 60,
+        "hat_frac": 0.4,
+        "lr": 0.003,
+        "batch_size": 128,
+        "pos_weight_grid": [
+            1.5,
+            2.0,
+            3.0
+        ],
+        "tune_k_range": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+        ],
+        "fitness_seeds": 1
+    },
+    "device": "auto",
+    "workers": "auto",
+    "seed": 42
+}

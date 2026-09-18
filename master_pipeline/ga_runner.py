@@ -112,11 +112,6 @@ def run_ext_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[str,
     """
     Etap 2: Ewaluacja najlepszej topologii na rozszerzonym zbiorze (spikes_ext).
     """
-    import os
-    import time
-    from ga_neuron_search.genome import Genome
-    from ga_neuron_search.fitness import RealFitness
-
     print(f"\n>>> [ETAP 2/3] Uruchamianie ewaluacji spikes_ext...")
     
     # 1. Obliczanie ścieżek bezwzględnych i podfolderów
@@ -176,19 +171,61 @@ def run_ext_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[str,
 
 def run_final_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[str, Any]):
     """
-    Etap 3: Ostateczna ewaluacja na ciągłym strumieniu (test split) 
-    z raportowaniem pod kątem FA/h.
+    Etap 3: Ostateczna ewaluacja (Test Split / Continuous).
+    Tymczasowo korzysta ze standardowego zbioru testowego. Gotowe do przepięcia na zbiór Kacpra.
     """
-    print(f"\n>>> [ETAP 3/3] Finalna ewaluacja ciągła (Test Split)...")
+    print(f"\n>>> [ETAP 3/3] Finalna ewaluacja ciągła...")
     
-    # Symulacja/Wywołanie testu na nietkniętym zbiorze testowym
-    # (w docelowej wersji podpina się tutaj RealFitness.evaluate_on_test)
+    # 1. Przygotowanie ścieżek
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    train_abs = os.path.join(project_root, config.data.train)
+    arch_dir = os.path.dirname(os.path.dirname(train_abs))
     
-    mock_test_metrics = {
-        "clip_f1": 0.892,
-        "recall_at_budget": 0.850,
-        "budget_fa_h": 6.0
+    # UWAGA: Tutaj podmienić 'config.data.test' na 'config.data.continuous_kacper' - Dataset od Kacpra
+    target_test_abs = os.path.join(project_root, config.data.test)
+    
+    g = Genome.from_dict(best_topology)
+    
+    # Inicjalizacja środowiska stricte pod test
+    # (Wyłączamy wpływ zbioru walidacyjnego, skupiamy się na teście)
+    rf_kwargs = dict(
+        arch_dir=arch_dir,
+        data=train_abs,
+        val_data=target_test_abs,   # Używamy testu jako punktu odniesienia
+        test_data=target_test_abs,  # Właściwy cel ewaluacji
+        limit=None,
+        epochs=config.train.proxy_epochs,
+        num_samples=6000, 
+        k=2,
+        metric=config.ga.fitness_metric,
+        fitness_seeds=3,
+        pos_weight=1.0,
+        feature_penalty=0.0,        # Na etapie testu nie karzemy już za cechy
+        channels_head=7,            # Ograniczenie do oryginalnych 7 kanałów
+        stream_budget=6.0,
+        stream_boot=0,
+        verbose=False,
+        seed=config.seed,
+        device=tracker.device
+    )
+    
+    print(f"[TEST] Ładowanie modelu na strumień testowy: {target_test_abs}")
+    start_time = time.time()
+    
+    # 3. Wywołanie (ponowny trening/finetuning na kanonicznym i test na docelowym)
+    rf_final = RealFitness(**rf_kwargs)
+    final_score = rf_final(g, budget=6.0)
+    
+    elapsed = time.time() - start_time
+    tracker.log_stage_time("final_eval_stage", elapsed)
+    
+    # Zebranie metryk - obecnie wpadnie tu finalny wynik fitness, 
+    # ale struktura jest gotowa na przyjęcie pełnego słownika z FA/h i AP z logiki Kacpra
+    real_test_metrics = {
+        "dataset": "canonical_test_placeholder",
+        f"test_{config.ga.fitness_metric}": final_score,
+        "latency_sec": elapsed
     }
     
-    tracker.log_metrics("continuous_test", mock_test_metrics)
-    print(f"[ETAP 3/3] Wynik testowy zapisany w manifeście.")
+    tracker.log_metrics("continuous_test", real_test_metrics)
+    print(f"[ETAP 3/3] Wynik testowy ({config.ga.fitness_metric}: {final_score:.4f}) zapisany w manifeście.")

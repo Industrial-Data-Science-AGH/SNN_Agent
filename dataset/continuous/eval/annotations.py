@@ -191,25 +191,58 @@ def read_stem_list(path: str) -> set[str]:
         raise ValueError(f"{path}: lista jest pusta")
     return stems
 
+def _load_train_group_ids(manifest_csv: str) -> set[str]:
+    """Wczytuje group_id ze wszystkich rekordów manifestu treningowego Patryka."""
+    import csv as _csv
+
+    group_ids: set[str] = set()
+    with open(manifest_csv, encoding="utf-8") as fh:
+        for row in _csv.DictReader(fh):
+            if "group_id" not in row:
+                raise ValueError(
+                    f"{manifest_csv}: brak kolumny 'group_id' — "
+                    f"upewnij się, że to manifest v2.0.0+"
+                )
+            group_ids.add(row["group_id"])
+    return group_ids
+
+
 def check_eval_train_overlap(
     eval_stems: set[str],
     train_stem_files: list[str],
-) -> dict[str, list[str]]:
-    """Sprawdza rozłączność eval vs train. Zwraca {plik_listy: [nakładające_się_stemy]}.
-    Rzuca ValueError jeśli cokolwiek się nakłada."""
-    report: dict[str, list[str]] = {}
+    bg_group_ids: set[str] | None = None,
+    train_manifest_csv: str | None = None,
+) -> dict:
+    """Sprawdza rozłączność eval/train dla szkła (po stemach) i tła (po group_id).
+    Rzuca ValueError jeśli szkło się pokrywa. Tło raportuje, ale nie rzuca
+    (overlap tła jest oczekiwany — model trenował na ESC-50 jako negatywach —
+    jednak musi być zaraportowany per kryterium akceptacji).
+    """
+    # --- szkło ---
+    glass_report: dict[str, list[str]] = {}
     for path in train_stem_files:
         train_stems = read_stem_list(path)
-        overlap = sorted(eval_stems & train_stems)
-        report[path] = overlap
+        glass_report[path] = sorted(eval_stems & train_stems)
 
-    violations = {p: stems for p, stems in report.items() if stems}
+    violations = {p: stems for p, stems in glass_report.items() if stems}
     if violations:
-        lines = []
-        for p, stems in violations.items():
-            lines.append(f"  {p}: {stems}")
+        lines = [f"  {p}: {stems}" for p, stems in violations.items()]
         raise ValueError(
-            f"overlap eval/train — te same pliki w datasecie ewaluacyjnym i treningowym:\n"
-            + "\n".join(lines)
+            "overlap eval/train (szkło) — te same pliki źródłowe VOICe "
+            "w puli ewaluacyjnej i treningowej:\n" + "\n".join(lines)
         )
-    return report  # pusty overlap per plik = OK
+
+    # --- tło ---
+    bg_report: dict[str, list[str]] = {}
+    if bg_group_ids and train_manifest_csv:
+        train_group_ids = _load_train_group_ids(train_manifest_csv)
+        overlap = sorted(bg_group_ids & train_group_ids)
+        bg_report[train_manifest_csv] = overlap
+        if overlap:
+            print(
+                f"[info] overlap tła eval/train: {len(overlap)} group_id "
+                f"z ESC-50 obecnych też w manifeście treningowym "
+                f"(oczekiwane — raportowane, nie błąd)"
+            )
+
+    return {"glass": glass_report, "background": bg_report}

@@ -16,14 +16,17 @@ import random
 import subprocess
 from dataclasses import dataclass, field
 from typing import Sequence
+from pathlib import Path
 
 import numpy as np
 
 from .annotations import GlassClip
-from .audio_io import AudioStandard, load_audio_mono, peak_normalize, write_audio
+from .audio_io import AudioStandard, load_audio_mono
+from snn_pipeline.dataset_contract import ESC50_KIND, group_id_for
 
+ESC50_GLASS_TARGET = 39  # "glass breaking"
 N_EVENTS = 5
-GENERATOR_VERSION = "1.0.0"
+GENERATOR_VERSION = "1.1.0"
 
 
 # ============================================================ pozycjonowanie
@@ -129,17 +132,6 @@ def sample_event_positions(
 
 # ============================================================ budowa strumienia
 
-# NOWE — kind z metadanych ESC-50, wyklucza glass breaking (target=39)
-_ESC50_KIND = {
-    **{i: "animal"      for i in range(0,  10)},
-    **{i: "stationary"  for i in range(10, 20)},
-    **{i: "speech"      for i in range(20, 30)},
-    **{i: "stationary"  for i in range(30, 40)},
-    **{i: "loud_event"  for i in range(40, 50)},
-}
-_ESC50_GLASS_TARGET = 39  # "glass breaking" — nie może być tłem
-
-
 def _load_esc50_kind_map(esc50_root: str) -> dict[str, str]:
     """Czyta meta/esc50.csv i zwraca {filename: kind}. Pomija glass breaking."""
     import csv
@@ -154,15 +146,16 @@ def _load_esc50_kind_map(esc50_root: str) -> dict[str, str]:
     with open(meta_path, encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
             target = int(row["target"])
-            if target == _ESC50_GLASS_TARGET:
+            if target == ESC50_GLASS_TARGET:
                 continue  # wyklucz szkło z tła
-            kind_map[row["filename"]] = _ESC50_KIND[target]
+            kind_map[row["filename"]] = ESC50_KIND[target]
     return kind_map
 
 
 @dataclass
 class BackgroundPool:
-    files: list[tuple[str, str, str]] = field(default_factory=list)  # path, source, kind
+    # path, source, kind, group_id
+    files: list[tuple[str, str, str, str]] = field(default_factory=list)
 
     def is_empty(self) -> bool:
         return len(self.files) == 0
@@ -175,7 +168,7 @@ def collect_background_pool(background_dirs: Sequence[str]) -> BackgroundPool:
             raise FileNotFoundError(f"katalog tła nie istnieje: {d}")
         kind_map = _load_esc50_kind_map(d)  # twardy fail gdy brak meta/esc50.csv
         found = sorted(glob.glob(os.path.join(d, "*.wav")))
-        included = [(f, "ESC-50", kind_map[os.path.basename(f)])
+        included = [(f, "ESC-50", kind_map[os.path.basename(f)], group_id_for("esc50", Path(f)))
                     for f in found if os.path.basename(f) in kind_map]
         if not included:
             raise FileNotFoundError(
@@ -216,7 +209,7 @@ def _fill_background(
         guard += 1
         if guard > 100_000:
             raise RuntimeError("nie udało się wypełnić tła — pula plików prawdopodobnie pusta/zbyt krótka")
-        path, source_name, kind = files[fi % len(files)]
+        path, source_name, kind, group_id = files[fi % len(files)]
         fi += 1
         samples = load_audio_mono(path, standard)
         if samples.size == 0:
@@ -232,6 +225,7 @@ def _fill_background(
             "path": os.path.relpath(path),
             "source": source_name,
             "kind": kind,
+            "group_id": group_id,
             "stream_start_s": round(pos / sample_rate, 6),
             "stream_end_s": round((pos + take) / sample_rate, 6),
         })

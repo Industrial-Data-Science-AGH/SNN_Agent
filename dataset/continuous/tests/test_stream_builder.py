@@ -45,13 +45,17 @@ def audio_root(tmp_path):
     return str(tmp_path)
 
 
+# omijamy collect_background_pool, budujemy BackgroundPool bezpośrednio
 @pytest.fixture()
 def background_pool(tmp_path):
     bg_dir = tmp_path / "bg"
     bg_dir.mkdir()
+    files = []
     for i in range(3):
-        _make_wav(str(bg_dir / f"bg{i:02d}.wav"), duration_s=30.0, freq=200 + i * 50)
-    pool = collect_background_pool([str(bg_dir)])
+        path = str(bg_dir / f"bg{i:02d}.wav")
+        _make_wav(path, duration_s=30.0, freq=200 + i * 50)
+        files.append((path, "ESC-50", "stationary", f"esc50_test_{i}"))
+    pool = BackgroundPool(files=files)
     return pool
 
 
@@ -61,7 +65,8 @@ def test_build_stream_exactly_5_events(audio_root, background_pool):
         duration_s=60.0, glass_clips=clips,
         audio_root_for_glass=audio_root,
         background_pool=background_pool,
-        seed=42, min_gap_s=1.0, edge_margin_s=0.5, standard=STD,
+        seed=42, min_gap_s=1.0, warmup_s=30,
+        end_margin_s=0.5, standard=STD,
     )
     assert len(result.events) == N_EVENTS == 5
 
@@ -72,7 +77,8 @@ def test_build_stream_no_event_overlap(audio_root, background_pool):
         duration_s=60.0, glass_clips=clips,
         audio_root_for_glass=audio_root,
         background_pool=background_pool,
-        seed=7, min_gap_s=1.0, edge_margin_s=0.5, standard=STD,
+        seed=7, min_gap_s=1.0, warmup_s=30,
+        end_margin_s=0.5, standard=STD,
     )
     evs = sorted(result.events, key=lambda e: e.start_s)
     for a, b in zip(evs, evs[1:]):
@@ -83,7 +89,7 @@ def test_build_stream_deterministic(audio_root, background_pool):
     clips = _fake_clips(10, "synthetic_001", duration_s=1.0)
     kw = dict(duration_s=60.0, glass_clips=clips,
                audio_root_for_glass=audio_root, background_pool=background_pool,
-               seed=99, min_gap_s=1.0, edge_margin_s=0.5, standard=STD)
+               seed=99, min_gap_s=1.0, warmup_s=30, end_margin_s=0.5, standard=STD)
     r1 = build_stream(**kw)
     r2 = build_stream(**kw)
     assert np.array_equal(r1.audio, r2.audio)
@@ -95,7 +101,7 @@ def test_build_stream_different_seeds_differ(audio_root, background_pool):
     clips = _fake_clips(10, "synthetic_001", duration_s=1.0)
     kw = dict(duration_s=60.0, glass_clips=clips,
                audio_root_for_glass=audio_root, background_pool=background_pool,
-               min_gap_s=1.0, edge_margin_s=0.5, standard=STD)
+               min_gap_s=1.0, warmup_s=30, end_margin_s=0.5, standard=STD)
     r1 = build_stream(**kw, seed=1)
     r2 = build_stream(**kw, seed=2)
     starts1 = [e.start_s for e in r1.events]
@@ -110,7 +116,7 @@ def test_build_stream_audio_length(audio_root, background_pool):
         duration_s=duration_s, glass_clips=clips,
         audio_root_for_glass=audio_root,
         background_pool=background_pool,
-        seed=0, min_gap_s=1.0, edge_margin_s=0.5, standard=STD,
+        seed=0, min_gap_s=1.0, warmup_s=30, end_margin_s=0.5, standard=STD,
     )
     assert abs(result.audio.size / SR - duration_s) < 0.1
 
@@ -121,7 +127,7 @@ def test_build_stream_no_clipping(audio_root, background_pool):
         duration_s=60.0, glass_clips=clips,
         audio_root_for_glass=audio_root,
         background_pool=background_pool,
-        seed=5, standard=STD, min_gap_s=1.0, edge_margin_s=0.5,
+        seed=5, standard=STD, min_gap_s=1.0, warmup_s=30, end_margin_s=0.5,
     )
     assert float(np.max(np.abs(result.audio))) <= 1.0 + 1e-6
 

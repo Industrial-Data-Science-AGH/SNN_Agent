@@ -14,6 +14,7 @@ python -m dataset.continuous.eval.cli \
     --glass-allowed-stems  dataset/clean/clean/target/synthetic_target_test.txt \
     --train-stems-files    dataset/clean/clean/source/synthetic_source_training.txt \
                            dataset/clean/clean/source/synthetic_source_validation.txt \
+    --train-manifest       dataset/versions/v2.0.0/manifest.csv \
     --background-dir       data/ESC-50-master/audio \
     --seeds 42 43 44 \
     --out-dir dataset/continuous/out
@@ -90,19 +91,18 @@ nie wiadomo ile godzin każdego rodzaju tła jest w strumieniu.
 
 ### 5. Sprawdzanie rozłączności eval/train
 
-```bash
---train-stems-files dataset/clean/clean/source/synthetic_source_training.txt \
-                    dataset/clean/clean/source/synthetic_source_validation.txt
-```
+**Szkło (VOICe)** — `--train-stems-files`:
+Porównuje stemmy plików szkła w puli eval z każdą podaną listą treningową.
+Jeśli cokolwiek się pokrywa — `ValueError`. Blokuje generację.
 
-Przed wygenerowaniem skrypt porównuje stemmy plików szkła w puli eval
-z każdą podaną listą treningową. Jeśli cokolwiek się pokrywa — `ValueError`
-z listą nakładających się plików. Wynik (pusta lista = brak overlap) trafia
-do manifestu w `config.overlap_check`.
+**Tło (ESC-50)** — `--train-manifest`:
+Porównuje `group_id` plików tła użytych w mikście z `group_id` z manifestu
+treningowego Patryka (`manifest.csv`). Overlap jest **oczekiwany** (model
+trenował na ESC-50 jako negatywach) — nie blokuje generacji, ale jest
+raportowany w manifeście pod `config.overlap_check.background` i wypisywany
+na stdout. Bez `--train-manifest` sekcja `background` w raporcie jest pusta.
 
-ESC-50 (tło) **nie jest sprawdzane** — model trenował na ESC-50 jako
-negatywach, więc jego obecność w tle eval jest oczekiwana i poprawna.
-
+Wynik obu sprawdzeń trafia do `config.overlap_check` w manifeście.
 ### 6. Standard audio: 44100 Hz / mono / PCM_16
 
 Przyjęty z `dataset/versions/v2.0.0/stats.md`. Każdy plik źródłowy
@@ -172,13 +172,13 @@ Ten sam seed + te same pliki = identyczny WAV.
 
 **Jak Marcel liczy metryki z manifestu:**
 
-| metryka | jak liczyć |
-|---|---|
-| detected / 5 | dla każdego `[start_s, end_s]` — czy detektor podniósł alarm (+tolerancja) |
-| event recall | `detected / 5` |
-| false alarms/h | alarmy poza oknami zdarzeń, na odcinku `[warmup_s, duration_s]` / `(duration_s - warmup_s)` × 3600 |
-| FA/h per kind | jak wyżej, ale tylko segmenty tła z danym `kind` |
-| latency | czas pierwszego alarmu w oknie zdarzenia minus `start_s` |
+| metryka | jak liczyć                                                                                                                                                    |
+|---|---------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| detected / 5 | dla każdego `[start_s, end_s]` — czy detektor podniósł alarm (+tolerancja)                                                                                    |
+| event recall | `detected / 5`                                                                                                                                                |
+| false alarms/h | alarmy poza wszystkimi oknami [start_s, end_s], liczone NA ODCINKU [warmup_s, duration_s] (warmup wyłączony), podzielone przez (duration_s - warmup_s) / 3600 |
+| FA/h per kind | jak wyżej, ale sumując tylko czas segmentów tła z danym "kind" (z background_segments); group_id pozwala powiązać segment z rekordem w manifeście treningowym |
+| latency | config.overlap_check.background zawiera listę group_id ESC-50 obecnych w obu datasetach — oczekiwany, raportowany, nie błąd                                   |
 
 ---
 

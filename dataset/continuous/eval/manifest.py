@@ -33,8 +33,12 @@ Schemat (manifest_schema_version="1.1.0"):
     "glass_audio_root": "dataset/clean/clean/audio",
     "glass_allowed_stems_file": "dataset/clean/clean/target/synthetic_target_test.txt" | null,
     "overlap_check": {
-      "train_stems_files": ["dataset/clean/clean/source/synthetic_source_training.txt"],
-      "result": {"synthetic_source_training.txt": []}
+      "glass": {
+        "dataset/clean/clean/source/synthetic_source_training.txt": []
+      },
+      "background": {
+        "dataset/versions/v2.0.0/manifest.csv": ["esc50_1_100032", "esc50_1_100038"]
+      }
     }
   },
   "events": [
@@ -57,10 +61,10 @@ Schemat (manifest_schema_version="1.1.0"):
       "path": "data/ESC-50-master/audio/1-100032-A-0.wav",
       "source": "ESC-50",
       "kind": "animal",           -- z meta/esc50.csv, jedna z: animal/stationary/speech/loud_event
+      "group_id": "esc50_1_100032",  -- wg reguły group_id_for("esc50", ...) z dataset_contract.py
       "stream_start_s": 0.0,
       "stream_end_s": 5.02
     },
-    ...
   ]
 }
 
@@ -132,7 +136,7 @@ def build_manifest_dict(
                 os.path.relpath(glass_allowed_stems_files)
                 if glass_allowed_stems_files else None
             ),
-            "overlap_check": overlap_check or {},
+            "overlap_check": overlap_check or {"glass": {}, "background": {}},
         },
         "events": [
             {"index": i, **e.to_manifest_dict()}

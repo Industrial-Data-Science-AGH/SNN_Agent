@@ -35,7 +35,7 @@ import argparse
 import os
 import sys
 
-from .annotations import collect_glass_clips, read_stem_list
+from .annotations import collect_glass_clips, read_stem_list, check_eval_train_overlap
 from .audio_io import AudioStandard, write_audio
 from .manifest import build_manifest_dict, write_manifest
 from .stream_builder import GENERATOR_VERSION, N_EVENTS, build_stream, collect_background_pool
@@ -59,6 +59,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    help="listy plików treningowych do sprawdzenia rozłączności "
                         "(np. source_training.txt source_validation.txt). "
                         "Jeśli którykolwiek stem wystąpi też w puli szkła — ValueError.")
+    p.add_argument("--train-manifest", required=True,
+                   help="ścieżka do manifest.csv (np. dataset/versions/v2.0.0/manifest.csv). "
+                        "Używana do sprawdzenia overlap tła (ESC-50) z danymi treningowymi. ")
     p.add_argument("--glassbreak-mode", choices=["clean", "background"], default="clean",
                     help="clean (domyślnie): tylko zdarzenia glassbreak bez nakładki "
                          "na gunshot/babycry. background: dopuszcza nakładki "
@@ -107,15 +110,15 @@ def generate_one(args, seed: int) -> tuple[str, str]:
         )
         sys.exit(1)
 
-    if args.train_stems_files:
-        from .annotations import check_eval_train_overlap
-        eval_stems = {c.source_stem for c in glass_clips}
-        overlap_check = check_eval_train_overlap(eval_stems, args.train_stems_files)
-    else:
-        overlap_check = {}
+    eval_stems = {c.source_stem for c in glass_clips}
+    overlap_report = check_eval_train_overlap(
+        eval_stems,
+        args.train_stems_files or [],
+        bg_group_ids=None,  # tło jeszcze nieznane
+        train_manifest_csv=None,
+    )
 
     background_pool = collect_background_pool(args.background_dirs)
-
     standard = AudioStandard()
     stream = build_stream(
         duration_s=args.duration_s,
@@ -129,6 +132,16 @@ def generate_one(args, seed: int) -> tuple[str, str]:
         event_gain_db_range=(args.event_gain_db_min, args.event_gain_db_max),
         standard=standard,
     )
+
+    if args.train_manifest:
+        bg_group_ids = {seg["group_id"] for seg in stream.background_segments}
+        bg_overlap = check_eval_train_overlap(
+            set(),  # szkło już sprawdzone, pomijamy
+            [],
+            bg_group_ids=bg_group_ids,
+            train_manifest_csv=args.train_manifest,
+        )
+        overlap_report["background"] = bg_overlap["background"]
 
     os.makedirs(args.out_dir, exist_ok=True)
     audio_name = f"{args.out_prefix}_seed{seed}.wav"
@@ -150,7 +163,7 @@ def generate_one(args, seed: int) -> tuple[str, str]:
         background_dirs=args.background_dirs,
         glass_audio_root=args.glass_audio_root,
         glass_allowed_stems_files=args.glass_allowed_stems,
-        overlap_check=overlap_check
+        overlap_check=overlap_report
     )
     write_manifest(manifest, manifest_path)
 

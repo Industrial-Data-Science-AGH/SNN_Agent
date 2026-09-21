@@ -163,7 +163,7 @@ def run_ext_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[str,
     tracker.log_stage_time("ext_eval_stage", time.time() - start_time)
     tracker.log_metrics("spikes_ext_eval", {
         "n_features_used": n_features,
-        "features_used": list(features_used),
+        "features_used": sorted(features_used),
         f"ext_{config.ga.fitness_metric}": ext_score
     })
     

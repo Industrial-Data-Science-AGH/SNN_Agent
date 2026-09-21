@@ -3,6 +3,7 @@ import sys
 import time
 import json
 from typing import Dict, Any
+from tracker import SetEncoder
 
 # 1. Główny katalog projektu (SNN_Agent)
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -306,7 +307,7 @@ def run_hardware_export_stage(config: Any, tracker: Any, best_topology: Dict[str
                 }
                 
         with open(path, "w") as f:
-            json.dump(cfg, f, indent=2, ensure_ascii=False)
+            json.dump(cfg, f, indent=2, ensure_ascii=False, cls=SetEncoder)
 
     # 2. Inicjalizacja środowiska i pełny trening modelu pod eksport sprzętowy
     g = Genome.from_dict(best_topology)

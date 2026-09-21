@@ -248,7 +248,8 @@ def run_hardware_export_stage(config: Any, tracker: Any, best_topology: Dict[str
     if arch_dir not in sys.path:
         sys.path.insert(0, arch_dir)
     
-    # 1. Importujemy wyłącznie stałe sprzętowe i funkcje fizyczne Patryka
+    # Uwaga: importowane lokalnie, ponieważ ścieżka do snn_hw_pipeline
+    # zależy od config.data.train, znanego dopiero w runtime stąd możliwe podkreślenie.
     try:
         from snn_hw_pipeline import DT, V_TH, CHANNELS, W_DEADZONE, W_MAX, pulses_to_fire
     except ImportError as e:

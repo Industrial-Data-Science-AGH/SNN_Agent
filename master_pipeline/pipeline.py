@@ -35,9 +35,10 @@ def main():
         config = PipelineConfig.from_json(args.config)
         print(f"[INIT] Załadowano konfigurację z: {args.config}")
     except FileNotFoundError:
-        print(f"[INIT] Nie znaleziono {args.config}, generuję domyślną konfigurację...")
-        config = PipelineConfig()
-        config.to_json("config.json")
+        raise FileNotFoundError(
+            f"[BŁĄD] Nie znaleziono pliku konfiguracyjnego: {args.config}. "
+            "Upewnij się, że plik istnieje lub wskaż poprawną ścieżkę używając flagi --config."
+        )
 
     # 2. Inicjalizacja sprzętu i workerów
     print("[INIT] Konfigurowanie środowiska...")

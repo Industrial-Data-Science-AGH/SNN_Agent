@@ -10,8 +10,7 @@
         "neurons_range": [
             4,
             6,
-            8,
-            10
+            8
         ],
         "pop_size": 30,
         "generations": 20,

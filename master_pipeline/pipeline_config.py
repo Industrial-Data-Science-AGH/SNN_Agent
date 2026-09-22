@@ -14,19 +14,19 @@ class DataConfig:
 @dataclass
 class GAConfig:
     """Parametry przeszukiwania topologii i okablowania."""
-    neurons_range: List[int] = field(default_factory=lambda: [4, 6, 8, 10])
+    neurons_range: List[int] = field(default_factory=lambda: [4, 6, 8])
     pop_size: int = 30
     generations: int = 20
     elite: int = 3
     screen_mult: int = 1
     screen_budget: float = 0.34
-    fitness_metric: str = "clip_f1"
+    fitness_metric: str = "recal_fa"
     feature_penalty: float = 0.005
     parsimony_eps: float = 0.02
     
     def __post_init__(self):
-        if max(self.neurons_range) > 10:
-            raise ValueError("Hardware constraint: max neurons na płytce Lu.i to 10!")
+        if max(self.neurons_range) > 8:
+            raise ValueError("Hardware constraint: max neurons na płytce Lu.i to 8!")
 
 @dataclass
 class TrainConfig:

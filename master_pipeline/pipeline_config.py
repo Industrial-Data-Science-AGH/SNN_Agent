@@ -39,6 +39,7 @@ class TrainConfig:
     pos_weight_grid: List[float] = field(default_factory=lambda: [1.5, 2.0, 3.0])
     tune_k_range: List[int] = field(default_factory=lambda: [1, 2, 3, 4, 5, 6])
     fitness_seeds: int = 1
+    num_samples: int = 6000
 
 @dataclass
 class PipelineConfig:

@@ -22,6 +22,7 @@ jobs:
           # Avoid checking out historical training datasets for a lightweight gate.
           sparse-checkout-cone-mode: false
           sparse-checkout: |
+            /.gitmodules
             /contracts/
             /rpi_agents/
             /tests/w0/

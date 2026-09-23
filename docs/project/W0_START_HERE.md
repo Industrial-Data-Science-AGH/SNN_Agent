@@ -87,3 +87,12 @@ pipeline deploymentu. Mock nigdy nie uruchamia gpio.py.
 W0 nie zmienia obecnego GA ani jego środowiska. M0 mierzy CPU/MPS i workers na
 realnej pracy, M2 naprawia selekcję/export, a dopiero potem profil trafia do
 manifestu eksperymentu. Lock W0 jest tylko do integracji; nie jest lockiem torch.
+
+## Git checkout i Lu.i
+
+W0 dodaje brakujący wpis `.gitmodules` dla istniejącego gitlinka
+`lu.i-neuron-pcb`. Źródło: https://github.com/giant-axon/lu.i-neuron-pcb.git ;
+commit pozostaje `0b2c0193595873fb41765e0a5293f15f4c8057b1`.
+Naprawa pozwala actions/checkout poprawnie zakończyć obsługę submodułów.
+Testy W0 nie pobierają zawartości submodułu; do pracy ze schematami można
+osobno wykonać `git submodule update --init lu.i-neuron-pcb`.

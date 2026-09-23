@@ -1,0 +1,19 @@
+digraph G {graph [rankdir=TB,bgcolor="white",pad="0.2",nodesep="0.3",ranksep="0.4"];node [shape=box,style="rounded,filled",fillcolor="#eef2fa",color="#ccd6e5",fontname="Arial",fontsize=13,margin="0.15"];edge [color="#687b94",fontname="Arial",fontsize=10];
+start[label="D1 rano
+W0 kontrakty + K1 enkoder + A1 sprzęt",fillcolor="#dedff4"];
+rt[label="Patryk P1–P3
+Runtime i telemetria"];ui[label="Karolina C1–C3
+UI na fixture"];ed[label="Wiktor W1–W2
+Bridge i trwałe zdarzenia"];data[label="Kacper K3 + Marcel M1–M3
+Continuous i zamrożony model"];hw[label="Andrzej A2–A3
+Kalibracja i energia"];
+start->{rt ui ed data hw};
+int[label="D2
+Prawdziwe wejście → SNN → zdjęcie
+Foundry + UI live + login",fillcolor="#dedff4"];rt->int;ui->int;ed->int;
+eval[label="D3
+M4–M5 ocena i pakiet
+P5 golden replay + A4 hardware"];data->eval;hw->eval;rt->eval;
+final[label="W5 odbiór E2E
+C5 UI • A5 stanowisko • release manifest",fillcolor="#dbeee5"];int->final;eval->final;
+}

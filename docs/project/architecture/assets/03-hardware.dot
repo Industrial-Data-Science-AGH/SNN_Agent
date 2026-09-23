@@ -1,0 +1,9 @@
+digraph G { graph [bgcolor="white", fontname="Arial", fontsize=15, pad="0.22", nodesep="0.3", ranksep="0.42"]; node [shape=box, style="rounded,filled", fillcolor="#f1edf8", color="#73508e", fontname="Arial", fontsize=14, margin="0.16,0.10"]; edge [fontname="Arial", fontsize=11, color="#506073", arrowsize=0.7];rankdir=TB; mic[label="MAX4466
+OUT · GND · VCC"];uno[label="Arduino Uno
+wejście ADC np. A0
+konfiguracja do sprawdzenia"];pi[label="RPi 5
+USB host"];cam[label="Kamera USB lub CSI
+model do potwierdzenia"];gpio[label="GPIO 3,3 V
+numery BCM z konfiguracji"];led[label="LED + rezystor"];driver[label="Stopień sterujący
+dobrany do buzzera"];buzz[label="Buzzer"];mic->uno[label="analog + wspólna masa"];uno->pi[label="USB danych i zasilanie Uno"];cam->pi;pi->gpio;gpio->led;gpio->driver->buzz;note[label="Nie łączyć sygnału 5 V z GPIO Pi
+Rysunek funkcjonalny, nie montażowy",fillcolor="#fff4da",color="#a78334"];pi->note[style=dashed,arrowhead=none]; }

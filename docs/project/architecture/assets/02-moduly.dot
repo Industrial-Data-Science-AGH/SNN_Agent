@@ -1,0 +1,5 @@
+digraph G { graph [bgcolor="white", fontname="Arial", fontsize=15, pad="0.22", nodesep="0.3", ranksep="0.42"]; node [shape=box, style="rounded,filled", fillcolor="#f1edf8", color="#73508e", fontname="Arial", fontsize=14, margin="0.16,0.10"]; edge [fontname="Arial", fontsize=11, color="#506073", arrowsize=0.7];rankdir=TB; subgraph cluster_e { label="EDGE · jeden serwis systemd"; color="#aaa"; serial[label="Serial adapter"];q[label="Bufor ograniczony
+numery sekwencji"];upl[label="Klient HTTPS"];cam[label="Camera adapter
+USB albo CSI"];gpio[label="Actuator adapter
+GPIO"];serial->q->upl;upl->cam;upl->gpio; } subgraph cluster_c {label="AZURE · logiczne moduły";color="#aaa";api[label="API urządzenia i operatora"];snn[label="Silnik SNN
+stan sesji"];policy[label="Reguły alarmu"];worker[label="Worker obrazu i e-mail"];db[label="Trwałe zdarzenia i artefakty"];api->snn;api->db;api->worker;worker->policy;policy->db;} upl->api[label="wersjonowany kontrakt"]; }

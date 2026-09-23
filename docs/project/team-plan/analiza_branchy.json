@@ -1,0 +1,170 @@
+[
+  {
+    "branch": "dataset/proposed-dataset",
+    "sha": "a6b76ee82fbed0b0117b07adb7b2a30c677b72e9",
+    "missing_from_branch": 85,
+    "unique_to_branch": 35,
+    "changed_files_since_common_ancestor": 27
+  },
+  {
+    "branch": "dev",
+    "sha": "f1b5f07f09cdd7b75ad0967c24dcb4fba475950c",
+    "missing_from_branch": 85,
+    "unique_to_branch": 106,
+    "changed_files_since_common_ancestor": 52
+  },
+  {
+    "branch": "docs",
+    "sha": "d3ddae3f9f796c4ac43c31120608244b9cb830a6",
+    "missing_from_branch": 86,
+    "unique_to_branch": 1,
+    "changed_files_since_common_ancestor": 1
+  },
+  {
+    "branch": "fah-metric-kn",
+    "sha": "e09456a854b5d0453861164e5f6243376f1f8bbd",
+    "missing_from_branch": 0,
+    "unique_to_branch": 3,
+    "changed_files_since_common_ancestor": 18
+  },
+  {
+    "branch": "feat/ci-cd-pipeline",
+    "sha": "e81faaa4c73a76be2e362f9fe7304fdc33c1e805",
+    "missing_from_branch": 85,
+    "unique_to_branch": 65,
+    "changed_files_since_common_ancestor": 33
+  },
+  {
+    "branch": "feat/continuous-dataset",
+    "sha": "a009acec80779ff1ec9e63c066df59ea11defa74",
+    "missing_from_branch": 30,
+    "unique_to_branch": 8,
+    "changed_files_since_common_ancestor": 11
+  },
+  {
+    "branch": "feat/dashboard",
+    "sha": "bb1dbe0209f5cb645546d87637d6ab51c09828f7",
+    "missing_from_branch": 80,
+    "unique_to_branch": 22,
+    "changed_files_since_common_ancestor": 129
+  },
+  {
+    "branch": "feat/dataset-contract-v1",
+    "sha": "2a5a5e2f48e5d45e3f935a01b896cac20dc6bb8f",
+    "missing_from_branch": 62,
+    "unique_to_branch": 0,
+    "changed_files_since_common_ancestor": 0
+  },
+  {
+    "branch": "feat/dataset-remove-atrifacts",
+    "sha": "b8a4ac1e86d46f784b21a6063b9b45697cfbcef4",
+    "missing_from_branch": 31,
+    "unique_to_branch": 0,
+    "changed_files_since_common_ancestor": 0
+  },
+  {
+    "branch": "feat/decoder",
+    "sha": "cf644e1a9e0fc5a391450730b3b75d9ff7ef7979",
+    "missing_from_branch": 85,
+    "unique_to_branch": 5,
+    "changed_files_since_common_ancestor": 9
+  },
+  {
+    "branch": "feat/encoder",
+    "sha": "3bf5b300d597f1664a236270d157e7cbba3e80c4",
+    "missing_from_branch": 85,
+    "unique_to_branch": 105,
+    "changed_files_since_common_ancestor": 52
+  },
+  {
+    "branch": "feat/encoder-features",
+    "sha": "c9ff2346abac54b07468d28e52e908788255569d",
+    "missing_from_branch": 0,
+    "unique_to_branch": 3,
+    "changed_files_since_common_ancestor": 21
+  },
+  {
+    "branch": "feat/master-pipeline",
+    "sha": "6fc7be79abc8ca2562877d6a9fb85f1515bd233f",
+    "missing_from_branch": 0,
+    "unique_to_branch": 24,
+    "changed_files_since_common_ancestor": 8
+  },
+  {
+    "branch": "feat/rebuild-clean-benchmark",
+    "sha": "6a93deb844779f9a829bb673d8db91979aa5c19b",
+    "missing_from_branch": 56,
+    "unique_to_branch": 0,
+    "changed_files_since_common_ancestor": 0
+  },
+  {
+    "branch": "feat/rpi",
+    "sha": "9c329a9fa681423d0e223071b2e30d3a4856a9f0",
+    "missing_from_branch": 80,
+    "unique_to_branch": 14,
+    "changed_files_since_common_ancestor": 55
+  },
+  {
+    "branch": "feat/testing-ideas",
+    "sha": "c8c6eab18b5a93a4b9a8b7656ebf391cfac1ace2",
+    "missing_from_branch": 0,
+    "unique_to_branch": 0,
+    "changed_files_since_common_ancestor": 0
+  },
+  {
+    "branch": "feat/training_N8",
+    "sha": "e36bc46724061661fa30c2decb4ad35cb7a32924",
+    "missing_from_branch": 64,
+    "unique_to_branch": 3,
+    "changed_files_since_common_ancestor": 18
+  },
+  {
+    "branch": "feat/voice-label-fix-dataset-contract-v2",
+    "sha": "6398209fc0be8640c043535eb15688a87eb8fc99",
+    "missing_from_branch": 61,
+    "unique_to_branch": 0,
+    "changed_files_since_common_ancestor": 0
+  },
+  {
+    "branch": "hat-metrics-work",
+    "sha": "b4cd271151ea5d5a544d646e6164f36d80db97b4",
+    "missing_from_branch": 81,
+    "unique_to_branch": 2,
+    "changed_files_since_common_ancestor": 1
+  },
+  {
+    "branch": "integration/ci-cd-test",
+    "sha": "22313da536fe6ca2c5e3d3a7a3ae6ba0c2120023",
+    "missing_from_branch": 80,
+    "unique_to_branch": 31,
+    "changed_files_since_common_ancestor": 46
+  },
+  {
+    "branch": "main",
+    "sha": "00c9d582fd877c3dd977d49be666345765025785",
+    "missing_from_branch": 80,
+    "unique_to_branch": 2,
+    "changed_files_since_common_ancestor": 1
+  },
+  {
+    "branch": "snn/ready-for-test-pipeline",
+    "sha": "da0dba3295d55006f98d74444635547e017950d1",
+    "missing_from_branch": 85,
+    "unique_to_branch": 54,
+    "changed_files_since_common_ancestor": 33
+  },
+  {
+    "branch": "snn_marcel_meeting",
+    "sha": "4f48fc984c1e70f68dd4bfc19d42fc89d59e83b2",
+    "missing_from_branch": 85,
+    "unique_to_branch": 45,
+    "changed_files_since_common_ancestor": 32
+  },
+  {
+    "branch": "worktree-dataset-expansion",
+    "sha": "4a659592d10fa7b9a9bfcc2d1eee0d799ba76c22",
+    "missing_from_branch": 80,
+    "unique_to_branch": 1,
+    "changed_files_since_common_ancestor": 1
+  }
+]

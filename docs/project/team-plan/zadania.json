@@ -1,0 +1,576 @@
+[
+  {
+    "id": "T01",
+    "name": "Wiktor",
+    "goal": "Lekki edge, chmura, wspólny dostęp i integracja end to end",
+    "branch": "feat/wiktor-edge-cloud",
+    "paths": "rpi_agents/agent/**; rpi_agents/cloud/app/{auth,storage,worker,vision,policy}*.py; rpi_agents/cloud/infra/**; rpi_agents/deploy/**; .github/workflows/**; contracts/**",
+    "reviewer": "Patryk dla API i bezpieczeństwa; Karolina dla UI",
+    "source": "feat/dashboard: rpi_agents/agent, cloud/app, cloud/infra, deploy; nie importować całej historii brancha",
+    "tasks": [
+      {
+        "id": "W0",
+        "title": "Kontrakty i podstawa integracji",
+        "day": "D1 rano",
+        "deps": [],
+        "steps": [
+          "Z Patrykiem i Kacprem zamrozić schema_version, channel_map, jednostki, zegar i encoder_hash. Zapisać kontrakty SpikeBatch, SNNDecision, NeuronFrame, CaptureCommand, VisionResult, AlarmCommand oraz manifest modelu.",
+          "W osobnym krótkim PR utworzyć contracts/ z JSON Schema i minimalnymi fixture: cisza, spike, duplikat, luka, trigger, vision unavailable. Dodać mock API do pracy bez urządzeń.",
+          "Przenieść wybrane rpi_agents z feat/dashboard do nowego brancha. Nie kopiować .env, wyników, starych ADR jako obowiązującego projektu ani całej historii dev. Zapisać źródłowy SHA.",
+          "Dodać root .github/workflows/pr.yml: pull_request na master, read-only token, testy kontraktów i lekkie testy modułów, bez sekretów i bez kosztownych treningów. Dopiero po udanym uruchomieniu ustawić wymagany check pr-gate."
+        ],
+        "done": "Pierwszy PR pokazuje walidację poprawnych fixture i odrzucenie błędnego kanału/wersji. Workflow rzeczywiście uruchamia się z głównego .github/workflows, a nie z rpi_agents/.github/workflows.",
+        "handoff": "Patryk i Karolina dostają fixtures oraz stabilne nazwy endpointów; wszyscy pobierają master po squash PR."
+      },
+      {
+        "id": "W1",
+        "title": "Bridge Uno i Raspberry Pi 5",
+        "day": "D1",
+        "deps": [
+          "W0",
+          "K1"
+        ],
+        "steps": [
+          "Z Andrzejem sprawdzić urządzenia USB, mikrofon i wyjścia; zapisać adapter kamery i serial device w konfiguracji.",
+          "Z Kacprem odebrać ramki Uno. Walidować seq, boot_id, zakresy i długość; bufor ograniczony, jawny gap zamiast cichej utraty. Batching z czasem źródłowym, nie czasem nadejścia HTTP.",
+          "Zaimplementować lekki proces systemd: reconnect USB/HTTPS, trwały mały outbox, heartbeat i obsługę SIGTERM. Nie instalować torch ani lokalnego vision.",
+          "Oddzielić CameraAdapter, SerialAdapter i AlarmAdapter od logiki. Capture wykonać dopiero po ważnej komendzie SNN; czas TTL i deduplikacja po command_id."
+        ],
+        "done": "Na Pi 5 działa serial replay i fizyczne Uno; ponowne podłączenie nie gubi tożsamości sesji. Powtórzona komenda nie robi kolejnych zdjęć.",
+        "handoff": "Patryk otrzymuje zapis wejścia; Karolina otrzymuje DeviceStatus; ten sam program ma działać na przyszłym Pi Zero po zmianie konfiguracji."
+      },
+      {
+        "id": "W2",
+        "title": "Trwałe zdarzenia i polecenia",
+        "day": "D1–D2",
+        "deps": [
+          "W0"
+        ],
+        "steps": [
+          "Przygotować API urządzenia, session/event_id, własność obiektów i idempotentne zapisy do Table/Blob. Zdefiniować limity JPEG i batchy.",
+          "Zapis zdarzenia i outbox powiązać jednym planem odzyskiwania; publikować zadania do Queue. Worker deduplikuje, odnawia visibility timeout i kończy retry w kolejce błędów.",
+          "Outbox skanować przy uruchomieniu i okresowo podczas pracy; przed scale-to-zero potwierdzić opróżnienie. Przy awarii pomiędzy zapisem a enqueue potrzebny jest niezależny okresowy reconciler albo jawne utrzymywanie minReplicas=1 aż do odrobienia zaległości.",
+          "Komenda alarmu zawiera TTL, event_id i command_id. Pi potwierdza applied/expired/failed, wyjścia wyłączają się po lokalnym limicie niezależnie od chmury."
+        ],
+        "done": "Test crash-before-enqueue kończy się odtworzeniem zadania; duplikat nie tworzy dwóch zdarzeń ani ponownego buzzera; obce device_id jest odrzucone.",
+        "handoff": "Karolina otrzymuje listę zdarzeń i statusy ACK; W3 dostaje kolejkę vision."
+      },
+      {
+        "id": "W3",
+        "title": "Foundry i reguła alarmu",
+        "day": "D2",
+        "deps": [
+          "W1",
+          "W2",
+          "P2"
+        ],
+        "steps": [
+          "Wybrać dostępny na subskrypcji model vision, zapisać model/deployment/version i sprawdzić poprawny JPEG oraz timeout. Dostęp z managed identity, jeśli wdrożenie go wspiera.",
+          "Model zwraca wyłącznie obserwacje zgodne ze schematem: glass_visible, person_visible, uncertainty. Nie nadaje osobie statusu unauthorized bez osobnej informacji.",
+          "Politykę alarmu trzymać w kodzie. Do czasu rozstrzygnięcia uzbrojenia/nieuprawnionej osoby: Review required. SNN=true samo nie uruchamia alarmu.",
+          "Przenieść e-mail do workera; adresaci z konfiguracji, załącznik wskazuje event_id. Retry nie może obiecywać exactly-once e-mail przy niejednoznacznym timeout."
+        ],
+        "done": "Cztery scenariusze glass/person oraz błąd vision dają zapisane statusy. Błąd API nigdy nie jest zamieniany w pewne włamanie. Alarm spełnia zatwierdzoną regułę i gaśnie po limicie.",
+        "handoff": "Karolina otrzymuje realne wyniki i obraz do Event details; Andrzej rejestruje pobór w fazie capture/vision/alarm."
+      },
+      {
+        "id": "W4",
+        "title": "Azure i wspólny login",
+        "day": "D2",
+        "deps": [
+          "W0",
+          "C1"
+        ],
+        "steps": [
+          "Sprawdzić dostępne regiony az CLI, modele Foundry i quota. Zbudować kontenery API/SNN/UI oraz workera; utworzyć Blob/Table/Queue i Key Vault.",
+          "Dodać formularz Username/Password dla jednej wspólnej pary, sesję serwerową i Logout. Brak rejestracji, ról i kont per osoba. Hasło lub jego weryfikator tylko w Key Vault; brak domyślnych danych logowania.",
+          "Włączyć HTTPS, Secure/HttpOnly/SameSite cookie, ochronę CSRF, TTL sesji, ograniczenie prób logowania oraz redakcję logów. Pi używa osobnego poświadczenia urządzenia.",
+          "Na test aktywować minReplicas=1 dla runtime SNN. Po Stop i drain wrócić do min0. Jedna aktywna epoka i lease również podczas zmiany rewizji; bez obietnicy zerowego kosztu całej subskrypcji."
+        ],
+        "done": "Login działa z dwóch przeglądarek tą samą parą, bezpieczny logout unieważnia daną sesję, nieautoryzowany odczyt zdjęć/telemetrii jest blokowany. Po restarcie sekret nie jest drukowany ani dodany do obrazu.",
+        "handoff": "Zespół dostaje URL; hasło Wiktor przekazuje własnym kanałem, poza rozmową z LLM. Karolina podłącza ekran loginu."
+      },
+      {
+        "id": "W5",
+        "title": "Odbiór i wersja demonstracyjna",
+        "day": "D3",
+        "deps": [
+          "W3",
+          "W4",
+          "P5",
+          "C5",
+          "M5",
+          "K2",
+          "A3"
+        ],
+        "steps": [
+          "Uruchomić skryptowany test E2E: Uno → Pi → SNN → capture → Foundry → policy → email/LED/buzzer. Zachować event_id oraz czasy wszystkich faz.",
+          "Sprawdzić przerwanie Wi-Fi, restart kontenera, odłączenie USB, timeout vision, duplikat i TTL. Awaria ma widoczny stan, bez fikcyjnej ciągłości.",
+          "Zamrozić release po zatwierdzonych PR, zapisać SHA obrazu/modelu/enkodera i parametry sesji. Nie poprawiać kodu bezpośrednio na urządzeniu bez przeniesienia przez PR.",
+          "Przygotować checklistę migracji: model Zero, architektura CPU, OS, USB/OTG, zasilanie, kamera i instalacja zależności. Decyzja o migracji dopiero po identyfikacji sprzętu."
+        ],
+        "done": "Demonstracja powtarza się z czystego wdrożenia; awarie mają ślad i dają się odtworzyć. Raport rozdziela wyniki rzeczywiste od replay.",
+        "handoff": "Cały zespół: instrukcja uruchomienia, rollback obrazu/modelu, manifest release i lista ograniczeń."
+      }
+    ]
+  },
+  {
+    "id": "T02",
+    "name": "Patryk",
+    "goal": "Stanowy symulator Lu.i i kontrakt cyfrowego bliźniaka",
+    "branch": "feat/patryk-lui-runtime",
+    "paths": "snn_runtime/** (nowy); tests/runtime/**; contracts/model*.json i contracts/neuron*.json po uzgodnieniu z Wiktorem",
+    "reviewer": "Marcel dla modelu; Andrzej dla parametrów fizycznych",
+    "source": "ga_neuron_search/net.py; snn_pipeline/snn_model.py; architecture_14_neurons_patryk_09_07/snn_hw_pipeline.py; dokumentacja Lu.i",
+    "tasks": [
+      {
+        "id": "P1",
+        "title": "Zdefiniować model i wejście runtime",
+        "day": "D1 rano",
+        "deps": [
+          "W0",
+          "K1"
+        ],
+        "steps": [
+          "Wybrać jeden adapter pakietu modelu; wymagać topology, weights, dt, reset, refractory, tau i decoder, bez ukrytych domyślnych wartości.",
+          "Zmapować kanały wejściowe na porty neuronów, odróżnić trzy fizyczne wejścia Lu.i od liczby cech enkodera.",
+          "Opisać jednostki napięcia/czasu i przejście z parametrów treningu na model referencyjny. Pozostawić oznaczenie uncalibrated do pomiarów Andrzeja."
+        ],
+        "done": "Niekompletny model, niezgodny encoder_hash i błędny port kończą się kontrolowanym błędem przed Start.",
+        "handoff": "Marcel zna format eksportu; Karolina zna ID neuronów i pól."
+      },
+      {
+        "id": "P2",
+        "title": "Stanowy streaming i dekoder",
+        "day": "D1–D2",
+        "deps": [
+          "P1"
+        ],
+        "steps": [
+          "Wydzielić Runtime.load/reset/step/checkpoint bez zależności od UI. Utrzymywać Vmem, prądy synaps i historię dekodera pomiędzy batchami.",
+          "Zaimplementować kolejność po seq i source time, duplikaty, jawne luki oraz session_epoch. Nie resetować stanu na każde HTTP.",
+          "Dostarczyć Wiktorowi adapter route SNN i wynik zawierający decision_id, source_time, model_hash. Nie tworzyć równoległego drugiego API."
+        ],
+        "done": "Ten sam strumień podzielony na różne batch sizes daje zgodne spike’y i decyzje w ustalonej tolerancji; luka generuje gap/warmup.",
+        "handoff": "Wiktor może podłączyć prawdziwy bridge; Karolina może odtworzyć krótką sesję."
+      },
+      {
+        "id": "P3",
+        "title": "Telemetria i edytowalna topologia",
+        "day": "D2",
+        "deps": [
+          "P2"
+        ],
+        "steps": [
+          "Emitować NeuronFrame z Vmem, progami, spike timestamp, stanem synaps, mode i calibration_id. Określić downsampling wykresu niezależnie od czasu symulacji.",
+          "Zapewnić snapshot i zdarzenia z rosnącym event sequence do live/replay. Telemetria UI może pomijać klatki, lecz nie ukrywać luk w danych wejściowych.",
+          "Walidować draft topologii 0–50: 0 oznacza pusty edytor, nie działający klasyfikator. Zmiana liczby neuronów nie przebudowuje po cichu championa; nowa sesja wymaga nowego ważnego modelu."
+        ],
+        "done": "Karolina widzi wierny raster i potencjał na znanym wektorze testowym; Pause view nie zatrzymuje backendu.",
+        "handoff": "Udokumentowane mapowanie LED oraz przykład 8 i 50 neuronów."
+      },
+      {
+        "id": "P4",
+        "title": "Porównać z fizycznym Lu.i",
+        "day": "D2–D3",
+        "deps": [
+          "P2",
+          "A2"
+        ],
+        "steps": [
+          "Odtworzyć wejściowe impulsy pomiarów Andrzeja z amplitudą i szerokością; uwzględnić ich znaczenie dla wagi.",
+          "Dopasować parametry na zbiorze kalibracyjnym i porównać na oddzielnym przebiegu: czasy spike, przebieg Vmem, nasycenie i reset.",
+          "Raportować błąd oraz zakres ważności; bez pomiarów oznaczyć model functional simulation, nie zweryfikowany twin 1:1."
+        ],
+        "done": "Raport zawiera identyfikatory płytek, nastawy, warunki i tolerancje ustalone przed oceną; błąd nie jest ukryty średnią.",
+        "handoff": "Karolina wyświetla calibration status; Andrzej potwierdza zgodność warunków."
+      },
+      {
+        "id": "P5",
+        "title": "Zamrożony runtime i golden replay",
+        "day": "D3",
+        "deps": [
+          "P3",
+          "M5"
+        ],
+        "steps": [
+          "Wczytać dokładny checkpoint Marcela bez dodatkowego treningu i porównać decoder output z eksportem.",
+          "Zapisać krótki golden replay z przewidywanym rastrem, decyzją i tolerancją. Uruchomić go lokalnie i w kontenerze Azure.",
+          "Przekazać lock zależności i wynik testu reset/restart/duplicate; trening nie może działać w runtime request path."
+        ],
+        "done": "Hash modelu pozostaje taki sam od oceny do Azure. Golden replay przechodzi w obu środowiskach.",
+        "handoff": "Wiktor dostaje kontrakt uruchomienia; zespół jeden identyfikator championa."
+      }
+    ]
+  },
+  {
+    "id": "T03",
+    "name": "Karolina",
+    "goal": "Angielski dashboard z płytkami Lu.i i pomiarami",
+    "branch": "feat/karolina-dashboard",
+    "paths": "rpi_agents/cloud/app/templates/**; static/**; routes_dashboard.py; tests/dashboard/**; UI fixtures",
+    "reviewer": "Patryk dla sygnałów; Wiktor dla integracji",
+    "source": "feat/dashboard: templates/static/routes_dashboard; referencja ciemna v2 i angielska v3; neuron.svg",
+    "tasks": [
+      {
+        "id": "C1",
+        "title": "Szkielet i ekran logowania",
+        "day": "D1",
+        "deps": [
+          "W0"
+        ],
+        "steps": [
+          "Przygotować ciemny shell: Network, Events, Experiments, Energy, Device. Wszystkie etykiety, błędy i tooltipy po angielsku.",
+          "Zbudować Username, Password, Sign in oraz Logout. Formularz korzysta z API Wiktora, nie przechowuje hasła w JS/localStorage i nie zawiera prawdziwych danych w mockach.",
+          "Wczytać fixture kontraktów i oznaczyć demo data. Oddzielić komponenty danych od renderowania, żeby realny backend zastąpił fixture bez przepisywania UI."
+        ],
+        "done": "Widoki są dostępne bez sprzętu jako jawny tryb demo; formularz ma focus klawiatury, loading i Invalid credentials.",
+        "handoff": "Wiktor dostaje listę route/asset i kontrakt formularza; Patryk widzi format danych wymagany przez komponenty."
+      },
+      {
+        "id": "C2",
+        "title": "Płytki i edytor sieci",
+        "day": "D1–D2",
+        "deps": [
+          "C1"
+        ],
+        "steps": [
+          "Użyć neuron.svg jako źródła kształtu, osobne warstwy portów, LED i zaznaczenia. Nie rysować płytki jako zwykłego koła.",
+          "Dodać Board count 0–50, automatyczny layout, przeciąganie, zoom/pan/Fit, wybór neuronu i widok połączeń pobudzających/hamujących.",
+          "Rozdzielić edycję draft, załadowany model i uruchomioną sesję. Import/Export JSON nie może wykonywać kodu ani nadpisywać aktywnego championa."
+        ],
+        "done": "Sprawdzone 0, 1, 8 i 50 płytek; puste płótno jest czytelne, etykiety nie nachodzą, połączenia zachowują ID po zmianie layoutu.",
+        "handoff": "Patryk dostaje payload draft topologii; zespół odnosi wygląd do referencji v3."
+      },
+      {
+        "id": "C3",
+        "title": "Potencjał LED raster i replay",
+        "day": "D2",
+        "deps": [
+          "C2",
+          "P3"
+        ],
+        "steps": [
+          "Implementować LED potencjału i osobny błysk spike na podstawie pól runtime, nie losowej animacji lub samego tau.",
+          "Dodać inspektor neuronu: Signals, Parameters, Connections, Notes; wykres Vmem z progiem, jednostki i calibration status.",
+          "Obsłużyć Live/Replay, Pause view/Resume, stale data oraz reconnect. Skok replay odtwarza spójny stan, nie tylko przewija ekran."
+        ],
+        "done": "Z golden fixture LED i raster wskazują ten sam neuron/czas; utrata połączenia daje Stale data; Pause view nie wysyła Stop.",
+        "handoff": "Patryk zatwierdza mapowanie sygnałów; Wiktor sprawdza obciążenie i reconnect."
+      },
+      {
+        "id": "C4",
+        "title": "Zdarzenia metryki i energia",
+        "day": "D2–D3",
+        "deps": [
+          "C1",
+          "W2"
+        ],
+        "steps": [
+          "Event details: zdjęcie, SNN/capture/vision/alarm timeline, osobne glass/person/authorization, ACK i error state. Brak danych pokazuje Not available.",
+          "Experiments: split, godziny tła, seed, model_hash, encoder_hash, FA/h z przedziałem ufności i recall; oddzielić metryki SNN oraz całego systemu.",
+          "Energy: źródło measured/estimated, granica pomiaru, moc W i energia J/Wh; Device: heartbeat, bufor, gap, kamera, serial. Nie wpisywać przykładowych liczb w realny tryb."
+        ],
+        "done": "Dane przykładowe są oznaczone; brak pomiaru nie staje się zerem. Filtr wyniku nie miesza różnych modeli, datasetów ani granic energii.",
+        "handoff": "Marcel i Andrzej sprawdzają znaczenie swoich metryk; Wiktor podłącza API."
+      },
+      {
+        "id": "C5",
+        "title": "Odbiór UI na realnych danych",
+        "day": "D3",
+        "deps": [
+          "C3",
+          "C4",
+          "W4"
+        ],
+        "steps": [
+          "Przejść login/logout, jedną sesję live i replay, błąd vision, utratę łącza, puste dane i próbę zmiany aktywnego modelu.",
+          "Przetestować desktop oraz węższy ekran, nawigację klawiaturą i 50 płytek. Renderowanie musi mieć ograniczony bufor i liczbę punktów wykresu.",
+          "Zrobić zrzuty referencyjne z jawnego demo i z jednej oznaczonej realnej sesji. Przekazać PR ze zdjęciami before/after i listą testów."
+        ],
+        "done": "Brak polskich etykiet produktu, wiszących spinnerów i wymyślonych danych; serwer blokuje dane po logout niezależnie od ukrycia UI.",
+        "handoff": "Wiktor otrzymuje gotowe zasoby do tego samego kontenera; dokumentacja ma wersję UI i SHA."
+      }
+    ]
+  },
+  {
+    "id": "T04",
+    "name": "Marcel",
+    "goal": "Pipeline badań i niezmienny champion na MacBooku M5 Max 128 GB",
+    "branch": "feat/master-pipeline — kontynuacja PR #47",
+    "paths": "master_pipeline/**; ga_neuron_search/{fitness,winner,export_winner}.py tylko gdy konieczne; tests/pipeline/**; raporty bez dużych binariów; master_pipeline/hardware.py i profiles/macbook_m5_max_128gb.json",
+    "reviewer": "Patryk; Kacper dla continuous evaluation",
+    "source": "master_pipeline/ga_runner.py, pipeline.py, pipeline_config.py, rank_runs.py, test_pipeline.py",
+    "tasks": [
+      {
+        "id": "M0",
+        "title": "Profil treningu M5 Max 128 GB",
+        "day": "D1 rano",
+        "deps": [],
+        "steps": [
+          "Potwierdzić ARM64 bez Rosetty, model CPU/GPU, macOS, Python i torch; sprawdzić is_built/is_available MPS. Nie przebudowywać środowiska trwającego treningu. Utworzyć odrębny lock i profil macbook_m5_max_128gb.",
+          "Naprawić benchmark_workers: każda konfiguracja ocenia ten sam zestaw rzeczywistych genomów, epok, próbek i seedów. Obecne tasks_per_worker mnoży ilość pracy przez liczbę workerów, a dummy matmul nie reprezentuje SNN.",
+          "Zmierzyć CPU GA z 1/2/4/8/12/16 workerami w granicach wykrytej maszyny i jednym wątkiem torch na worker. MPS przetestować osobno z jednym procesem treningowym, dla batch 128/256/512. Wybrać per etap na podstawie kandydatów/min, czasu epoki, jakości i pamięci.",
+          "Raportować RSS, memory pressure, swap, pamięć MPS i czas po synchronizacji GPU; zacząć od budżetu procesu około 80 GB jako ustawienia ostrożnego, nie fizycznego limitu. Bez wyłączania limitu MPS. Zapisać checkpoint/resume i porównanie CPU/MPS na identycznym wektorze."
+        ],
+        "done": "Benchmark na rzeczywistym M5 Max 128 GB wybiera profil; manifest podaje sprzęt, wersje i parametry. Samo auto=cpu lub wymuszenie mps nie jest odbiorem optymalizacji.",
+        "handoff": "Patryk dostaje wersję torch i test zgodności; Wiktor uruchamia właściwy profil lokalnie. Azure wykonuje inferencję i obsługę aplikacji, a nie ten trening."
+      },
+      {
+        "id": "M1",
+        "title": "Ustalić protokół eksperymentu",
+        "day": "D1 rano",
+        "deps": [
+          "K1"
+        ],
+        "steps": [
+          "Zamrozić train/val/test, wersję enkodera i cel wyboru modelu na walidacji. Zachować lineage source/group_id.",
+          "Sprawdzić że żaden checkpoint, seed ani próg nie jest wybrany po końcowym teście. Wyniki historyczne oznaczyć osobno.",
+          "Zapisać macierz porównań SNN symulowane, Lu.i fizyczne i Uno FFT z identycznymi strumieniami oraz oddzielnymi granicami energii."
+        ],
+        "done": "Konfiguracja i manifest pozwalają odtworzyć selekcję; test nie trafia do funkcji fitness ani strojenia progu.",
+        "handoff": "Kacper otrzymuje protokół budowy continuous; Andrzej listę przebiegów pomiarowych."
+      },
+      {
+        "id": "M2",
+        "title": "Naprawić final evaluation i eksport",
+        "day": "D1",
+        "deps": [
+          "M1"
+        ],
+        "steps": [
+          "W ga_runner.py usunąć podstawianie testu do val_data w run_final_evaluation_stage i etykietę canonical_test_placeholder.",
+          "Rozdzielić trening, wybór, eksport i eval. Eksport ma serializować wybrany checkpoint, nie uruchamiać train_winner jeszcze raz.",
+          "Zachować jednocześnie source_commit, seed, dataset_manifest_hash, encoder_hash, checkpoint_hash, decoder i jednostki. Test sprawdza niezmienność wag po eksporcie.",
+          "Sprawdzić przekazywanie config.train.fitness_seeds: obecny run_ga_stage ma literal fitness_seeds=3. Test ma dowodzić, że profil sprzętowy i konfiguracja eksperymentu nie są ignorowane."
+        ],
+        "done": "Wywołanie eval/export nie zmienia parametrów ani czasu uczenia; test wykrywa próbę użycia testu do wyboru modelu.",
+        "handoff": "Patryk dostaje pierwszy prawdziwy model do runtime bez czekania na najlepszy wynik GA."
+      },
+      {
+        "id": "M3",
+        "title": "Uruchomić kontrolowany trening",
+        "day": "D1–D2",
+        "deps": [
+          "M0",
+          "M2"
+        ],
+        "steps": [
+          "Wykorzystać trwające GA tylko po potwierdzeniu zgodnego kodu, splitów i enkodera. Nie restartować kosztownego treningu bez potrzeby.",
+          "W rankingu porównywać zgodne protokoły, kryterium najpierw walidacja i budżet FA, następnie złożoność/energia według wcześniej zapisanej reguły.",
+          "Zapisywać seed, checkpoint i config atomowo, wspierać resume z jawnego stanu. Nie wymuszać sukcesu przy nieosiągalnym budżecie FA/h."
+        ],
+        "done": "Champion oznacza najlepszy według z góry określonej walidacji; jeśli budżet jest nieosiągalny, raport mówi infeasible.",
+        "handoff": "Patryk ma candidate model; Karolina ma manifest oraz historyczne punkty porównania."
+      },
+      {
+        "id": "M4",
+        "title": "Ocenić ciągły strumień",
+        "day": "D2–D3",
+        "deps": [
+          "M3",
+          "K3"
+        ],
+        "steps": [
+          "Wczytać continuous manifest Kacpra, zachować stan SNN na granicach okien i odjąć tylko z góry określony warmup/gapy od ekspozycji.",
+          "Policzyć event recall, FA/h, false-alarm count, czas tła, one-to-one matching i opóźnienie od onset; elapsed treningu nie jest latency detekcji.",
+          "Zamrożony test uruchomić dopiero po wyborze modelu. Raportować przedział ufności FA/h i różnicę do historycznej metryki na klipach."
+        ],
+        "done": "Każdy FA da się wskazać na osi czasu. Przy zerowym FA wynik ma dodatnią granicę górną niepewności, a nie obietnicę braku alarmów.",
+        "handoff": "Karolina dostaje CSV/JSON metryk; Andrzej identyczny zestaw do hardware."
+      },
+      {
+        "id": "M5",
+        "title": "Przekazać pakiet championa",
+        "day": "D3",
+        "deps": [
+          "M4",
+          "P1"
+        ],
+        "steps": [
+          "Spakować checkpoint, manifest, topologię, weights, decoder, calibration status i golden replay. Podać SHA256 każdego artefaktu.",
+          "Sprawdzić powtórne załadowanie w czystym procesie i identyczne wyjście. Duże artefakty przekazać przez uzgodniony storage, nie zwykły commit binariów.",
+          "PR #47 po poprawkach kierować do master. Po jego squash kolejny etap zaczynać z aktualnego master, żeby nie powielać starej historii."
+        ],
+        "done": "Patryk i Wiktor wczytują dokładnie oceniony model; plik JSON nie obiecuje fizycznej kompatybilności bez kalibracji.",
+        "handoff": "Zamrożony raport naukowy, hash modelu i opis ograniczeń dla artykułu."
+      }
+    ]
+  },
+  {
+    "id": "T05",
+    "name": "Kacper",
+    "goal": "Zgodny enkoder oraz ciągłe dane do pipeline’u Marcela",
+    "branch": "feat/encoder-features PR #50 oraz feat/continuous-dataset PR #48 — dwa istniejące zakresy",
+    "paths": "encoder/features-improvement/**; dataset/continuous/**; tests/encoder/**; encoder/uno_baseline/** (nowy)",
+    "reviewer": "Marcel dla danych; Wiktor i Andrzej dla Uno",
+    "source": "fixed_encoder z feat/encoder; features-improvement/twin i tools; continuous/eval i tests",
+    "tasks": [
+      {
+        "id": "K1",
+        "title": "Zamrozić działający wariant enkodera",
+        "day": "D1 rano",
+        "deps": [],
+        "steps": [
+          "Porównać trzykanałowy szkic ze starszego feat/encoder z wariantem features-improvement. Zidentyfikować faktyczny firmware i model, nie wybierać po nazwie pliku.",
+          "Wypisać sample_rate, preprocessing, gain/ADC, okno, kanały, progi, pulse width i encoder_hash. Nazwy kanałów w swap muszą odpowiadać mobility/autocorr, nie dawnym etykietom.",
+          "Sprawdzić kompilację i RAM/czas na rzeczywistym Uno ATmega328P; wyniki Cortex-M4F nie są dowodem wydajności Uno. Z Wiktorem ustalić format serial."
+        ],
+        "done": "Jeden wariant ma jawny kontrakt i budżet czasu/RAM; przy braku zgodności blokuje się Start, a nie dopasowuje kanały heurystycznie.",
+        "handoff": "Wiktor dostaje opis i przykładową ramkę; Marcel zgodny encoder_hash do treningu."
+      },
+      {
+        "id": "K2",
+        "title": "Firmware i test zgodności",
+        "day": "D1–D2",
+        "deps": [
+          "K1",
+          "A1"
+        ],
+        "steps": [
+          "Dodać lub wydzielić serial output z timestamp i seq bez zakłócania próbkowania. Udokumentować przepustowość oraz przepełnienie bufora.",
+          "Na ustalonym wektorze porównać Python twin i firmware: cechy, impulsy i tolerancje. Zestaw obejmuje ciszę, impuls, sinus, szkło i nagłą zmianę amplitudy.",
+          "Z Wiktorem wykonać 30–60 minut pomiaru stabilności: przepełnienia, jitter, liczba próbek i restart. Nie podawać samego zgodnego pojedynczego klipu jako dowodu."
+        ],
+        "done": "Firmware mieści się na Uno i dotrzymuje budżetu; zgodność ma zapisany raport, nie tylko ręczną obserwację LED.",
+        "handoff": "W1 ma gotowe Uno; Patryk ma identyczne wejście do symulacji."
+      },
+      {
+        "id": "K3",
+        "title": "Dokończyć continuous dataset",
+        "day": "D1–D2",
+        "deps": [
+          "M1"
+        ],
+        "steps": [
+          "Na feat/continuous-dataset uzupełnić bazę o aktualny master bez utraty własnych zmian; branch jest 30 commitów za bazą. Na branchu współdzielonym preferować merge master do feature, nigdy odwrotnie.",
+          "W annotations.py i stream_builder.py wykluczyć grupy train oraz val z końcowego testu continuous. Rozdzielić strojenie continuous-val od continuous-test.",
+          "Zbudować manifest z source_id, group_id, onset/offset, gain, seed, warmup i ekspozycją; walidować także overlap źródeł i mixów VOICe.",
+          "Dodać testy rozłączności, minimalnych przerw, granic strumienia i deterministyczności; README ma opisywać rzeczywisty kod."
+        ],
+        "done": "Ponowny build z tym samym seed daje ten sam manifest; walidator odrzuca wspólny group_id z train lub val; znany czas tła.",
+        "handoff": "Marcel pozostaje właścicielem całego pipeline’u; Kacper dostarcza builder i audyt jako jego wejście."
+      },
+      {
+        "id": "K4",
+        "title": "Baseline FFT dla Uno",
+        "day": "D2–D3",
+        "deps": [
+          "K2",
+          "A1"
+        ],
+        "steps": [
+          "Zaimplementować najprostszy wykonalny baseline cech częstotliwościowych i progu, z tą samą akwizycją oraz znanym kosztem SRAM.",
+          "Parametry dobrać wyłącznie na walidacji; odtworzyć strumienie M1/M4, zapisać decyzje i czas źródłowy.",
+          "Z Andrzejem zmierzyć moc baseline i akwizycji; zaznaczyć, czy porównanie obejmuje komunikację oraz Pi. FFT nie jest samodzielnym klasyfikatorem bez reguły decyzyjnej."
+        ],
+        "done": "Baseline ma regułę, parametry, encoder/firmware hash i identyczny protokół oceny; pomiar nie miesza różnych urządzeń bez oznaczenia.",
+        "handoff": "Marcel otrzymuje decyzje do tego samego evaluator; Andrzej wynik dla bilansu energii."
+      },
+      {
+        "id": "K5",
+        "title": "PR i instrukcja dla Wiktora",
+        "day": "D3",
+        "deps": [
+          "K2",
+          "K3"
+        ],
+        "steps": [
+          "Dokończyć #48 i #50 jako odrębne PR: dane i firmware nie powinny mieć jednego nierozdzielnego diffu. Przed zmianą base sprawdzić porównanie z master.",
+          "W #50 usunąć przypadkową zmianę architecture_14_neurons_patryk_09_07/train_log.csv z zakresu kodu lub uzasadnić ją jako osobny artefakt; nie wybierać seed po teście.",
+          "Przekazać Wiktorowi komendę budowania, wgrywania, diagnostyki ADC i interpretacji spike; nie wymagać znajomości notebooków."
+        ],
+        "done": "Oba PR mają testy i dowody oraz wymagane review; po squash nie dopisywać nowych zmian na tych samych dawnych branchach.",
+        "handoff": "Runbook Uno, fixture serial i raport datasetu; następne poprawki z nowego master."
+      }
+    ]
+  },
+  {
+    "id": "T06",
+    "name": "Andrzej",
+    "goal": "Fizyczne Lu.i kalibracja oraz wiarygodne pomiary energii",
+    "branch": "feat/andrzej-hardware-energy",
+    "paths": "hardware/calibration/**; hardware/measurements/**; hardware/runbooks/**; schematy bez sekretów; duże przebiegi poza Git",
+    "reviewer": "Patryk dla Lu.i; Kacper dla Uno; Marcel dla metodologii",
+    "source": "lu.i-neuron-pcb-master/doc; schematy i instrukcje elektroniki; posiadane płytki i sprzęt pomiarowy",
+    "tasks": [
+      {
+        "id": "A1",
+        "title": "Inwentaryzacja i bezpieczne stanowisko",
+        "day": "D1 rano",
+        "deps": [],
+        "steps": [
+          "Spisać liczbę/sprawność Lu.i, model Pi 5 i opcjonalnego Zero, kamerę, kable USB/OTG/CSI, zasilacze, buzzer i dostępny miernik/oscyloskop.",
+          "Potwierdzić pinout i zakres MAX4466→Uno ADC, masę i napięcia; Pi komunikuje się z Uno po USB. GPIO Pi nie przyjmuje 5 V.",
+          "Ustalić sterowanie buzzerem i wymagany driver na podstawie rzeczywistego modułu. Zrobić zdjęcie realnego okablowania i listę ustawień."
+        ],
+        "done": "Wiktor może uruchomić stanowisko z instrukcji; braki są zapisane pierwszego dnia, zanim zacznie się integracja.",
+        "handoff": "Kacper zna tor ADC; Wiktor zna adapter kamery i wyjść; zespół wie, czy Zero jest opcją."
+      },
+      {
+        "id": "A2",
+        "title": "Kalibracja pojedynczych neuronów",
+        "day": "D1–D2",
+        "deps": [
+          "A1",
+          "P1"
+        ],
+        "steps": [
+          "Nadać board_id, zapisać nastawy trymerów i napięcie zasilania. Podać impulsy o kontrolowanej amplitudzie, czasie i szerokości.",
+          "Zmierzyć odpowiedź pobudzającą/hamującą, tau membrany/synaps, próg, reset, refractory, zakres nasycenia i LED. Zachować surowe przebiegi.",
+          "Przekazać osobny zestaw do dopasowania i walidacji Patryka. Z góry wspólnie ustalić tolerancje i sposób porównania czasów spike."
+        ],
+        "done": "Każda wartość ma jednostkę, warunki i board_id. Jeśli nie da się zmierzyć Vmem, raport nie deklaruje zweryfikowanego przebiegu potencjału.",
+        "handoff": "Patryk dostaje CSV i opis; Karolina zakres fizycznej skali LED."
+      },
+      {
+        "id": "A3",
+        "title": "Pomiar energii urządzeń i sieci",
+        "day": "D2–D3",
+        "deps": [
+          "A1",
+          "K2"
+        ],
+        "steps": [
+          "Zdefiniować granice pomiaru: Uno+mikrofon, sieć Lu.i, Pi idle/capture/transmit/alarm. Zmierzyć pobór z LED i jawnie opisać ich udział.",
+          "Użyć napięcia/prądu w czasie; podać częstotliwość próbkowania miernika i niepewność. Powtórzyć ten sam przebieg kilka razy.",
+          "Dla krótkich zdarzeń uwzględnić ograniczenie miernika USB; nie wyliczać impulsowej energii ze zbyt wolnego pojedynczego odczytu.",
+          "Chmurę mierzyć jako koszt/zasoby albo oddzielną estymację; nie utożsamiać liczby spike z energią fizycznej płytki."
+        ],
+        "done": "Raport rozdziela measured/estimated i podaje W oraz J/Wh przy tej samej ekspozycji. Brak pomiaru oznacza unavailable.",
+        "handoff": "Marcel otrzymuje tabelę do artykułu; Karolina dane Energy z granicą systemu."
+      },
+      {
+        "id": "A4",
+        "title": "Sieć fizyczna lub dane partnerskie",
+        "day": "D3",
+        "deps": [
+          "A2",
+          "M5"
+        ],
+        "steps": [
+          "Odwzorować kompatybilną topologię championa i nastawy; weryfikować fan-in, fan-out, znak i timing. Nie każda sieć 0–50 z edytora pasuje do fizycznego zestawu.",
+          "Odtworzyć te same wejściowe spike co w symulacji, zapisać rzeczywiste output spike/decisions i źródło zegara.",
+          "Jeżeli używane są wyniki drugiego zespołu: zebrać board revision, nastawy, firmware, encoder/model hash, surowe dane, aparat pomiarowy i zgodę na wykorzystanie/atrybucję."
+        ],
+        "done": "Identyczny typ Lu.i nie zastępuje zgodności konfiguracji. Dane nieporównywalne trafiają wyłącznie do wyników wstępnych z jasnym opisem.",
+        "handoff": "Marcel otrzymuje porównywalny raport albo jawny brak finalnego eksperymentu."
+      },
+      {
+        "id": "A5",
+        "title": "Instrukcja i finalny odbiór sprzętu",
+        "day": "D3",
+        "deps": [
+          "A3"
+        ],
+        "steps": [
+          "Opisać uruchomienie, kontrolę poziomów, bezpieczne wyłączenie i symptomy błędnego okablowania.",
+          "Z Wiktorem sprawdzić fizyczny LED/buzzer: brak alarmu po starcie, limit czasu, Stop i awaria połączenia.",
+          "Przekazać podpisane identyfikatorem sesji zdjęcia stanowiska i pliki kalibracji przez własny PR."
+        ],
+        "done": "Druga osoba uruchamia stanowisko bez domysłów, a alarm nie pozostaje włączony po utracie chmury.",
+        "handoff": "Zespół ma materiał do demonstracji i metodologii artykułu."
+      }
+    ]
+  }
+]

@@ -161,20 +161,51 @@ class BackgroundPool:
         return len(self.files) == 0
 
 
-def collect_background_pool(background_dirs: Sequence[str]) -> BackgroundPool:
+# wczytaj group_id z train splits manifestu Patryka przed pętlą,
+# przy każdym pliku sprawdź czy jego group_id tam jest.
+# Pliki które model widział w treningu są raportowane i WYKLUCZONE z puli,
+# żeby tło ewaluacyjne było naprawdę niewidziane przez model.
+def collect_background_pool(
+    background_dirs: Sequence[str],
+    train_manifest_csv: str | None = None,
+) -> BackgroundPool:
+    from .annotations import _load_train_group_ids
+
+    train_group_ids: set[str] = set()
+    if train_manifest_csv:
+        train_group_ids = _load_train_group_ids(train_manifest_csv)
+        print(f"[overlap] załadowano {len(train_group_ids)} group_id z train "
+              f"splitu manifestu — pliki ESC-50 z tego zbioru będą wykluczone z tła")
+
     pool = BackgroundPool()
+    excluded_count = 0
+
     for d in background_dirs:
         if not os.path.isdir(d):
             raise FileNotFoundError(f"katalog tła nie istnieje: {d}")
-        kind_map = _load_esc50_kind_map(d)  # twardy fail gdy brak meta/esc50.csv
+        kind_map = _load_esc50_kind_map(d)
         found = sorted(glob.glob(os.path.join(d, "*.wav")))
-        included = [(f, "ESC-50", kind_map[os.path.basename(f)], group_id_for("esc50", Path(f)))
-                    for f in found if os.path.basename(f) in kind_map]
+
+        included = []
+        for f in found:
+            fname = os.path.basename(f)
+            if fname not in kind_map:
+                continue
+            gid = group_id_for("esc50", Path(f))
+            if gid in train_group_ids:
+                excluded_count += 1
+                continue  # ten plik był w treningu Patryka — pomijamy
+            included.append((f, "ESC-50", kind_map[fname], gid))
+
         if not included:
             raise FileNotFoundError(
-                f"0 plików .wav po wykluczeniu glass breaking w: {d}"
+                f"0 plików .wav po wykluczeniu glass breaking i train-overlap w: {d}"
             )
         pool.files.extend(included)
+
+    if excluded_count:
+        print(f"[overlap] wykluczono {excluded_count} plików ESC-50 "
+              f"obecnych w train splicie Patryka")
 
     if pool.is_empty():
         raise FileNotFoundError("pula tła jest pusta — twardy fail")

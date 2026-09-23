@@ -142,3 +142,36 @@ def test_collect_background_pool_empty_dir_fails(tmp_path):
     empty.mkdir()
     with pytest.raises(FileNotFoundError):
         collect_background_pool([str(empty)])
+
+def test_collect_background_pool_excludes_train_group_ids(tmp_path):
+    import csv
+    bg_dir = tmp_path / "bg"
+    bg_dir.mkdir()
+    _make_wav(str(bg_dir / "1-100032-A-0.wav"), duration_s=5.0)
+    _make_wav(str(bg_dir / "1-100038-A-14.wav"), duration_s=5.0)
+
+    # manifest treningowy — jeden z plików jest w train
+    manifest_path = tmp_path / "manifest.csv"
+    with open(manifest_path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["group_id", "split", "source"])
+        w.writeheader()
+        w.writerow({"group_id": "esc50_1_100032", "split": "train", "source": "esc50"})
+        w.writerow({"group_id": "esc50_1_100038", "split": "test",  "source": "esc50"})
+
+    # symulowany kind_map — normalnie z meta/esc50.csv
+    # patch _load_esc50_kind_map żeby nie szukał prawdziwego pliku
+    from unittest.mock import patch
+    kind_map = {
+        "1-100032-A-0.wav": "animal",
+        "1-100038-A-14.wav": "animal",
+    }
+    with patch("eval.stream_builder._load_esc50_kind_map",
+               return_value=kind_map):
+        pool = collect_background_pool(
+            [str(bg_dir)],
+            train_manifest_csv=str(manifest_path),
+        )
+
+    group_ids = {f[3] for f in pool.files}
+    assert "esc50_1_100032" not in group_ids, "plik z train nie powinien być w puli"
+    assert "esc50_1_100038" in group_ids,     "plik z test powinien być w puli"

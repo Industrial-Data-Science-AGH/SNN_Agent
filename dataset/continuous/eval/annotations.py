@@ -191,19 +191,25 @@ def read_stem_list(path: str) -> set[str]:
         raise ValueError(f"{path}: lista jest pusta")
     return stems
 
+# bierzemy tylko wiersze gdzie split=="train",
+# bo model widział tylko te pliki. Pliki z val/test Patryka
+# są bezpieczne — model ich nie trenował, nie ma przecieku.
 def _load_train_group_ids(manifest_csv: str) -> set[str]:
-    """Wczytuje group_id ze wszystkich rekordów manifestu treningowego Patryka."""
+    """Wczytuje group_id wyłącznie z wierszy split==train manifestu Patryka."""
     import csv as _csv
 
     group_ids: set[str] = set()
     with open(manifest_csv, encoding="utf-8") as fh:
-        for row in _csv.DictReader(fh):
-            if "group_id" not in row:
+        reader = _csv.DictReader(fh)
+        for col in ("group_id", "split"):
+            if col not in (reader.fieldnames or []):
                 raise ValueError(
-                    f"{manifest_csv}: brak kolumny 'group_id' — "
+                    f"{manifest_csv}: brak kolumny '{col}' — "
                     f"upewnij się, że to manifest v2.0.0+"
                 )
-            group_ids.add(row["group_id"])
+        for row in reader:
+            if row["split"] == "train":
+                group_ids.add(row["group_id"])
     return group_ids
 
 

@@ -8,6 +8,7 @@ pipeline'u Marcela.
 
 ```bash
 # 3 warianty z różnymi seedami
+# root: SNN_Agent
 python -m dataset.continuous.eval.cli \
     --glass-annotation-dir dataset/clean/clean/annotation \
     --glass-audio-root     dataset/clean/clean/audio \

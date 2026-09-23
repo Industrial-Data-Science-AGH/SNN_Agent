@@ -1,0 +1,18 @@
+{
+  "schema_version": "1.0",
+  "device_id": "demo-pi",
+  "session_id": "demo-session",
+  "epoch": 1,
+  "event_id": "event-demo",
+  "image_id": null,
+  "status": "unavailable",
+  "glass_visible": "unknown",
+  "person_visible": "unknown",
+  "authorization": "unknown",
+  "image_quality": "unknown",
+  "observation": "Demo: vision provider unavailable.",
+  "model_deployment": null,
+  "prompt_version": "demo-v1",
+  "error_code": "VISION_UNAVAILABLE",
+  "provenance": "demo"
+}

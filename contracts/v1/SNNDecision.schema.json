@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SNNDecision",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "device_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "epoch": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "source_time_us": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "model_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "decision_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "event_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "batch_seq": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "encoder_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "trigger": {
+      "type": "boolean"
+    },
+    "status": {
+      "enum": [
+        "valid",
+        "warmup",
+        "gap",
+        "invalid"
+      ]
+    },
+    "score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "score_kind": {
+      "enum": [
+        "spike_count",
+        "uncalibrated",
+        "unavailable"
+      ]
+    },
+    "provenance": {
+      "enum": [
+        "demo",
+        "simulated",
+        "measured"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "device_id",
+    "session_id",
+    "epoch",
+    "source_time_us",
+    "model_hash",
+    "decision_id",
+    "event_id",
+    "batch_seq",
+    "encoder_hash",
+    "trigger",
+    "status",
+    "score",
+    "score_kind",
+    "provenance"
+  ],
+  "additionalProperties": false
+}

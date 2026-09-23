@@ -1,5 +1,7 @@
 # SNN Agent — dokumentacja projektu
 
+**Start implementacji:** [W0 — wspólne kontrakty, mock API i instrukcja branchy](W0_START_HERE.md).
+
 Aktualizacja: 24 września 2026. Dokumenty opisują docelową architekturę i plan realizacji; nie są potwierdzeniem wdrożenia wszystkich funkcji.
 
 - [Architektura — DOCX do importu do Google Docs](architecture/Architektura_SNN_Agent.docx)

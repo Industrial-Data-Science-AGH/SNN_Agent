@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "device_id": "demo-pi",
+  "session_id": "demo-session",
+  "epoch": 1,
+  "source_time_us": 500000,
+  "model_hash": "sha256:8780dfeca1acfd3a292d90f614b12b25abff4c2e77e83ba7f8926a4d8bf9d445",
+  "frame_seq": 1,
+  "topology_version": "demo-topology-1",
+  "status": "running",
+  "provenance": "demo",
+  "potential_unit": "a.u.",
+  "neurons": [
+    {
+      "neuron_id": "n0",
+      "v_mem": 0.8,
+      "v_threshold": 1,
+      "v_reset": 0,
+      "spiked": true
+    }
+  ]
+}

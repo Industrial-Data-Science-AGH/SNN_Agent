@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "device_id": "demo-pi",
+  "session_id": "demo-session",
+  "epoch": 1,
+  "command_id": "capture-demo",
+  "event_id": "event-demo",
+  "type": "capture",
+  "issued_at": "2026-09-24T00:00:00Z",
+  "expires_at": "2026-09-24T00:00:10Z",
+  "mode": "demo",
+  "parameters": {
+    "frames": 1,
+    "max_bytes": 1048576
+  }
+}

@@ -1,0 +1,431 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ModelManifest",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "model_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "status": {
+      "enum": [
+        "demo",
+        "sandbox",
+        "evaluated_champion"
+      ]
+    },
+    "encoder_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "encoder_profile": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "1.0"
+        },
+        "profile_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+        },
+        "provenance": {
+          "enum": [
+            "demo",
+            "measured",
+            "reference"
+          ]
+        },
+        "implementation_sha": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "config_sha256": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "sample_rate_hz": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 192000
+        },
+        "hop_samples": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 192000
+        },
+        "pulse_width_us": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "clock": {
+          "const": "source_monotonic_us"
+        },
+        "channel_map": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "channel": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+              },
+              "index": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 63
+              },
+              "feature": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+              }
+            },
+            "required": [
+              "channel",
+              "index",
+              "feature"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 64,
+          "minItems": 1
+        }
+      },
+      "required": [
+        "schema_version",
+        "profile_id",
+        "provenance",
+        "implementation_sha",
+        "config_sha256",
+        "sample_rate_hz",
+        "hop_samples",
+        "pulse_width_us",
+        "clock",
+        "channel_map"
+      ],
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "pattern": "^(?!/)(?!.*\\.\\.)(?!.*\\\\)[A-Za-z0-9_./-]+$"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 32,
+      "minItems": 1
+    },
+    "runtime": {
+      "type": "object",
+      "properties": {
+        "implementation": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+        },
+        "integrator": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+        },
+        "dt_us": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "potential_unit": {
+          "enum": [
+            "a.u.",
+            "V"
+          ]
+        }
+      },
+      "required": [
+        "implementation",
+        "version",
+        "integrator",
+        "dt_us",
+        "potential_unit"
+      ],
+      "additionalProperties": false
+    },
+    "decoder": {
+      "type": "object",
+      "properties": {
+        "implementation": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+        },
+        "window_us": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "threshold": {
+          "type": "number",
+          "minimum": 0
+        },
+        "cooldown_us": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "implementation",
+        "version",
+        "window_us",
+        "threshold",
+        "cooldown_us"
+      ],
+      "additionalProperties": false
+    },
+    "topology": {
+      "type": "object",
+      "properties": {
+        "topology_version": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+        },
+        "mode": {
+          "enum": [
+            "hardware_compatible",
+            "simulation"
+          ]
+        },
+        "neurons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "neuron_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+              },
+              "tau_mem_us": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "tau_syn_us": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "v_leak": {
+                "type": "number"
+              },
+              "v_threshold": {
+                "type": "number"
+              },
+              "v_reset": {
+                "type": "number"
+              },
+              "refractory_us": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "potential_unit": {
+                "enum": [
+                  "a.u.",
+                  "V"
+                ]
+              }
+            },
+            "required": [
+              "neuron_id",
+              "tau_mem_us",
+              "tau_syn_us",
+              "v_leak",
+              "v_threshold",
+              "v_reset",
+              "refractory_us",
+              "potential_unit"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 50,
+          "minItems": 0
+        },
+        "connections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "source_kind": {
+                "enum": [
+                  "channel",
+                  "neuron"
+                ]
+              },
+              "source_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+              },
+              "target_id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+              },
+              "target_port": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3
+              },
+              "sign": {
+                "enum": [
+                  "excitatory",
+                  "inhibitory"
+                ]
+              },
+              "weight": {
+                "type": "number",
+                "minimum": 0
+              },
+              "weight_unit": {
+                "enum": [
+                  "a.u.",
+                  "A"
+                ]
+              },
+              "delay_us": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "source_kind",
+              "source_id",
+              "target_id",
+              "target_port",
+              "sign",
+              "weight",
+              "weight_unit",
+              "delay_us"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 150,
+          "minItems": 0
+        }
+      },
+      "required": [
+        "topology_version",
+        "mode",
+        "neurons",
+        "connections"
+      ],
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "training_run_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dataset_manifest_hash": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "checkpoint_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "evaluation_hash": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "seed": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "calibration_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "training_run_id",
+        "dataset_manifest_hash",
+        "checkpoint_hash",
+        "evaluation_hash",
+        "seed",
+        "calibration_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "model_id",
+    "status",
+    "encoder_hash",
+    "encoder_profile",
+    "artifacts",
+    "runtime",
+    "decoder",
+    "topology",
+    "provenance"
+  ],
+  "additionalProperties": false
+}

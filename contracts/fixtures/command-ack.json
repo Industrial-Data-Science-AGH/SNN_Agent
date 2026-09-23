@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0",
+  "device_id": "demo-pi",
+  "session_id": "demo-session",
+  "epoch": 1,
+  "request_id": "ack-1",
+  "command_id": "capture-demo",
+  "status": "expired",
+  "completed_at": null,
+  "error_code": "COMMAND_EXPIRED",
+  "image_id": null
+}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any, Mapping
 
 from .errors import RuntimeStateError
@@ -9,8 +10,11 @@ from .manifest import LoadedModel, load_manifest
 class LuiRuntime:
     """Holds one model package and, later, one continuous session on it."""
 
-    def __init__(self, *, artifact_root: str | None = None) -> None:
+    def __init__(self, *, artifact_root: str | None = None, allow_unverified_artifacts: bool = False) -> None:
+        """A runtime that starts sessions verifies the weights: give it the directory the manifest's artifact
+        paths are relative to. ``allow_unverified_artifacts`` is the explicit opt-out for tests and demos."""
         self._artifact_root = artifact_root
+        self._allow_unverified = allow_unverified_artifacts
         self._model: LoadedModel | None = None
         self._epoch: int | None = None
         self._source_time_us: int | None = None
@@ -27,7 +31,9 @@ class LuiRuntime:
 
     def load(self, manifest: Mapping[str, Any]) -> None:
         """Accept or reject a package. Rejection leaves the previous state intact."""
-        accepted = load_manifest(manifest, artifact_root=self._artifact_root)
+        accepted = load_manifest(
+            manifest, artifact_root=self._artifact_root, require_artifacts=not self._allow_unverified,
+        )
         self._model = accepted
         self._epoch = None
         self._source_time_us = None
@@ -59,10 +65,22 @@ class LuiRuntime:
         raise NotImplementedError("checkpoint/restore is task P5")
 
     def restore(self, checkpoint: bytes) -> None:
-        _ = self.model
+        self._require_started()
         raise NotImplementedError("checkpoint/restore is task P5")
 
     def _require_started(self) -> None:
         _ = self.model
         if self._epoch is None:
             raise RuntimeStateError("NOT_STARTED", "reset() must open a session epoch first")
+
+
+def from_environment(env: Mapping[str, str] | None = None) -> LuiRuntime:
+    """The factory a backend names in ``SNN_RUNTIME=snn_runtime.runtime:from_environment``.
+
+    ``SNN_MODEL_ARTIFACT_ROOT`` is the directory holding the weights the manifest names. Without it the runtime
+    refuses any package that lists artifacts, unless ``SNN_ALLOW_UNVERIFIED_ARTIFACTS=1`` says that is intended."""
+    env = os.environ if env is None else env
+    root = env.get("SNN_MODEL_ARTIFACT_ROOT", "").strip() or None
+    return LuiRuntime(
+        artifact_root=root, allow_unverified_artifacts=env.get("SNN_ALLOW_UNVERIFIED_ARTIFACTS", "").strip() == "1",
+    )

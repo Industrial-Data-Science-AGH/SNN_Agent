@@ -233,7 +233,7 @@ def test_calls_before_load_are_refused():
 
 
 def test_step_before_reset_is_refused(lui8):
-    runtime = LuiRuntime()
+    runtime = LuiRuntime(allow_unverified_artifacts=True)
     runtime.load(lui8)
     with pytest.raises(RuntimeStateError) as err:
         runtime.step({})
@@ -241,7 +241,7 @@ def test_step_before_reset_is_refused(lui8):
 
 
 def test_reset_validates_the_session_clock(lui8):
-    runtime = LuiRuntime()
+    runtime = LuiRuntime(allow_unverified_artifacts=True)
     runtime.load(lui8)
     with pytest.raises(RuntimeStateError) as err:
         runtime.reset(epoch=0, source_time_us=0)
@@ -251,7 +251,7 @@ def test_reset_validates_the_session_clock(lui8):
 
 
 def test_a_rejected_package_does_not_replace_a_good_one(lui8, mutate):
-    runtime = LuiRuntime()
+    runtime = LuiRuntime(allow_unverified_artifacts=True)
     runtime.load(lui8)
     good = runtime.model.model_hash
     with pytest.raises(RuntimeLoadError):
@@ -310,3 +310,88 @@ def test_artifacts_are_hashed_from_a_stream_not_read_whole(lui8, tmp_path, monke
 
     monkeypatch.setattr(Path, "read_bytes", refuse)
     assert load_manifest(declared, artifact_root=tmp_path).model_id == lui8["model_id"]
+
+
+# --------------------------------------------- a running runtime verifies weights
+
+def declared_file(lui8, tmp_path, payload=b"the trained weights"):
+    (tmp_path / lui8["artifacts"][0]["path"]).write_bytes(payload)
+    declared = copy.deepcopy(lui8)
+    digest = "sha256:" + hashlib.sha256(payload).hexdigest()
+    declared["artifacts"][0]["sha256"] = declared["provenance"]["checkpoint_hash"] = digest
+    return declared
+
+
+def test_a_runtime_without_an_artifact_root_refuses_a_package_it_cannot_verify(lui8):
+    runtime = LuiRuntime()
+    with pytest.raises(RuntimeLoadError) as err:
+        runtime.load(lui8)
+    assert err.value.code == "ARTIFACT_ROOT_REQUIRED"
+    with pytest.raises(RuntimeStateError) as state:
+        runtime.reset(epoch=1, source_time_us=0)
+    assert state.value.code == "NOT_LOADED"  # nothing half-started
+
+
+def test_a_runtime_with_a_root_verifies_then_accepts(lui8, tmp_path):
+    runtime = LuiRuntime(artifact_root=str(tmp_path))
+    with pytest.raises(RuntimeLoadError) as err:
+        runtime.load(lui8)
+    assert err.value.code == "ARTIFACT_MISSING"
+    runtime.load(declared_file(lui8, tmp_path))
+    runtime.reset(epoch=1, source_time_us=0)
+    assert runtime.started
+
+
+def test_a_wrong_weights_file_is_refused_by_a_runtime_with_a_root(lui8, tmp_path):
+    declared = declared_file(lui8, tmp_path)
+    (tmp_path / declared["artifacts"][0]["path"]).write_bytes(b"swapped after packaging")
+    with pytest.raises(RuntimeLoadError) as err:
+        LuiRuntime(artifact_root=str(tmp_path)).load(declared)
+    assert err.value.code == "ARTIFACT_HASH_MISMATCH"
+
+
+def test_the_standalone_loader_still_inspects_a_manifest_without_weights(lui8):
+    assert load_manifest(lui8).model_id == lui8["model_id"]  # dashboards and contract tests hold no weights
+    with pytest.raises(RuntimeLoadError) as err:
+        load_manifest(lui8, require_artifacts=True)
+    assert err.value.code == "ARTIFACT_ROOT_REQUIRED"
+
+
+def test_a_package_without_artifacts_needs_no_root(lui8):
+    bare = copy.deepcopy(lui8)
+    bare["artifacts"] = []
+    bare["provenance"]["checkpoint_hash"] = None
+    try:
+        load_manifest(bare, require_artifacts=True)
+    except RuntimeLoadError as err:
+        assert err.code != "ARTIFACT_ROOT_REQUIRED"  # whatever else the contract says, not the missing root
+
+
+def test_the_environment_factory_wires_the_root_and_the_opt_out(lui8, tmp_path):
+    from snn_runtime.runtime import from_environment
+
+    with pytest.raises(RuntimeLoadError) as err:
+        from_environment({}).load(lui8)
+    assert err.value.code == "ARTIFACT_ROOT_REQUIRED"
+    from_environment({"SNN_MODEL_ARTIFACT_ROOT": str(tmp_path)}).load(declared_file(lui8, tmp_path))
+    from_environment({"SNN_ALLOW_UNVERIFIED_ARTIFACTS": "1"}).load(lui8)
+    with pytest.raises(RuntimeLoadError):
+        from_environment({"SNN_ALLOW_UNVERIFIED_ARTIFACTS": "true"}).load(lui8)  # only the literal 1 opts out
+
+
+# ------------------------------------------------------- call order
+
+@pytest.mark.parametrize("call", ["step", "snapshot", "checkpoint", "restore"])
+def test_every_stateful_call_checks_the_session_order_before_it_does_anything(lui8, call):
+    args = {"step": ({},), "restore": (b"",)}.get(call, ())
+    runtime = LuiRuntime(allow_unverified_artifacts=True)
+    with pytest.raises(RuntimeStateError) as err:
+        getattr(runtime, call)(*args)
+    assert err.value.code == "NOT_LOADED"
+    runtime.load(lui8)
+    with pytest.raises(RuntimeStateError) as err:
+        getattr(runtime, call)(*args)
+    assert err.value.code == "NOT_STARTED"  # restore included: it cannot bypass reset()
+    runtime.reset(epoch=1, source_time_us=0)
+    with pytest.raises(NotImplementedError):
+        getattr(runtime, call)(*args)  # only now does it reach the task that delivers it

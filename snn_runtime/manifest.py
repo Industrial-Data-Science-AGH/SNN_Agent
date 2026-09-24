@@ -252,12 +252,16 @@ def _freeze(value: Any) -> Any:
     return value
 
 
-def load_manifest(manifest: Mapping[str, Any], *, artifact_root: str | Path | None = None) -> LoadedModel:
+def load_manifest(
+    manifest: Mapping[str, Any], *, artifact_root: str | Path | None = None, require_artifacts: bool = False,
+) -> LoadedModel:
     """Validate a model package and return what the integrator needs.
 
     ``artifact_root`` enables the on-disk artifact check. It is optional so that
     contract-level tests and the dashboard can validate a manifest they received
-    over the wire without holding the weights. A runtime that STARTS a session must not use it that way: see
+    over the wire without holding the weights. ``require_artifacts`` turns "no root" into a
+    rejection (``ARTIFACT_ROOT_REQUIRED``) for a package that lists artifacts: a caller that
+    is about to run the model says so, and cannot accept weights it did not verify. A runtime that STARTS a session must not use it that way: see
     ``LuiRuntime``, which refuses a package with artifacts unless it can verify them.
 
     Everything is decided on a private deep copy, and what is stored on the result is read-only, so neither the
@@ -298,6 +302,12 @@ def load_manifest(manifest: Mapping[str, Any], *, artifact_root: str | Path | No
 
     if artifact_root is not None:
         _check_artifacts(manifest, Path(artifact_root))
+    elif require_artifacts and manifest["artifacts"]:
+        _reject(
+            "ARTIFACT_ROOT_REQUIRED",
+            f"the package lists {len(manifest['artifacts'])} artifact(s) but no artifact root was given, so their "
+            "hashes cannot be verified; refusing to run weights that were not checked",
+        )
 
     channel_map: Sequence[Mapping[str, Any]] = manifest["encoder_profile"]["channel_map"]
     channel_index = {c["channel"]: c["index"] for c in channel_map}

@@ -1,5 +1,6 @@
 import multiprocessing
 import os
+import resource
 import statistics
 import sys
 import time
@@ -66,6 +67,26 @@ def _default_worker_counts(ceiling: int | None = None) -> tuple[int, ...]:
     candidates = (1, 2, 4, 8, 12, 16)
     counts = tuple(w for w in candidates if w <= ceiling)
     return counts or (1,)
+
+
+def _peak_rss_bytes(who: int) -> int:
+    """
+    Szczytowe RSS (bajty) dla resource.RUSAGE_SELF (proces bieżący) albo
+    resource.RUSAGE_CHILDREN (dzieci już zreapowane, np. po zamknięciu puli
+    procesów). Normalizacja jednostek: na macOS/BSD ru_maxrss jest w bajtach,
+    na Linuksie w kilobajtach -- bez tego liczby różniłyby się 1024x między
+    dev-Linuksem a docelowym Makiem.
+
+    UWAGA (RUSAGE_CHILDREN): to narastające maksimum od startu procesu, nie
+    czysty peak jednej konfiguracji -- nigdy nie maleje w obrębie tego samego
+    uruchomienia benchmark_workers. Przy rosnącym sweepie (1,2,4,8,12,16)
+    zwykle każda kolejna, większa konfiguracja i tak ustawia nowe maksimum,
+    więc w praktyce liczby są sensowne -- ale to obserwowany watermark, nie
+    izolowany pomiar. Dla pewności co do pojedynczej konfiguracji użyj
+    zewnętrznego narzędzia (Activity Monitor, `/usr/bin/time -l`) na Macu.
+    """
+    raw = resource.getrusage(who).ru_maxrss
+    return raw if sys.platform == "darwin" else raw * 1024
 
 
 def _dummy_eval(worker_id: int, matrix_size: int = 800, iterations: int = 40) -> float:
@@ -189,10 +210,28 @@ def _run_real_ga_once(config, device: str, w: int, total_tasks: int) -> tuple[fl
         seed=config.seed,
     )
 
+    if w > 1 and device == "mps":
+        # "MPS GA" w planie M0 wymaga jednego procesu wykonującego trening GPU,
+        # "bez puli wielu właścicieli GPU" -- pula wieloprocesowa na jednym GPU
+        # to dokładnie to, czego plan zabrania (wiele procesów walczących o ten
+        # sam Metal device). Ta funkcja i tak może zostać wywołana z w>1 przez
+        # benchmark_workers (sweep po worker_counts), więc blokujemy to jawnie
+        # zamiast cicho uruchamiać coś niezgodnego z planem.
+        raise ValueError(
+            "[BŁĄD] MPS z w>1 oznaczałoby wiele procesów na jednym GPU -- plan M0 "
+            "wymaga tu pojedynczego procesu. Wywołaj benchmark_workers(worker_counts=(1,), "
+            "device='mps', ...) dla wariantu MPS GA."
+        )
+
     fitness_evaluator = ParallelFitness(rf_kwargs, max_workers=w) if w > 1 else RealFitness(**rf_kwargs)
+
+    if device == "mps":
+        torch.mps.synchronize()  # flush wszelkiej wcześniejszej, asynchronicznej pracy GPU przed startem zegara
     start = time.perf_counter()
     try:
         res = run_ga(fitness_evaluator, ga_cfg, log=lambda *a, **k: None)
+        if device == "mps":
+            torch.mps.synchronize()  # bez tego zegar mógłby się zatrzymać, zanim GPU faktycznie skończy
     finally:
         if hasattr(fitness_evaluator, "close"):
             fitness_evaluator.close()
@@ -206,7 +245,12 @@ def _run_real_ga_once(config, device: str, w: int, total_tasks: int) -> tuple[fl
     # Ważna jest tu spójność MIĘDZY konfiguracjami workerów (sprawdzana niżej w
     # benchmark_workers), nie zgodność z total_tasks wprost.
 
-    return elapsed, {"best_fitness": res.best.fitness, "evaluated": res.evaluated}
+    diagnostics = {"best_fitness": res.best.fitness, "evaluated": res.evaluated}
+    if device == "mps":
+        diagnostics["mps_current_allocated_bytes"] = torch.mps.current_allocated_memory()
+        diagnostics["mps_driver_allocated_bytes"] = torch.mps.driver_allocated_memory()
+
+    return elapsed, diagnostics
 
 
 def benchmark_workers(
@@ -270,13 +314,21 @@ def benchmark_workers(
                 list(executor.map(_dummy_eval, range(total_tasks)))
             return time.perf_counter() - start, {}
 
+        # RSS dzieci (w>1: workerzy ParallelFitness/ProcessPoolExecutor) albo
+        # RSS własnego procesu (w<=1: praca dzieje się w tym samym procesie,
+        # więc RUSAGE_CHILDREN byłoby puste/nierelewantne).
+        rusage_who = resource.RUSAGE_CHILDREN if w > 1 else resource.RUSAGE_SELF
+
         if warmup:
-            _run_once()  # pomiar odrzucony: rozgrzewa pulę procesów, cache, load datasetu
+            warmup_elapsed, _ = _run_once()  # zgłoszony, ale odrzucony z mediany
+            print(f"  [warmup] w={w}: {warmup_elapsed:.3f} s (rozgrzewa pulę/cache/load datasetu)")
 
         timed = [_run_once() for _ in range(repeats)]
         timings = [t for t, _ in timed]
         median_elapsed = statistics.median(timings)
         results[w] = round(median_elapsed, 3)
+        rss_watermark_mb = round(_peak_rss_bytes(rusage_who) / 2**20, 1)
+        candidates_per_min = round(total_tasks / (median_elapsed / 60), 1) if median_elapsed > 0 else None
         if config is not None:
             diagnostics[w] = timed[-1][1]
 
@@ -286,9 +338,16 @@ def benchmark_workers(
                 f" | best_fitness={diagnostics[w]['best_fitness']:.4f}, "
                 f"evaluated={diagnostics[w]['evaluated']}"
             )
+            if "mps_current_allocated_bytes" in diagnostics[w]:
+                extra += (
+                    f", mps_allocated={diagnostics[w]['mps_current_allocated_bytes'] / 2**20:.1f}MB, "
+                    f"mps_driver={diagnostics[w]['mps_driver_allocated_bytes'] / 2**20:.1f}MB"
+                )
         print(
             f"  -> {w} workerów: mediana {median_elapsed:.3f} s "
-            f"(powtórzenia: {[round(t, 3) for t in timings]}){extra}"
+            f"(powtórzenia: {[round(t, 3) for t in timings]}); "
+            f"{candidates_per_min} kandydatów/min; "
+            f"RSS watermark ({'dzieci' if w > 1 else 'proces'}): {rss_watermark_mb} MB{extra}"
         )
 
     if config is not None and diagnostics:
@@ -361,4 +420,159 @@ def resolve_workers(
         return w, {}
     except ValueError:
         raise ValueError(f"[BŁĄD] Flaga --workers musi być 'auto' lub >0, podano: {workers_arg}")
-    
+
+
+def _get_representative_genome(config, device: str, pop_size: int = 4):
+    """
+    Tani, PRAWDZIWY genom do benchmarku "Dotrenowanie championa" -- NIE
+    faktyczny champion (do tego potrzeba pełnego GA, M3). Ponownie wykorzystuje
+    tę samą ścieżkę importu/konfiguracji co _run_real_ga_once (lazy import
+    ga_neuron_search, budowa GAConfig, run_ga na małej populacji), ale zwraca
+    sam obiekt Genome zamiast (czas, diagnostyka) -- stąd osobna funkcja, żeby
+    nie zmieniać już przetestowanej sygnatury _run_real_ga_once używanej przez
+    benchmark_workers.
+
+    Zwraca też zbudowaną instancję RealFitness, żeby benchmark_winner_batch_sizes
+    mógł jej użyć ponownie zamiast wczytywać dataset po raz drugi.
+    """
+    try:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        for p in (project_root, os.path.join(project_root, "ga_neuron_search")):
+            if p not in sys.path:
+                sys.path.insert(0, p)
+        from ga_neuron_search.fitness import RealFitness
+        from ga_neuron_search.ga import GAConfig, run_ga
+    except ImportError as exc:
+        raise RuntimeError(
+            f"[BŁĄD] Nie można zaimportować ga_neuron_search do wygenerowania genomu: {exc}"
+        ) from exc
+
+    rf_kwargs = _build_rf_kwargs_for_benchmark(config, project_root, device)
+    max_neurons = max(config.ga.neurons_range)
+    effective_elite = min(config.ga.elite, pop_size)
+    ga_cfg = GAConfig(
+        n_total=max_neurons, pop_size=pop_size, generations=1,
+        elite=effective_elite, max_hidden_layers=4, seed=config.seed,
+    )
+
+    rf = RealFitness(**rf_kwargs)
+    res = run_ga(rf, ga_cfg, log=lambda *a, **k: None)
+    print(
+        f"[WINNER-BENCH] Genom reprezentatywny: fitness={res.best.fitness:.4f} "
+        f"(pop_size={pop_size}, generations=1 -- NIE faktyczny champion, tylko "
+        f"materiał do pomiaru czasu treningu)."
+    )
+    return res.best.genome, rf
+
+
+def benchmark_winner_batch_sizes(
+    config,
+    device: str = "cpu",
+    batch_sizes: tuple[int, ...] = (128, 256, 512),
+    epochs: int = 2,
+    seeds: int = 1,
+    num_samples: int = 12000,
+    repeats: int = 3,
+    warmup: bool = True,
+    pop_size_for_genome: int = 4,
+) -> dict:
+    """
+    Krok 3 M0, wariant "Dotrenowanie championa": benchmark winner.train_full
+    dla różnych batch_size, przy zachowaniu definicji eksperymentu -- ten sam
+    genom, te same epochs/seeds/num_samples dla każdego batch_size, zmienia
+    się wyłącznie batch_size (rozdział 8 planu zespołu: "Zmiana batch size
+    może zmienić trening, więc jest parametrem eksperymentu, a nie darmową
+    optymalizacją").
+
+    epochs=2, seeds=1 to CELOWO małe wartości -- to benchmark czasu/pamięci
+    na epokę, NIE realny trening championa (produkcyjnie winner_epochs=60,
+    seeds=5). clip_f1 zwrócone stąd nie ma znaczenia jakościowego i nie
+    powinno być mylone z wynikiem prawdziwego treningu.
+
+    Wymaga winner.py z parametrami batch_size/num_samples w train_full
+    (dodane 24.09.2026 -- wcześniej oba były wpisane na sztywno w ciele
+    funkcji, ignorując wszystko z zewnątrz).
+
+    NIEPRZETESTOWANE przeze mnie wykonaniem: brak tu ga_neuron_search,
+    datasetu i modułów net/genome/snn_hw_pipeline, od których zależy
+    winner.py. Zweryfikowana jest tylko składnia i logika na podstawie
+    przeczytanego kodu winner.py/fitness.py.
+    """
+    genome, rf = _get_representative_genome(config, device, pop_size=pop_size_for_genome)
+
+    try:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        for p in (project_root, os.path.join(project_root, "ga_neuron_search")):
+            if p not in sys.path:
+                sys.path.insert(0, p)
+        import winner
+    except ImportError as exc:
+        raise RuntimeError(f"[BŁĄD] Nie można zaimportować winner.py: {exc}") from exc
+
+    print(
+        f"[WINNER-BENCH] batch_sizes={batch_sizes}; epochs={epochs} (BENCHMARK, "
+        f"nie produkcyjne winner_epochs=60); seeds={seeds}; num_samples={num_samples}; "
+        f"{repeats} powtórzeń" + (" + warmup" if warmup else "") + "."
+    )
+
+    results: dict[int, float] = {}
+    diagnostics: dict[int, dict] = {}
+
+    for bs in batch_sizes:
+        rf.bs = bs  # mutacja atrybutu instancji -- unika ponownego wczytania cache danych
+
+        def _run_once() -> tuple[float, dict]:
+            if device == "mps":
+                torch.mps.synchronize()  # flush przed startem zegara
+            start = time.perf_counter()
+            _, median_m, final_m = winner.train_full(
+                rf, genome, epochs=epochs, seeds=seeds, batch_size=bs,
+                num_samples=num_samples, log=lambda *a, **k: None,
+            )
+            if device == "mps":
+                torch.mps.synchronize()  # bez tego zegar mógłby stanąć przed końcem pracy GPU
+            elapsed = time.perf_counter() - start
+            return elapsed, {
+                "median_clip_f1": median_m.get("clip_f1"),
+                "final_test_clip_f1": final_m.get("clip_f1"),
+            }
+
+        if warmup:
+            warmup_elapsed, _ = _run_once()
+            print(f"  [warmup] batch_size={bs}: {warmup_elapsed:.3f} s")
+
+        timed = [_run_once() for _ in range(repeats)]
+        timings = [t for t, _ in timed]
+        median_elapsed = statistics.median(timings)
+        results[bs] = round(median_elapsed, 3)
+        diagnostics[bs] = timed[-1][1]
+
+        rss_mb = round(_peak_rss_bytes(resource.RUSAGE_SELF) / 2**20, 1)
+        total_updates = epochs * seeds
+        per_epoch_s = round(median_elapsed / total_updates, 3) if total_updates else None
+        # Przybliżenie throughput: nie liczy narzutu eval_events (walidacja po
+        # każdej epoce) ani ewaluacji na teście na końcu -- to górna granica,
+        # nie czysta przepustowość samego forward/backward.
+        samples_per_sec = (
+            round((num_samples * total_updates) / median_elapsed, 1) if median_elapsed > 0 else None
+        )
+
+        clip_f1 = diagnostics[bs].get("median_clip_f1")
+        clip_f1_str = f"{clip_f1:.3f}" if clip_f1 is not None else "?"
+        print(
+            f"  -> batch_size={bs}: mediana {median_elapsed:.3f} s "
+            f"(powtórzenia: {[round(t, 3) for t in timings]}); "
+            f"~{per_epoch_s}s/epokę; ~{samples_per_sec} próbek/s (górna granica, "
+            f"pomija narzut eval_events); RSS: {rss_mb} MB; "
+            f"clip_f1(benchmark, nieistotne jakościowo)={clip_f1_str}"
+        )
+
+    best_bs = min(results, key=results.get)
+    print(
+        f"[WINNER-BENCH] Najszybszy batch_size: {best_bs} (mediana {results[best_bs]:.3f} s). "
+        f"UWAGA: zmiana batch_size zmienia sam trening (inny gradient noise, inna "
+        f"liczba kroków optymalizatora na epokę) -- traktuj to jako parametr "
+        f"eksperymentu do zatwierdzenia, nie darmową optymalizację."
+    )
+
+    return results

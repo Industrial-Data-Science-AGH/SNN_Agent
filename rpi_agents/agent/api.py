@@ -13,6 +13,7 @@ change on retry, for example a 409 conflict). Callers keep order and never drop 
 from __future__ import annotations
 
 import http.client
+import ipaddress
 import json
 import random
 import ssl
@@ -49,16 +50,32 @@ class Transport(Protocol):
         *,
         headers: Mapping[str, str] | None = None,
         timeout_s: float = 5.0,
-    ) -> Response: ...
+        raw: bytes | None = None,
+    ) -> Response:
+        """`raw` sends bytes as they are (a JPEG); the caller then sets Content-Type in `headers`."""
+        ...
 
 
-def validate_base_url(url: str) -> str:
+def is_local_host(host: str | None) -> bool:
+    """Loopback, or an address literal that is not globally routable (link-local, private, carrier-grade NAT 100.64/10, ...):
+    somewhere a platform agent listens, never the internet."""
+    if host in LOOPBACK_HOSTS:
+        return True
+    try:
+        address = ipaddress.ip_address(host or "")
+    except ValueError:
+        return False
+    return not address.is_global
+
+
+def validate_base_url(url: str, *, local_http: bool = False) -> str:
+    """`local_http` also allows plain http to link-local/private addresses, for a platform's managed-identity endpoint."""
     parts = urlsplit(url)
     if parts.scheme not in ("http", "https") or not parts.hostname:
         raise ValueError("backend url must be http(s)://host[:port]")
     if parts.username or parts.password or parts.query or parts.fragment:
         raise ValueError("backend url must not contain credentials, a query or a fragment")
-    if parts.scheme == "http" and parts.hostname not in LOOPBACK_HOSTS:
+    if parts.scheme == "http" and not (is_local_host(parts.hostname) if local_http else parts.hostname in LOOPBACK_HOSTS):
         raise ValueError("plain http is only allowed for loopback; use https")
     return url.rstrip("/")
 
@@ -77,8 +94,8 @@ def _retry_after(headers) -> float | None:
 
 
 class UrllibTransport:
-    def __init__(self, base_url: str, *, token: str | None = None, ca_file: str | None = None):
-        self._base = validate_base_url(base_url)
+    def __init__(self, base_url: str, *, token: str | None = None, ca_file: str | None = None, local_http: bool = False):
+        self._base = validate_base_url(base_url, local_http=local_http)
         self._token = token
         handlers: list = [_NoRedirect()]
         if self._base.startswith("https"):
@@ -93,13 +110,16 @@ class UrllibTransport:
         *,
         headers: Mapping[str, str] | None = None,
         timeout_s: float = 5.0,
+        raw: bytes | None = None,
     ) -> Response:
         if not path.startswith("/"):
             raise ValueError("path must start with '/'")
-        data = None if body is None else json.dumps(body, separators=(",", ":"), allow_nan=False).encode()
+        if raw is not None and body is not None:
+            raise ValueError("give either a JSON body or raw bytes")
+        data = raw if raw is not None else None if body is None else json.dumps(body, separators=(",", ":"), allow_nan=False).encode()
         req = urllib.request.Request(self._base + path, data=data, method=method)
         req.add_header("Accept", "application/json")
-        if data is not None:
+        if data is not None and raw is None:
             req.add_header("Content-Type", "application/json")
         if self._token:
             req.add_header("Authorization", f"Bearer {self._token}")
@@ -159,10 +179,13 @@ class ApiClient:
     def __init__(self, transport: Transport, *, timeout_s: float = 5.0):
         self._transport, self._timeout = transport, timeout_s
 
-    def _call(self, method: str, path: str, body: dict | None = None) -> Result:
-        headers = {"Idempotency-Key": body["request_id"]} if method == "POST" and body else None
+    def _call(self, method: str, path: str, body: dict | None = None, *, raw: bytes | None = None,
+              headers: Mapping[str, str] | None = None, timeout_s: float | None = None) -> Result:  # fmt: skip
+        if headers is None and method == "POST" and body:
+            headers = {"Idempotency-Key": body["request_id"]}
         try:
-            response = self._transport.request(method, path, body, headers=headers, timeout_s=self._timeout)
+            extra = {"raw": raw} if raw is not None else {}
+            response = self._transport.request(method, path, body, headers=headers, timeout_s=timeout_s or self._timeout, **extra)
         except TransportError as exc:
             return Result(Outcome.RETRY, None, "TRANSPORT_ERROR", None, None, str(exc) or "transport error")
         return classify(response)
@@ -182,6 +205,14 @@ class ApiClient:
 
     def ack_command(self, command_id: str, body: dict) -> Result:
         return self._call("POST", f"/v1/commands/{quote(command_id, safe='')}/ack", body)
+
+    def upload_image(self, event_id: str, index: int, jpeg: bytes, *, sha256: str, captured_at: str) -> Result:
+        """Send one JPEG for an event. The key is stable per (event, index), so a retry is idempotent."""
+        headers = {
+            "Content-Type": "image/jpeg", "X-Image-Index": str(index), "X-Image-Sha256": sha256,
+            "X-Captured-At": captured_at, "Idempotency-Key": f"{event_id}-{index}",
+        }  # fmt: skip
+        return self._call("POST", f"/v1/events/{quote(event_id, safe='')}/image", raw=jpeg, headers=headers, timeout_s=self._timeout * 3)
 
     def post_status(self, device_id: str, body: dict) -> Result:
         return self._call("POST", f"/v1/devices/{quote(device_id, safe='')}/status", body)

@@ -187,3 +187,16 @@ def test_backend_reports_a_serial_hole_as_missing_batch(client):
 def test_backend_reports_a_merged_frame_as_dropped_events(client):
     _, acks = send_all(client, [BOOT_LINE, *[frame(i) for i in range(10)], frame(11, n=384)])
     assert [g_["reason"] for g_ in acks[0]["gaps"]] == ["dropped_events"]
+
+
+def test_the_next_batch_start_is_where_the_open_batch_begins_or_the_next_hop():
+    tracker = StreamTracker(lambda: "demo-boot")
+    asm = assembler()
+    assert asm.next_batch_start_us is None
+    events = [e for raw in (BOOT_LINE, *[frame(i) for i in range(30)]) for e in tracker.feed_line(raw)]
+    for event in events:
+        if not isinstance(event, BootEvent):
+            asm.feed(event)
+    assert asm.next_batch_start_us == g(25)  # one batch of 25 hops closed; the next one is open from hop 25
+    asm.flush()
+    assert asm.next_batch_start_us == g(30)  # nothing open: the next hop

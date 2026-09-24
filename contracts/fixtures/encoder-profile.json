@@ -1,48 +1,20 @@
 {
   "schema_version": "1.0",
-  "profile_id": "demo-base-v1",
-  "provenance": "demo",
-  "implementation_sha": "c9ff2346abac54b07468d28e52e908788255569d",
-  "config_sha256": "sha256:46c0f23bb3f2166baac9dccc76fcbc67b3cbad901db0e9ca01992fbd742d2425",
+  "profile_id": "encoder_v3",
+  "provenance": "measured",
+  "implementation_sha": "73fd8df2645460eee95539f745ea1fc920e02ab1",
+  "config_sha256": "sha256:???",
   "sample_rate_hz": 19231,
   "hop_samples": 192,
-  "pulse_width_us": 500,
+  "pulse_width_us": 6000,
   "clock": "source_monotonic_us",
   "channel_map": [
-    {
-      "index": 0,
-      "channel": "peak",
-      "feature": "peak"
-    },
-    {
-      "index": 1,
-      "channel": "peak_cnt",
-      "feature": "peak_cnt"
-    },
-    {
-      "index": 2,
-      "channel": "cv",
-      "feature": "cv"
-    },
-    {
-      "index": 3,
-      "channel": "zcr",
-      "feature": "zcr"
-    },
-    {
-      "index": 4,
-      "channel": "flux",
-      "feature": "flux"
-    },
-    {
-      "index": 5,
-      "channel": "hf_lo",
-      "feature": "hf_lo"
-    },
-    {
-      "index": 6,
-      "channel": "hf_hi",
-      "feature": "hf_hi"
-    }
+    { "index": 0, "channel": "ch1", "feature": "peak" },
+    { "index": 1, "channel": "ch2", "feature": "hjorth_mobility" },
+    { "index": 2, "channel": "ch3", "feature": "autocorr_lag1" },
+    { "index": 3, "channel": "ch4", "feature": "zcr" },
+    { "index": 4, "channel": "ch5", "feature": "flux" },
+    { "index": 5, "channel": "ch6", "feature": "hf_lo" },
+    { "index": 6, "channel": "ch7", "feature": "hf_hi" }
   ]
 }

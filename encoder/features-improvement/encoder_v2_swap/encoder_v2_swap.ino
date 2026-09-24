@@ -24,55 +24,26 @@
 #include <util/atomic.h>
 
 // ================================================================ FLAGI KOMPILACJI
+// define'y zamiast infdefów żeby nie było pomyłek
 // Wszystkie domyślnie 0 => kod IDENTYCZNY z encoder_v2.ino (sprawdzane w tools/run_predictions.sh).
-#ifndef ENC_SET_SWAP
-#define ENC_SET_SWAP 1    // 1: peak_cnt -> hjorth_mobility, cv -> autocorr_lag1 (pozycyjnie: kanały 1 i 2)
-#endif
-#ifndef ENC_PARITY
-#define ENC_PARITY 1      // 1: włącza trzy poprawki zgodności z encoder_twin.py (poniżej), każdą można też osobno
-#endif
-#ifndef ENC_DC_FIX
-#define ENC_DC_FIX ENC_PARITY   // usuwanie DC bez martwej strefy (Q4>>9 miało ~32 LSB) — patrz ISR
-#endif
-#ifndef ENC_HF_ROUND
-#define ENC_HF_ROUND ENC_PARITY // zaokrąglanie w 1-biegunowym LP pasma górnego (>>1 ścinało w dół)
-#endif
-#ifndef ENC_EPS_FLOOR
-#define ENC_EPS_FLOOR ENC_PARITY // EPS per kanał w mianowniku z-score jak EPS_FLOOR w twinie (zamiast 1e-6)
-#endif
-#ifndef ENC_ACC32
-#define ENC_ACC32 1       // 1: acc_sq/acc_hf_sq jako uint32 (192*1023^2 = 2.0e8 < 2^32) — bez __adddi3
-#endif
-#ifndef ENC_DEBUG_FEAT
-#define ENC_DEBUG_FEAT 0  // 1: w linii debug wypisz też wartości cech (do testu parytetu z twinem)
-#endif
-#ifndef ENC_BAUD
-#define ENC_BAUD 115200
-#endif
-#ifndef ENC_ADC_PRESCALER
-#define ENC_ADC_PRESCALER 64   // 32 = oryginał (ADC 500 kHz => ~38.5 kHz); 64 => ADC 250 kHz => 19231 Hz (wartość FS_HZ)
-#endif
-#ifndef ENC_ISR_PIN
-#define ENC_ISR_PIN 0     // 1: D9 wysoko na czas ISR (oscyloskop/analizator). Pulsu NIE obejmuje prologu/epilogu ISR
-#endif
-#ifndef ENC_BENCH
-#define ENC_BENCH 1       // 1: tryb pomiarowy (polecenie 'B' przez Serial) — patrz sekcja BENCH
-#endif
+#define ENC_SET_SWAP 0       // 0: wyłączone (zachowujemy oryginalne kanały)
+#define ENC_PARITY 1         // 1: włącza poprawki zgodności z encoder_twin.py
+#define ENC_DC_FIX 1         // włączone przez ENC_PARITY
+#define ENC_HF_ROUND 1       // włączone przez ENC_PARITY
+#define ENC_EPS_FLOOR 1      // włączone przez ENC_PARITY
+#define ENC_ACC32 0          // 0: wyłączone w czystym wariancie 'parity'
+#define ENC_DEBUG_FEAT 0     // 0: tryb normalny/bench
+#define ENC_BAUD 115200      // Prędkość UART
+#define ENC_ADC_PRESCALER 64 // 64 => ADC 250 kHz => 19231 Hz
+#define ENC_ISR_PIN 0        // 0: wyłączone
+#define ENC_BENCH 1          // 1: tryb pomiarowy - WYŁĄCZ do ostatecznej wersji
 
 // Progi bezwzględne nowych kanałów (poziom kształtu widma, jak hf_lo/hf_hi — NIE z-score).
 // WSTAW wartości z phase0_analysis.py (recommended_thresholds). Domyślnie kanał MILCZY.
-#ifndef MOB_FIRE_BELOW
-#define MOB_FIRE_BELOW 0  // mobility: szkło ma WYŻSZĄ mobility (d>0) -> odpala gdy mob > MOB_THR
-#endif
-#ifndef AC_FIRE_BELOW
-#define AC_FIRE_BELOW 1   // autocorr_lag1: szkło ma NIŻSZĄ autokorelację (d<0) -> odpala gdy ac < AC_THR
-#endif
-#ifndef MOB_THR
-#define MOB_THR (MOB_FIRE_BELOW ? -1.0e9f : 1.0e9f)   // <<< WSTAW z fazy 0 (tu: nigdy nie strzela)
-#endif
-#ifndef AC_THR
-#define AC_THR  (AC_FIRE_BELOW  ? -1.0e9f : 1.0e9f)   // <<< WSTAW z fazy 0 (tu: nigdy nie strzela)
-#endif
+#define MOB_FIRE_BELOW 0     // mobility: odpala gdy mob > MOB_THR
+#define AC_FIRE_BELOW 1      // autocorr_lag1: odpala gdy ac < AC_THR
+#define MOB_THR 2.497324f    // Próg mobility z phase0
+#define AC_THR -0.233599f    // Próg autokorelacji z phase0
 
 // ---------------------------------------------------------------- konfiguracja
 

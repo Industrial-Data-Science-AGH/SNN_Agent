@@ -49,52 +49,84 @@
       "firmware_flags": null
     },
     "parity": {
-      "fs_hz": 19230.7,
-      "isr_cpu_pct": 60.7,
-      "isr_us_mean": 31.56,
-      "isr_cycles_mean": 505,
+      "fs_hz": 19230.8,
+      "isr_cpu_pct": 61.02,
+      "isr_us_mean": 31.73,
+      "isr_cycles_mean": 507.7,
       "p1": {
         "frames": 448,
         "late": 0,
         "sn_max": 192,
-        "proc_us_mean": 2024,
-        "proc_us_max": 2064,
-        "per_us_min": 9980,
-        "per_us_mean": 9983,
+        "proc_us_mean": 2956,
+        "proc_us_max": 3164,
+        "per_us_min": 9976,
+        "per_us_mean": 9984,
         "per_us_max": 9992
       },
-      "p2": null,
+      "p2": {
+        "frames": 501,
+        "late": 0,
+        "sn_max": 192,
+        "proc_us_mean": 2633,
+        "proc_us_max": 3164,
+        "per_us_min": 9948,
+        "per_us_mean": 9984,
+        "per_us_max": 10020
+      },
       "scope": {
         "isr_pulse_us_min": null,
         "isr_pulse_us_max": null,
         "note": "opcjonalnie: ENC_ISR_PIN=1, D9"
       },
-      "captured_at": null,
-      "firmware_flags": null
+      "captured_at": "20260924_182806",
+      "firmware_flags": {
+        "cfg_swap": 0,
+        "cfg_dc_fix": 1,
+        "cfg_hf_round": 1,
+        "cfg_eps_floor": 1,
+        "cfg_acc32": 0,
+        "adcsra_ps_bits": 6
+      }
     },
     "swap_full": {
-      "fs_hz": 19230.7,
-      "isr_cpu_pct": 68.3,
-      "isr_us_mean": 35.54,
-      "isr_cycles_mean": 569,
+      "fs_hz": 19230.6,
+      "isr_cpu_pct": 69.29,
+      "isr_us_mean": 36.03,
+      "isr_cycles_mean": 576.5,
       "p1": {
         "frames": 448,
         "late": 0,
         "sn_max": 192,
-        "proc_us_mean": 1692,
-        "proc_us_max": 1712,
-        "per_us_min": 9940,
-        "per_us_mean": 9984,
-        "per_us_max": 10028
+        "proc_us_mean": 2717,
+        "proc_us_max": 3008,
+        "per_us_min": 9976,
+        "per_us_mean": 9983,
+        "per_us_max": 9988
       },
-      "p2": null,
+      "p2": {
+        "frames": 501,
+        "late": 0,
+        "sn_max": 192,
+        "proc_us_mean": 2709,
+        "proc_us_max": 2952,
+        "per_us_min": 9980,
+        "per_us_mean": 9983,
+        "per_us_max": 9988
+      },
       "scope": {
         "isr_pulse_us_min": null,
         "isr_pulse_us_max": null,
         "note": "opcjonalnie: ENC_ISR_PIN=1, D9"
       },
-      "captured_at": null,
-      "firmware_flags": null
+      "captured_at": "20260924_182143",
+      "firmware_flags": {
+        "cfg_swap": 1,
+        "cfg_dc_fix": 1,
+        "cfg_hf_round": 1,
+        "cfg_eps_floor": 1,
+        "cfg_acc32": 1,
+        "adcsra_ps_bits": 6
+      }
     }
   },
   "parity": {

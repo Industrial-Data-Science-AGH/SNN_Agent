@@ -120,7 +120,12 @@ class StallEvent:
     idle_s: float
 
 
-StreamEvent = Event | StallEvent
+@dataclass(frozen=True)
+class TickEvent:
+    """An idle poll: nothing arrived, but the caller gets control (to check a stop request, say)."""
+
+
+StreamEvent = Event | StallEvent | TickEvent
 
 
 def event_stream(
@@ -129,9 +134,12 @@ def event_stream(
     *,
     poll_s: float = 0.25,
     stall_s: float = 1.0,
+    ticks: bool = False,
     clock: Callable[[], float] = time.monotonic,
 ) -> Iterator[StreamEvent]:
-    """Yield events until the source ends (SourceEnded) or fails (SourceDisconnected propagates)."""
+    """Yield events until the source ends (SourceEnded) or fails (SourceDisconnected propagates).
+
+    With `ticks=True` every idle poll also yields a TickEvent."""
     lines = LineAssembler()
     last_progress, stalled = clock(), False
     while True:
@@ -152,3 +160,5 @@ def event_stream(
         if idle >= stall_s and not stalled:
             stalled = True
             yield StallEvent(idle)
+        if ticks and not chunk:
+            yield TickEvent()

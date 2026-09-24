@@ -1,4 +1,4 @@
-"""Small durable outbox for edge -> cloud messages. Standard library only (sqlite3).
+"""Small durable outbox and edge state for edge -> cloud messages. Standard library only (sqlite3).
 
 Guarantees:
 - Survives process crashes and restarts: pending entries are re-read in their original order.
@@ -8,6 +8,10 @@ Guarantees:
   returned to the caller, so loss becomes an explicit sequence gap on the backend, never silence. The
   newest data is kept because it is the most relevant one for an alarm.
 - Delivery order equals insertion order; a consumer must send entries oldest first.
+- An entry the backend rejects for good is dead-lettered (`mark_dead`): kept for inspection, never resent,
+  counted in the stats.
+The same database also holds a tiny key-value store (the session to stop after a restart) and the
+capture commands already handled, so a restart cannot repeat a command.
 WAL with synchronous=NORMAL survives a process crash without corruption; a sudden power cut can lose the
 last few transactions, which the backend then sees as a gap like any other loss.
 """
@@ -33,7 +37,15 @@ CREATE TABLE IF NOT EXISTS outbox (
 );
 CREATE INDEX IF NOT EXISTS outbox_pending ON outbox (sent, id);
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS commands (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    command_id TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL
+);
 """
+PENDING, SENT, DEAD = 0, 1, 2
+MAX_COMMANDS_KEPT = 1000
 
 
 class OutboxConflict(ValueError):
@@ -61,6 +73,7 @@ class OutboxStats:
     pending: int
     sent: int
     dropped_total: int
+    dead: int = 0
 
 
 def _canonical(payload: dict) -> str:
@@ -145,19 +158,79 @@ class Outbox:
             )
         return cursor.rowcount == 1
 
-    def purge_sent(self, keep: int = 100) -> int:
-        """Forget delivered entries but keep the newest `keep`, so late duplicates are still recognised."""
+    def mark_dead(self, request_id: str, error: str) -> bool:
+        """The backend rejected this entry for good: keep it for inspection, never resend it."""
         with self._lock:
             cursor = self._db.execute(
-                "DELETE FROM outbox WHERE sent = 1 AND id NOT IN "
-                "(SELECT id FROM outbox WHERE sent = 1 ORDER BY id DESC LIMIT ?)",
+                "UPDATE outbox SET sent = 2, attempts = attempts + 1, last_error = ? "
+                "WHERE request_id = ? AND sent = 0",
+                (error[:200], request_id),
+            )
+        return cursor.rowcount == 1
+
+    def state(self, request_id: str) -> str | None:
+        """'pending', 'sent', 'dead', or None when the request_id is unknown."""
+        with self._lock:
+            row = self._db.execute("SELECT sent FROM outbox WHERE request_id = ?", (request_id,)).fetchone()
+        return None if row is None else {PENDING: "pending", SENT: "sent", DEAD: "dead"}[row[0]]
+
+    def purge_sent(self, keep: int = 100) -> int:
+        """Forget delivered or dead entries but keep the newest `keep`, so late duplicates are recognised."""
+        with self._lock:
+            cursor = self._db.execute(
+                "DELETE FROM outbox WHERE sent != 0 AND id NOT IN "
+                "(SELECT id FROM outbox WHERE sent != 0 ORDER BY id DESC LIMIT ?)",
                 (keep,),
             )
         return cursor.rowcount
+
+    def kv_get(self, key: str) -> str | None:
+        with self._lock:
+            row = self._db.execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
+        return None if row is None else row[0]
+
+    def kv_set(self, key: str, value: str) -> None:
+        with self._lock:
+            self._db.execute(
+                "INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+
+    def kv_delete(self, key: str) -> None:
+        with self._lock:
+            self._db.execute("DELETE FROM kv WHERE key = ?", (key,))
+
+    def claim_command(self, command_id: str, status: str) -> bool:
+        """Record a command as handled. False when it was already claimed: a duplicate, do nothing."""
+        with self._lock:
+            cursor = self._db.execute(
+                "INSERT OR IGNORE INTO commands (command_id, status) VALUES (?, ?)", (command_id, status)
+            )
+            if cursor.rowcount == 1:
+                self._db.execute(
+                    "DELETE FROM commands WHERE id NOT IN (SELECT id FROM commands ORDER BY id DESC LIMIT ?)",
+                    (MAX_COMMANDS_KEPT,),
+                )
+        return cursor.rowcount == 1
+
+    def command_status(self, command_id: str) -> str | None:
+        with self._lock:
+            row = self._db.execute("SELECT status FROM commands WHERE command_id = ?", (command_id,)).fetchone()
+        return None if row is None else row[0]
+
+    def set_command_status(self, command_id: str, status: str) -> None:
+        with self._lock:
+            self._db.execute("UPDATE commands SET status = ? WHERE command_id = ?", (status, command_id))
+
+    def commands_with_status(self, status: str) -> list[str]:
+        with self._lock:
+            rows = self._db.execute("SELECT command_id FROM commands WHERE status = ? ORDER BY id", (status,))
+            return [r[0] for r in rows.fetchall()]
 
     def stats(self) -> OutboxStats:
         with self._lock:
             pending = self._db.execute("SELECT COUNT(*) FROM outbox WHERE sent = 0").fetchone()[0]
             sent = self._db.execute("SELECT COUNT(*) FROM outbox WHERE sent = 1").fetchone()[0]
+            dead = self._db.execute("SELECT COUNT(*) FROM outbox WHERE sent = 2").fetchone()[0]
             row = self._db.execute("SELECT value FROM meta WHERE key = 'dropped_total'").fetchone()
-        return OutboxStats(pending, sent, row[0] if row else 0)
+        return OutboxStats(pending, sent, row[0] if row else 0, dead)

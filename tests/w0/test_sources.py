@@ -19,6 +19,7 @@ from rpi_agents.agent.sources import (
     SourceDisconnected,
     SourceEnded,
     StallEvent,
+    TickEvent,
     event_stream,
 )
 from rpi_agents.agent.synthetic import scenario
@@ -78,6 +79,7 @@ def test_late_frame_is_merged_not_a_gap():
 def test_corrupt_lines_are_rejected_and_show_as_gaps():
     evs = events(scenario("corrupt", 200))
     assert [r.code for r in of(RejectedEvent, evs)] == ["BAD_CRC"] * 4
+    assert all("b'$F," in r.detail for r in of(RejectedEvent, evs))  # the log says which line was bad
     assert [(g.first_seq, g.missing_hops) for g in of(GapEvent, evs)] == [(49, 1), (99, 1), (149, 1)]
 
 
@@ -89,10 +91,13 @@ def test_reset_scenario_starts_a_new_boot_without_seq_errors():
 
 @pytest.mark.parametrize("name", ["silence", "glass", "gap", "late", "corrupt", "reset"])
 def test_chunking_and_crlf_do_not_change_the_events(name):
+    def same(evs):  # a rejected line carries a free-text preview of the raw bytes, which differs by line ending
+        return [RejectedEvent(e.code, "") if isinstance(e, RejectedEvent) else e for e in evs]
+
     data = scenario(name, 120)
-    baseline = events(data, chunk=4096)
-    assert events(data, chunk=1) == baseline and events(data, chunk=7) == baseline
-    assert events(scenario(name, 120, eol=b"\r\n"), chunk=5) == baseline
+    baseline = same(events(data, chunk=4096))
+    assert same(events(data, chunk=1)) == baseline and same(events(data, chunk=7)) == baseline
+    assert same(events(scenario(name, 120, eol=b"\r\n"), chunk=5)) == baseline
 
 
 def test_unknown_scenario_is_refused():
@@ -150,6 +155,15 @@ def test_silent_port_is_a_visible_stall_reported_once_per_silence():
     kinds = [type(e).__name__ for e in stream]
     assert kinds.count("StallEvent") == 2 and isinstance(stream[-1], StallEvent)
     assert kinds.index("StallEvent") < kinds.index("FrameEvent")  # first silence before any frame
+
+
+def test_idle_polls_yield_ticks_only_when_asked_for():
+    clock = Clock()
+    src = Scripted([b"", b"", b""], clock)
+    kinds = [type(e) for e in event_stream(src, tracker(), poll_s=0.5, stall_s=1e9, ticks=True, clock=clock)]
+    assert kinds == [TickEvent] * 3
+    src = Scripted([b"", b""], Clock())
+    assert list(event_stream(src, tracker(), poll_s=0.5, stall_s=1e9, clock=src.clock)) == []
 
 
 def test_a_boot_line_restarts_the_stall_timer():

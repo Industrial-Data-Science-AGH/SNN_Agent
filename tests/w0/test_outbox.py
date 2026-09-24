@@ -122,5 +122,45 @@ def test_concurrent_writers_lose_nothing(db):
     assert not errors and box.stats().pending == 200
 
 
+def test_dead_lettered_entries_are_kept_counted_and_never_resent(db):
+    box = Outbox(db)
+    box.put("r1", {"n": 1})
+    box.put("r2", {"n": 2})
+    assert box.state("r1") == "pending" and box.state("nope") is None
+    assert box.mark_dead("r1", "HTTP 409 SESSION_STOPPED") is True and box.mark_dead("r1", "again") is False
+    assert box.state("r1") == "dead" and ids(box) == ["r2"]
+    assert box.mark_sent("r1") is False  # a dead entry cannot become delivered
+    assert box.put("r1", {"n": 1}).stored is False  # and is not queued again
+    assert (box.stats().pending, box.stats().dead, box.stats().sent) == (1, 1, 0)
+    box.mark_sent("r2")
+    assert box.state("r2") == "sent"
+    assert box.purge_sent(keep=0) == 2 and box.state("r1") is None
+
+
+def test_key_value_store_survives_reopen(db):
+    box = Outbox(db)
+    assert box.kv_get("session") is None
+    box.kv_set("session", "a")
+    box.kv_set("session", "b")
+    box.close()
+    box = Outbox(db)
+    assert box.kv_get("session") == "b"
+    box.kv_delete("session")
+    assert box.kv_get("session") is None
+
+
+def test_a_command_can_only_be_claimed_once_even_across_restarts(db):
+    box = Outbox(db)
+    assert box.claim_command("c1", "accepted") is True
+    assert box.claim_command("c1", "accepted") is False
+    box.set_command_status("c1", "completed")
+    box.claim_command("c2", "accepted")
+    assert box.commands_with_status("accepted") == ["c2"]
+    box.close()
+    again = Outbox(db)
+    assert again.claim_command("c1", "accepted") is False and again.command_status("c1") == "completed"
+    assert again.command_status("unknown") is None
+
+
 def test_module_imports_without_site_packages():
     subprocess.run([sys.executable, "-S", "-c", "import rpi_agents.agent.outbox"], check=True)

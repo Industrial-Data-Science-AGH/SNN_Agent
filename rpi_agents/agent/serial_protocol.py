@@ -211,7 +211,7 @@ class StreamTracker:
         try:
             parsed = parse_line(raw)
         except ProtocolError as exc:
-            return [RejectedEvent(exc.code, str(exc))]
+            return [RejectedEvent(exc.code, f"{exc}: {raw[:40]!r}")]
         if parsed is None:
             return []
         return self._boot_line(parsed) if isinstance(parsed, BootLine) else self._frame_line(parsed)

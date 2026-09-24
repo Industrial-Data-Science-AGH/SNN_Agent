@@ -1,0 +1,16 @@
+{
+  "encoder-profile": "EncoderProfile",
+  "model-manifest": "ModelManifest",
+  "session-create": "SessionCreate",
+  "silence": "SpikeBatch",
+  "spike": "SpikeBatch",
+  "duplicate": "SpikeBatch",
+  "gap": "SpikeBatch",
+  "trigger": "SNNDecision",
+  "neuron-frame": "NeuronFrame",
+  "capture-command": "CaptureCommand",
+  "alarm-command": "AlarmCommand",
+  "vision-unavailable": "VisionResult",
+  "command-ack": "CommandAck",
+  "device-status": "DeviceStatus"
+}

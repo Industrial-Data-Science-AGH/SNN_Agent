@@ -1,0 +1,5 @@
+digraph G { graph [bgcolor="white", fontname="Arial", fontsize=15, pad="0.22", nodesep="0.3", ranksep="0.42"]; node [shape=box, style="rounded,filled", fillcolor="#f1edf8", color="#73508e", fontname="Arial", fontsize=14, margin="0.16,0.10"]; edge [fontname="Arial", fontsize=11, color="#506073", arrowsize=0.7];rankdir=TB;subgraph cluster_edge {label="GRANICA A · pomiar lokalny";color="#777";mic[label="Mikrofon"];enc[label="Uno + enkoder / FFT"];host[label="Pi + kamera + alarm"];lui[label="Lu.i
+tylko wariant sprzętowy"];mic->enc;enc->host;enc->lui[style=dashed];lui->host[style=dashed];} net[label="Sieć i transmisja
+pomiar lub jawna estymacja",fillcolor="#e5f1f5"];cloud[label="Azure SNN + Foundry
+koszt ≠ energia",fillcolor="#e5f1f5"];host->net->cloud;report[label="GRANICA B · bilans rozszerzony
+pokazać składniki niezmierzone",fillcolor="#fff4da"];cloud->report; }

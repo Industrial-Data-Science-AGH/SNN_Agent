@@ -1,0 +1,8 @@
+digraph G { graph [bgcolor="white", fontname="Arial", fontsize=15, pad="0.22", nodesep="0.3", ranksep="0.42"]; node [shape=box, style="rounded,filled", fillcolor="#f1edf8", color="#73508e", fontname="Arial", fontsize=14, margin="0.16,0.10"]; edge [fontname="Arial", fontsize=11, color="#506073", arrowsize=0.7];rankdir=TB;stim[label="Identyczny zapis impulsów
+czas + kanał + szerokość"];sim[label="Symulator Lu.i
+model parametrów"];hw[label="Fizyczne Lu.i
+zmierzone ustawienia"];trace[label="Porównanie przebiegów
+Vmem i czasy spike’ów"];fit[label="Dopasowanie parametrów
+wyłącznie dane kalibracyjne"];hold[label="Oddzielny test zgodności
+bez dopasowywania"];report[label="Raport tolerancji i zakresu
+zgodność / rozbieżności"];stim->sim;stim->hw;sim->trace;hw->trace;trace->fit;fit->hold->report; }

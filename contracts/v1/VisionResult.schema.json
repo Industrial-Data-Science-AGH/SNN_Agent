@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VisionResult",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "device_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "epoch": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "event_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "image_id": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "unavailable",
+        "error"
+      ]
+    },
+    "glass_visible": {
+      "enum": [
+        true,
+        false,
+        "unknown"
+      ]
+    },
+    "person_visible": {
+      "enum": [
+        true,
+        false,
+        "unknown"
+      ]
+    },
+    "authorization": {
+      "const": "unknown"
+    },
+    "image_quality": {
+      "enum": [
+        "good",
+        "poor",
+        "unknown"
+      ]
+    },
+    "observation": {
+      "type": "string",
+      "maxLength": 512
+    },
+    "model_deployment": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "prompt_version": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "provenance": {
+      "enum": [
+        "demo",
+        "real",
+        "synthetic",
+        "screen_capture_test"
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "device_id",
+    "session_id",
+    "epoch",
+    "event_id",
+    "image_id",
+    "status",
+    "glass_visible",
+    "person_visible",
+    "authorization",
+    "image_quality",
+    "observation",
+    "model_deployment",
+    "prompt_version",
+    "error_code",
+    "provenance"
+  ],
+  "additionalProperties": false
+}

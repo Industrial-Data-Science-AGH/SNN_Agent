@@ -1,0 +1,410 @@
+{
+  "schema_version": "1.0",
+  "model_id": "lui8-v2-recallfa-s0",
+  "status": "sandbox",
+  "encoder_hash": "sha256:febf0f35749ff98cb0bd66cd26e36cf7ee7c9cdd5338f2d9c8499b97f171851e",
+  "encoder_profile": {
+    "schema_version": "1.0",
+    "profile_id": "encoder-v2-atmega328p",
+    "provenance": "reference",
+    "implementation_sha": "aaed1647ce3ed394035bafb8d60ab0ac657f9f34",
+    "config_sha256": "sha256:1be666b59b91cdc8141f033111eb9b24369dd202c93244df815d9993aae79763",
+    "sample_rate_hz": 19231,
+    "hop_samples": 192,
+    "pulse_width_us": 500,
+    "clock": "source_monotonic_us",
+    "channel_map": [
+      {
+        "channel": "peak",
+        "index": 0,
+        "feature": "peak"
+      },
+      {
+        "channel": "peak_cnt",
+        "index": 1,
+        "feature": "peak_cnt"
+      },
+      {
+        "channel": "cv",
+        "index": 2,
+        "feature": "cv"
+      },
+      {
+        "channel": "zcr",
+        "index": 3,
+        "feature": "zcr"
+      },
+      {
+        "channel": "flux",
+        "index": 4,
+        "feature": "flux"
+      },
+      {
+        "channel": "hf_lo",
+        "index": 5,
+        "feature": "hf_lo"
+      },
+      {
+        "channel": "hf_hi",
+        "index": 6,
+        "feature": "hf_hi"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "v2_recallfa_s0.pt",
+      "sha256": "sha256:21c2b120f2222612216300cf8449dcda56d4be638e3ca175e656b900268c0bef"
+    }
+  ],
+  "runtime": {
+    "implementation": "snn_runtime.LuiRuntime",
+    "version": "0.1.0",
+    "integrator": "lui-order2-hard-reset",
+    "dt_us": 10000,
+    "potential_unit": "a.u."
+  },
+  "decoder": {
+    "implementation": "k-of-w-with-cooldown",
+    "version": "1.0",
+    "window_us": 10000,
+    "threshold": 1,
+    "cooldown_us": 5000000
+  },
+  "topology": {
+    "topology_version": "lui8-7-4-3-1",
+    "mode": "hardware_compatible",
+    "neurons": [
+      {
+        "neuron_id": "H0",
+        "tau_mem_us": 315100,
+        "tau_syn_us": 56100,
+        "v_leak": 0.487,
+        "v_threshold": 1.0,
+        "v_reset": 0.0,
+        "refractory_us": 0,
+        "potential_unit": "a.u."
+      },
+      {
+        "neuron_id": "H1",
+        "tau_mem_us": 64500,
+        "tau_syn_us": 20900,
+        "v_leak": 0.2,
+        "v_threshold": 1.0,
+        "v_reset": 0.0,
+        "refractory_us": 0,
+        "potential_unit": "a.u."
+      },
+      {
+        "neuron_id": "H2",
+        "tau_mem_us": 64700,
+        "tau_syn_us": 21400,
+        "v_leak": 0.2,
+        "v_threshold": 1.0,
+        "v_reset": 0.0,
+        "refractory_us": 0,
+        "potential_unit": "a.u."
+      },
+      {
+        "neuron_id": "H3",
+        "tau_mem_us": 363900,
+        "tau_syn_us": 83800,
+        "v_leak": 0.624,
+        "v_threshold": 1.0,
+        "v_reset": 0.0,
+        "refractory_us": 0,
+        "potential_unit": "a.u."
+      },
+      {
+        "neuron_id": "G0",
+        "tau_mem_us": 202900,
+        "tau_syn_us": 27300,
+        "v_leak": 0.2,
+        "v_threshold": 1.0,
+        "v_reset": 0.0,
+        "refractory_us": 0,
+        "potential_unit": "a.u."
+      },
+      {
+        "neuron_id": "G1",
+        "tau_mem_us": 149900,
+        "tau_syn_us": 38300,
+        "v_leak": 0.2,
+        "v_threshold": 1.0,
+        "v_reset": 0.0,
+        "refractory_us": 0,
+        "potential_unit": "a.u."
+      },
+      {
+        "neuron_id": "G2",
+        "tau_mem_us": 297700,
+        "tau_syn_us": 48500,
+        "v_leak": 0.2,
+        "v_threshold": 1.0,
+        "v_reset": 0.0,
+        "refractory_us": 0,
+        "potential_unit": "a.u."
+      },
+      {
+        "neuron_id": "D",
+        "tau_mem_us": 45000,
+        "tau_syn_us": 43300,
+        "v_leak": 0.2,
+        "v_threshold": 1.0,
+        "v_reset": 0.0,
+        "refractory_us": 0,
+        "potential_unit": "a.u."
+      }
+    ],
+    "connections": [
+      {
+        "source_kind": "channel",
+        "source_id": "peak",
+        "target_id": "H0",
+        "target_port": 1,
+        "sign": "inhibitory",
+        "weight": 1.2,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "channel",
+        "source_id": "peak_cnt",
+        "target_id": "H0",
+        "target_port": 2,
+        "sign": "inhibitory",
+        "weight": 1.44,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "channel",
+        "source_id": "hf_lo",
+        "target_id": "H0",
+        "target_port": 3,
+        "sign": "excitatory",
+        "weight": 0.16,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "channel",
+        "source_id": "cv",
+        "target_id": "H1",
+        "target_port": 1,
+        "sign": "inhibitory",
+        "weight": 0.08,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "channel",
+        "source_id": "zcr",
+        "target_id": "H1",
+        "target_port": 2,
+        "sign": "excitatory",
+        "weight": 0.16,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "channel",
+        "source_id": "hf_hi",
+        "target_id": "H1",
+        "target_port": 3,
+        "sign": "excitatory",
+        "weight": 0.48,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "channel",
+        "source_id": "peak",
+        "target_id": "H2",
+        "target_port": 1,
+        "sign": "inhibitory",
+        "weight": 0.16,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "channel",
+        "source_id": "flux",
+        "target_id": "H2",
+        "target_port": 2,
+        "sign": "inhibitory",
+        "weight": 0.32,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "channel",
+        "source_id": "hf_lo",
+        "target_id": "H2",
+        "target_port": 3,
+        "sign": "excitatory",
+        "weight": 0.24,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "channel",
+        "source_id": "peak_cnt",
+        "target_id": "H3",
+        "target_port": 1,
+        "sign": "inhibitory",
+        "weight": 1.6,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "channel",
+        "source_id": "flux",
+        "target_id": "H3",
+        "target_port": 2,
+        "sign": "excitatory",
+        "weight": 0.16,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "channel",
+        "source_id": "hf_hi",
+        "target_id": "H3",
+        "target_port": 3,
+        "sign": "excitatory",
+        "weight": 0.24,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "neuron",
+        "source_id": "H0",
+        "target_id": "G0",
+        "target_port": 1,
+        "sign": "excitatory",
+        "weight": 0.24,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "neuron",
+        "source_id": "H1",
+        "target_id": "G0",
+        "target_port": 2,
+        "sign": "inhibitory",
+        "weight": 0.4,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "neuron",
+        "source_id": "H2",
+        "target_id": "G0",
+        "target_port": 3,
+        "sign": "excitatory",
+        "weight": 0.0,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "neuron",
+        "source_id": "H1",
+        "target_id": "G1",
+        "target_port": 1,
+        "sign": "excitatory",
+        "weight": 0.32,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "neuron",
+        "source_id": "H2",
+        "target_id": "G1",
+        "target_port": 2,
+        "sign": "excitatory",
+        "weight": 0.16,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "neuron",
+        "source_id": "H3",
+        "target_id": "G1",
+        "target_port": 3,
+        "sign": "inhibitory",
+        "weight": 0.24,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "neuron",
+        "source_id": "H0",
+        "target_id": "G2",
+        "target_port": 1,
+        "sign": "inhibitory",
+        "weight": 0.08,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "neuron",
+        "source_id": "H2",
+        "target_id": "G2",
+        "target_port": 2,
+        "sign": "inhibitory",
+        "weight": 0.32,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "neuron",
+        "source_id": "H3",
+        "target_id": "G2",
+        "target_port": 3,
+        "sign": "excitatory",
+        "weight": 0.24,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "neuron",
+        "source_id": "G0",
+        "target_id": "D",
+        "target_port": 1,
+        "sign": "inhibitory",
+        "weight": 0.16,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "neuron",
+        "source_id": "G1",
+        "target_id": "D",
+        "target_port": 2,
+        "sign": "excitatory",
+        "weight": 0.24,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      },
+      {
+        "source_kind": "neuron",
+        "source_id": "G2",
+        "target_id": "D",
+        "target_port": 3,
+        "sign": "inhibitory",
+        "weight": 0.08,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      }
+    ]
+  },
+  "provenance": {
+    "training_run_id": null,
+    "dataset_manifest_hash": "sha256:b3dcc1101a6522ec567ff210e5a943f7aa606d4dc5b01e3e67de73ed70227cd3",
+    "checkpoint_hash": "sha256:21c2b120f2222612216300cf8449dcda56d4be638e3ca175e656b900268c0bef",
+    "evaluation_hash": null,
+    "seed": 0,
+    "calibration_id": null
+  }
+}

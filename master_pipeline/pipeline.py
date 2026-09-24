@@ -43,7 +43,7 @@ def main():
     # 2. Inicjalizacja sprzętu i workerów
     print("[INIT] Konfigurowanie środowiska...")
     device = get_device(args.device)
-    workers_count, hw_benchmark = resolve_workers(args.workers)
+    workers_count, hw_benchmark = resolve_workers(args.workers, config=config, device=device)
     print(f"[INIT] Ustawiono urządzenie: {device.upper()} | Workery: {workers_count}")
 
     # 3. Uruchomienie Run Trackera

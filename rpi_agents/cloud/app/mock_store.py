@@ -30,6 +30,7 @@ class DemoStore:
         self.commands = {}
         self.acks = {}
         self.retries = {}
+        self.status = {}
         self.manifest = validate("ModelManifest", fixture("model-manifest"))
 
     def mutation(self, scope, body, operation):
@@ -328,6 +329,25 @@ class DemoStore:
                 return body
 
             return self.mutation(f"ack/{command_id}", body, operation)
+
+    def set_status(self, device_id, body):
+        """Latest report per device. Deliberately outside `mutation`: a heartbeat must never use up the
+        idempotent-request budget, and an old report is worthless once a newer one exists."""
+        require(body["device_id"] == device_id, "Path and device ID differ", "DEVICE_MISMATCH", 409)
+        with self.lock:
+            require(
+                device_id in self.status or len(self.status) < 16,
+                "Demo device limit reached; restart mock",
+                "DEMO_CAPACITY",
+                429,
+            )
+            self.status[device_id] = copy.deepcopy(body)
+            return copy.deepcopy(body)
+
+    def get_status(self, device_id):
+        with self.lock:
+            require(device_id in self.status, "No status reported by this device", "NOT_FOUND", 404)
+            return copy.deepcopy(self.status[device_id])
 
     def stop(self, session_id, body):
         with self.lock:

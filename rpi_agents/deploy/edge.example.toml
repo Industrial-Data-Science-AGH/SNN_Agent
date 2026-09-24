@@ -1,0 +1,53 @@
+# SNN edge bridge configuration. Copy to /etc/snn-edge/edge.toml (system) or ~/.config/snn-edge/edge.toml.
+# Unknown keys are errors, so a typo cannot silently fall back to a default.
+
+[device]
+id = "snn-pi"
+# uno = the real Uno + microphone; stand_in = a Mega running hwtest/mega_standin; replay = a recorded file.
+# Results from stand_in and replay are not results of the real chain and are labelled so in DeviceStatus.
+input_kind = "stand_in"
+
+[backend]
+# https is required for anything that is not loopback. The demo mock only accepts loopback.
+url = "http://127.0.0.1:8000"
+# Required for a non-loopback backend. Must be chmod 600 and hold one bearer token; never put it in this file.
+# credential_file = "/etc/snn-edge/device.token"
+# ca_file = "/etc/snn-edge/ca.pem"
+# Demo mock only: silence | spike | trigger | vision_unavailable
+demo_scenario = "silence"
+timeout_s = 5
+
+[session]
+mode = "demo"                     # demo | replay | live (the mock refuses live)
+# Replace both with the hashes of the frozen release; these are the W0 demo fixtures.
+model_hash = "sha256:8780dfeca1acfd3a292d90f614b12b25abff4c2e77e83ba7f8926a4d8bf9d445"
+encoder_hash = "sha256:cf0a898563e7f8d928454f91faaf5a92dc29d41afd3be7feabf58d267ff0e78c"
+
+[serial]
+# Persistent path only. Never /dev/ttyACM0: the number changes. Many Mega clones (CH340) share one by-id name.
+path = "/dev/serial/by-id/usb-1a86_USB2.0-Serial-if00-port0"
+baud = 115200
+# Order must match the firmware channel order and the encoder profile. A boot line that reports a different
+# number of channels is refused and the device reports state "error"; nothing is guessed.
+channels = ["peak", "peak_cnt", "cv", "zcr", "flux", "hf_lo", "hf_hi"]
+# expected_build_id = "5717A0D0"  # refuse any other firmware build
+stall_s = 2.0
+
+[camera]
+serial = "308643024550"           # USB serial number of the camera (RealSense D415 here); empty = no camera
+
+[images]
+# DEMO ONLY: keep captured JPEGs on this device (newest `keep`). Nothing is uploaded. Photos can show people.
+# local_dir = "/var/lib/snn-edge/images"
+# keep = 20
+
+[state]
+dir = "/var/lib/snn-edge"         # outbox database and session state; created with mode 0700
+
+[limits]
+max_pending = 5000                # outbox bound; the oldest entry is dropped visibly when exceeded
+pre_session_batches = 400         # batches buffered before their session exists (about 100 s)
+batch_ms = 250
+heartbeat_s = 5
+command_poll_s = 1
+drain_s = 5                       # time allowed to flush the outbox on SIGTERM

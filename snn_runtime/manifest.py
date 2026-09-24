@@ -19,9 +19,11 @@ allocated, so a bad package can never half-start a session.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
 from contracts.validation import ContractError, content_hash, validate
@@ -231,7 +233,8 @@ def _check_artifacts(manifest: Mapping[str, Any], artifact_root: Path) -> None:
         path = artifact_root / artifact["path"]
         if not path.is_file():
             _reject("ARTIFACT_MISSING", f"artifact {artifact['path']} is not on disk under {artifact_root}")
-        digest = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+        with path.open("rb") as handle:  # streamed: a production checkpoint must not be held in memory to be hashed
+            digest = "sha256:" + hashlib.file_digest(handle, "sha256").hexdigest()
         if digest != artifact["sha256"]:
             _reject(
                 "ARTIFACT_HASH_MISMATCH",
@@ -240,15 +243,30 @@ def _check_artifacts(manifest: Mapping[str, Any], artifact_root: Path) -> None:
             )
 
 
+def _freeze(value: Any) -> Any:
+    """Recursively read-only: dicts become mappings that cannot be assigned to, lists become tuples."""
+    if isinstance(value, Mapping):
+        return MappingProxyType({key: _freeze(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_freeze(item) for item in value)
+    return value
+
+
 def load_manifest(manifest: Mapping[str, Any], *, artifact_root: str | Path | None = None) -> LoadedModel:
     """Validate a model package and return what the integrator needs.
 
     ``artifact_root`` enables the on-disk artifact check. It is optional so that
     contract-level tests and the dashboard can validate a manifest they received
-    over the wire without holding the weights.
+    over the wire without holding the weights. A runtime that STARTS a session must not use it that way: see
+    ``LuiRuntime``, which refuses a package with artifacts unless it can verify them.
+
+    Everything is decided on a private deep copy, and what is stored on the result is read-only, so neither the
+    caller mutating its dict afterwards nor a holder of ``LoadedModel.manifest`` can change what was accepted while
+    ``model_hash`` stays the same.
     """
+    manifest = copy.deepcopy(dict(manifest))
     try:
-        validate("ModelManifest", dict(manifest))
+        validate("ModelManifest", manifest)
     except ContractError as exc:
         raise RuntimeLoadError(exc.code, str(exc)) from exc
 
@@ -292,7 +310,7 @@ def load_manifest(manifest: Mapping[str, Any], *, artifact_root: str | Path | No
     return LoadedModel(
         model_id=manifest["model_id"],
         status=manifest["status"],
-        model_hash=content_hash(dict(manifest)),
+        model_hash=content_hash(manifest),
         encoder_hash=manifest["encoder_hash"],
         dt_us=dt_us,
         integrator=integrator,
@@ -300,9 +318,9 @@ def load_manifest(manifest: Mapping[str, Any], *, artifact_root: str | Path | No
         calibration=calibration,
         decision_neuron=decision_neuron,
         neuron_order=tuple(n["neuron_id"] for n in manifest["topology"]["neurons"]),
-        bindings=bindings,
-        channel_index=channel_index,
+        bindings=MappingProxyType(bindings),
+        channel_index=MappingProxyType(channel_index),
         unused_channels=tuple(sorted(set(channel_index) - wired)),
-        decoder=dict(manifest["decoder"]),
-        manifest=dict(manifest),
+        decoder=_freeze(manifest["decoder"]),
+        manifest=_freeze(manifest),
     )

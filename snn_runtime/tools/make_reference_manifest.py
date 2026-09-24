@@ -49,7 +49,8 @@ DEFAULT_COOLDOWN_FRAMES = 500
 
 
 def _sha256_file(path: Path) -> str:
-    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+    with path.open("rb") as handle:  # streamed: checkpoints are large
+        return "sha256:" + hashlib.file_digest(handle, "sha256").hexdigest()
 
 
 def build(

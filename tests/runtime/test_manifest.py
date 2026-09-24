@@ -5,6 +5,11 @@ Each test names the code it expects, so a reworded message does not break the
 suite and a silently changed rejection reason does.
 """
 
+import copy
+import hashlib
+import json
+from pathlib import Path
+
 import pytest
 
 from contracts.validation import content_hash, fixture
@@ -256,3 +261,52 @@ def test_a_rejected_package_does_not_replace_a_good_one(lui8, mutate):
 
 def test_model_hash_is_the_canonical_hash_of_the_manifest(lui8):
     assert load_manifest(lui8).model_hash == content_hash(lui8)
+
+
+# ------------------------------------------------- isolation and memory
+
+def test_mutating_the_callers_manifest_after_load_changes_nothing_that_was_accepted(lui8):
+    manifest = copy.deepcopy(lui8)
+    model = load_manifest(manifest)
+    accepted_hash, accepted_threshold = model.model_hash, model.decoder["threshold"]
+    manifest["decoder"]["threshold"] = 0
+    manifest["topology"]["neurons"].clear()
+    assert model.decoder["threshold"] == accepted_threshold and len(model.manifest["topology"]["neurons"]) > 0
+    assert content_hash(json.loads(json.dumps(model.manifest, default=dict))) == accepted_hash
+
+
+def test_the_accepted_package_cannot_be_edited_through_the_result(lui8):
+    model = load_manifest(lui8)
+    with pytest.raises(TypeError):
+        model.decoder["threshold"] = 0
+    with pytest.raises(TypeError):
+        model.manifest["decoder"]["window_us"] = 1
+    with pytest.raises(TypeError):
+        model.manifest["topology"]["neurons"][0]["v_threshold"] = 9  # a nested mapping inside a tuple
+    with pytest.raises((TypeError, AttributeError)):
+        model.manifest["topology"]["neurons"].append({})  # lists were frozen to tuples
+    with pytest.raises(TypeError):
+        model.channel_index["peak"] = 99
+    with pytest.raises(TypeError):
+        model.bindings["extra"] = ()
+    assert model.manifest["decoder"] == lui8["decoder"]  # still equal in content to what was given
+
+
+def test_load_does_not_touch_the_callers_dict(lui8):
+    before = copy.deepcopy(lui8)
+    load_manifest(lui8)
+    assert lui8 == before
+
+
+def test_artifacts_are_hashed_from_a_stream_not_read_whole(lui8, tmp_path, monkeypatch):
+    payload = b"weights" * 600_000  # about 4 MiB
+    (tmp_path / lui8["artifacts"][0]["path"]).write_bytes(payload)
+    declared = copy.deepcopy(lui8)
+    digest = "sha256:" + hashlib.sha256(payload).hexdigest()
+    declared["artifacts"][0]["sha256"] = declared["provenance"]["checkpoint_hash"] = digest  # the contract ties the two
+
+    def refuse(self):
+        raise AssertionError("the whole artifact was read into memory")
+
+    monkeypatch.setattr(Path, "read_bytes", refuse)
+    assert load_manifest(declared, artifact_root=tmp_path).model_id == lui8["model_id"]

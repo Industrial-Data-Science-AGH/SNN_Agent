@@ -24,10 +24,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
 from contracts.validation import content_hash
+from snn_runtime.errors import RuntimeLoadError
+from snn_runtime.manifest import load_manifest
 
 # Lu.i solder headers, in the order the export names them.
 PORT_OF_HEADER = {"J1": 1, "J2": 2, "J3": 3}
@@ -172,7 +175,7 @@ def build(
     return manifest
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--export", required=True, help="hw_*.json produced by snn_hw_pipeline export")
     ap.add_argument("--out", required=True)
@@ -198,8 +201,11 @@ def main() -> None:
     ap.add_argument("--evaluation-hash")
     ap.add_argument("--seed", type=int)
     ap.add_argument("--calibration-id")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
+    if args.checkpoint and args.artifact_sha256:
+        ap.error("--checkpoint and --artifact-sha256 are alternatives: one would silently win and the manifest could "
+                 "declare a hash that is not the named file's")
     if not (args.checkpoint or args.artifact_sha256):
         ap.error("pass --checkpoint to hash a local file, or --artifact-sha256 directly")
     artifact_sha256 = args.artifact_sha256 or _sha256_file(Path(args.checkpoint))
@@ -229,9 +235,15 @@ def main() -> None:
         seed=args.seed,
         calibration_id=args.calibration_id,
     )
+    try:  # the contract AND the runtime's own checks: never emit a file that load_manifest would refuse
+        load_manifest(manifest)
+    except RuntimeLoadError as exc:
+        print(f"refused, nothing written: {exc}", file=sys.stderr)
+        return 1
     Path(args.out).write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     print(f"wrote {args.out}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

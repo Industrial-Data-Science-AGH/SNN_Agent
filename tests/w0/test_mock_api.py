@@ -227,3 +227,37 @@ def test_demo_capacity_does_not_evict_retry_records(client):
     response = post(client, "/v1/sessions", fixture("session-create"))
     assert response.status_code == 429
     assert store.sessions == {}
+
+
+def test_device_status_latest_wins_and_never_uses_the_idempotency_budget(client):
+    body = fixture("device-status")
+    r = post(client, "/v1/devices/demo-pi/status", body)
+    assert r.status_code == 200
+    validate("DeviceStatus", r.json())
+    assert client.get("/v1/devices/demo-pi/status").json() == body
+    for i in range(1100):  # more heartbeats than the 1024 idempotent-mutation budget
+        sent = post(client, "/v1/devices/demo-pi/status", body | {"request_id": f"status-{i + 2}", "uptime_s": i})
+        assert sent.status_code == 200
+    assert client.get("/v1/devices/demo-pi/status").json()["uptime_s"] == 1099
+    assert session(client)["state"] == "running"  # sessions are still creatable: the budget is untouched
+
+
+def test_device_status_rejects_mismatch_unknown_device_and_bad_payloads(client):
+    body = fixture("device-status")
+    r = post(client, "/v1/devices/other-pi/status", body)
+    assert (r.status_code, r.json()["error"]["code"]) == (409, "DEVICE_MISMATCH")
+    assert client.get("/v1/devices/nobody/status").status_code == 404
+    assert post(client, "/v1/devices/demo-pi/status", body | {"epoch": None}).status_code == 422
+    assert post(client, "/v1/devices/demo-pi/status", body | {"surprise": 1}).status_code == 422
+    assert post(client, "/v1/devices/demo-pi/status", body | {"reported_at": "2026-09-24T00:00:05"}).status_code == 422
+    assert post(client, "/v1/devices/demo-pi/status", body | {"state": "asleep"}).status_code == 422
+    assert client.get("/v1/devices/demo-pi/status").status_code == 404  # nothing invalid was stored
+
+
+def test_device_status_is_capped_at_sixteen_devices(client):
+    body = fixture("device-status")
+    for i in range(16):
+        assert post(client, f"/v1/devices/pi-{i}/status", body | {"device_id": f"pi-{i}"}).status_code == 200
+    r = post(client, "/v1/devices/pi-16/status", body | {"device_id": "pi-16"})
+    assert (r.status_code, r.json()["error"]["code"]) == (429, "DEMO_CAPACITY")
+    assert post(client, "/v1/devices/pi-3/status", body | {"device_id": "pi-3", "request_id": "again"}).status_code == 200

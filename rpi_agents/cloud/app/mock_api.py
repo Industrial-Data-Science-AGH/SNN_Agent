@@ -170,6 +170,18 @@ def create_app():
         return {"schema_version": "1.0", "items": store.pending(device_id), "demo": True}
 
     @app.post(
+        "/v1/devices/{device_id}/status",
+        openapi_extra=body_spec("DeviceStatus"),
+        responses=responses("DeviceStatus"),
+    )
+    async def report_status(device_id: str, request: Request):
+        return store.set_status(device_id, await payload(request, "DeviceStatus"))
+
+    @app.get("/v1/devices/{device_id}/status", responses=responses("DeviceStatus"))
+    def device_status(device_id: str):
+        return store.get_status(device_id)
+
+    @app.post(
         "/v1/commands/{command_id}/ack",
         openapi_extra=body_spec("CommandAck"),
         responses=responses("CommandAck"),

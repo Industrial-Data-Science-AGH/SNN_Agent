@@ -1,0 +1,19 @@
+# User unit for development on the Pi without sudo: ~/.config/systemd/user/snn-edge.service
+#   systemctl --user daemon-reload && systemctl --user enable --now snn-edge
+# Paths assume a checkout in ~/snn-edge and a virtualenv that can import Pillow (for the camera).
+[Unit]
+Description=SNN edge bridge (development, user unit)
+
+[Service]
+Type=simple
+WorkingDirectory=%h/snn-edge
+Environment=PYTHONUNBUFFERED=1
+ExecStart=%h/snn-edge/.venv/bin/python -m rpi_agents.agent.bridge --config %h/.config/snn-edge/edge.toml
+Restart=on-failure
+RestartSec=3
+RestartPreventExitStatus=2
+KillSignal=SIGTERM
+TimeoutStopSec=20
+
+[Install]
+WantedBy=default.target

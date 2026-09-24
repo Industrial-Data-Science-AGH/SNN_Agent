@@ -3,7 +3,8 @@
 Start with [W0 team handoff](../docs/project/W0_START_HERE.md) and
 [contracts/mock quickstart](../contracts/README.md).
 
-- agent/: dependency-light hardware interfaces and imported GPIO guard (W1).
+- agent/: dependency-light hardware interfaces and imported GPIO guard (W1): Uno serial protocol,
+  batching, byte sources, durable outbox, UVC camera adapter; `hwtest/` holds the Mega stand-in and probe docs.
 - runtime/: stateful SNN interface for Patryk (P1).
 - cloud/app/mock_api.py: local scripted fixtures for frontend/integration only.
 - [MIGRATION.md](MIGRATION.md): source commit and selective legacy import.

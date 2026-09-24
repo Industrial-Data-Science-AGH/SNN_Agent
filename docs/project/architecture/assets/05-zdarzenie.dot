@@ -1,0 +1,8 @@
+digraph G { graph [bgcolor="white", fontname="Arial", fontsize=15, pad="0.22", nodesep="0.3", ranksep="0.42"]; node [shape=box, style="rounded,filled", fillcolor="#f1edf8", color="#73508e", fontname="Arial", fontsize=14, margin="0.16,0.10"]; edge [fontname="Arial", fontsize=11, color="#506073", arrowsize=0.7];rankdir=TB; t[label="SNN_TRIGGER
+trwały event_id"];c[label="CAPTURE_REQUESTED
+command_id + termin ważności"];i[label="IMAGE_STORED
+JPEG i skrót SHA256"];v[label="VISION_PENDING
+trwałe zadanie"];r[label="VISION_RESULT
+walidacja struktury"];p[label="POLICY_DECISION
+reguła i stan uzbrojenia"];a[label="ALARM
+oddzielne statusy LED i e-mail"];n[label="NO_ALARM"];x[label="REVIEW_REQUIRED / ERROR",fillcolor="#fff4da"];t->c->i->v->r->p;p->a[label="warunki spełnione"];p->n[label="warunki niespełnione"];r->x[label="niepewność"];v->x[label="timeout / brak wyniku"]; }

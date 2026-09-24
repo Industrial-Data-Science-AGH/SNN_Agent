@@ -1,0 +1,8 @@
+# Development/CI only. Never install this full stack on the Pi or into GA venv.
+fastapi
+uvicorn
+jsonschema
+rfc8785
+httpx
+pytest
+ruff

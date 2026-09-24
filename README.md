@@ -1,3 +1,5 @@
+> **Start zespołu:** [W0 — kontrakty, mock API, CI i instrukcja branchy](docs/project/W0_START_HERE.md) · [Dokumentacja projektu](docs/project/README.md)
+
 # Wake-Up AI: Hybrid Neuromorphic Edge System
 
 This project implements a hybrid architecture for ultra-low power "Always-On" Edge AI, combining analog neuromorphic circuits (Layer 1) with digital software agents (Layer 3).

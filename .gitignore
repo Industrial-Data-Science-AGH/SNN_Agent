@@ -58,3 +58,7 @@ architecture_14_neurons_patryk_09_07/spikes_v*/
 *.zip
 *.7z
 
+# Isolated W0 integration environment
+.venv-w0/
+.pytest_cache/
+.ruff_cache/

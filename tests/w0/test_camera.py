@@ -14,9 +14,9 @@ from rpi_agents.agent.camera import (
     ReplayCamera,
     UvcCamera,
     find_v4l2_device,
+    grab_v4l2_frame,
     shadow_lift_table,
     tune_v4l2,
-    grab_v4l2_frame,
     yuyv_to_jpeg,
 )
 

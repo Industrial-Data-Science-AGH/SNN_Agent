@@ -13,11 +13,11 @@ change on retry, for example a 409 conflict). Callers keep order and never drop 
 from __future__ import annotations
 
 import http.client
+import ipaddress
 import json
 import random
 import ssl
 import urllib.error
-import ipaddress
 import urllib.request
 from dataclasses import dataclass
 from enum import Enum

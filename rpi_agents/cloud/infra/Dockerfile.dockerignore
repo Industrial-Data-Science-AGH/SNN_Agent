@@ -1,0 +1,12 @@
+# Allow-list: nothing enters the build context unless it is named below. The repository holds datasets, models and
+# training code that must never end up in an image.
+*
+!requirements-backend.lock
+!contracts/
+!rpi_agents/__init__.py
+!rpi_agents/cloud/
+!rpi_agents/runtime/
+!rpi_agents/agent/__init__.py
+!rpi_agents/agent/api.py
+**/__pycache__
+**/*.pyc

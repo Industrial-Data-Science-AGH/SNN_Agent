@@ -63,12 +63,31 @@ class SerialConfig:
 @dataclass(frozen=True)
 class CameraConfig:
     serial: str | None = None
+    replay_image: str | None = None  # a fixed JPEG served instead of a camera; only in a replay session
+    # Optional tuning of the real camera; None = the adapter's default (see agent/camera.py for why they are what they are).
+    width: int | None = None
+    height: int | None = None
+    fps: int | None = None
+    dynamic_framerate: bool | None = None
+    enhance: bool | None = None
 
 
 @dataclass(frozen=True)
 class ImagesConfig:
     local_dir: str | None = None  # demo sink only: images stay on the device
     keep: int = 20
+    upload: bool = False  # send images to the backend (the real sink); exclusive with local_dir
+
+
+@dataclass(frozen=True)
+class AlarmConfig:
+    """LED and buzzer outputs. Off by default: no pin is touched unless `enabled` is set."""
+
+    enabled: bool = False
+    led_pin: int | None = 17  # BCM; assumed from the previous agent, verify against the real wiring
+    buzzer_pin: int | None = None  # BCM 27 in the previous agent, where it was not wired; opt in explicitly
+    max_ms: int = 10_000  # local limit per activation, whatever the command asks for
+    max_continuous_ms: int = 30_000
 
 
 @dataclass(frozen=True)
@@ -91,6 +110,7 @@ class Config:
     state_dir: str
     limits: LimitsConfig
     images: ImagesConfig = ImagesConfig()
+    alarm: AlarmConfig = AlarmConfig()
 
 
 def _section(data: dict, name: str, allowed: set[str], *, required: bool = True) -> dict:
@@ -113,8 +133,9 @@ def _get(section: dict, where: str, key: str, kind: type | tuple, *, default: An
             raise ConfigError(f"missing {where}.{key}")
         return default
     value = section[key]
-    if isinstance(value, bool) or not isinstance(value, kind):
-        raise ConfigError(f"{where}.{key} has the wrong type")
+    kinds = kind if isinstance(kind, tuple) else (kind,)
+    if not isinstance(value, kinds) or (isinstance(value, bool) and bool not in kinds):
+        raise ConfigError(f"{where}.{key} has the wrong type")  # a bool is only accepted where a bool is asked for
     return value
 
 
@@ -130,7 +151,7 @@ def _bounded(value: float, where: str, low: float, high: float) -> float:
 
 
 def parse_config(data: dict) -> Config:
-    unknown = sorted(set(data) - {"device", "backend", "session", "serial", "camera", "state", "limits", "images"})
+    unknown = sorted(set(data) - {"device", "backend", "session", "serial", "camera", "state", "limits", "images", "alarm"})
     if unknown:
         raise ConfigError(f"unknown section(s): {', '.join(unknown)}")
 
@@ -196,8 +217,24 @@ def parse_config(data: dict) -> Config:
         stall_s=_bounded(float(_get(sr, "serial", "stall_s", (int, float), default=2.0)), "serial.stall_s", 0.2, 60),
     )
 
-    cam = _section(data, "camera", {"serial"}, required=False)
-    camera = CameraConfig(_optional_text(cam, "camera", "serial"))
+    cam = _section(data, "camera", {"serial", "replay_image", "width", "height", "fps", "dynamic_framerate", "enhance"}, required=False)
+
+    def _opt(key: str, kind: type, low: int | None = None, high: int | None = None):
+        value = _get(cam, "camera", key, kind, default=None)
+        if value is not None and low is not None:
+            _bounded(value, f"camera.{key}", low, high)
+        return value
+
+    camera = CameraConfig(
+        _optional_text(cam, "camera", "serial"), _optional_text(cam, "camera", "replay_image"),
+        width=_opt("width", int, 160, 1920), height=_opt("height", int, 120, 1080), fps=_opt("fps", int, 1, 60),
+        dynamic_framerate=_opt("dynamic_framerate", bool), enhance=_opt("enhance", bool),
+    )
+    if camera.replay_image is not None:
+        if camera.serial is not None:
+            raise ConfigError("camera.serial and camera.replay_image are alternatives: choose one")
+        if session.mode != "replay":
+            raise ConfigError("camera.replay_image is a synthetic input and needs session.mode = \"replay\"")
 
     st = _section(data, "state", {"dir"})
     state_dir = _get(st, "state", "dir", str)
@@ -214,12 +251,32 @@ def parse_config(data: dict) -> Config:
         command_poll_s=_bounded(float(_get(li, "limits", "command_poll_s", (int, float), default=1.0)), "limits.command_poll_s", 0.05, 3600),
         drain_s=_bounded(float(_get(li, "limits", "drain_s", (int, float), default=5.0)), "limits.drain_s", 0, 300),
     )  # fmt: skip
-    im = _section(data, "images", {"local_dir", "keep"}, required=False)
+    im = _section(data, "images", {"local_dir", "keep", "upload"}, required=False)
     images = ImagesConfig(
         local_dir=_optional_text(im, "images", "local_dir"),
         keep=int(_bounded(_get(im, "images", "keep", int, default=20), "images.keep", 1, 10_000)),
+        upload=_get(im, "images", "upload", bool, default=False),
     )
-    return Config(DeviceConfig(device_id, kind), backend, session, serial, camera, state_dir, limits, images)
+    if images.upload and images.local_dir:
+        raise ConfigError("images.upload and images.local_dir are alternatives: choose one sink")
+    al = _section(data, "alarm", {"enabled", "led_pin", "buzzer_pin", "max_ms", "max_continuous_ms"}, required=False)
+    enabled = _get(al, "alarm", "enabled", bool, default=False)
+    pins = {}
+    for key, default in (("led_pin", 17), ("buzzer_pin", 0)):
+        pin = _get(al, "alarm", key, int, default=default)
+        if pin != 0 and not 2 <= pin <= 27:
+            raise ConfigError(f"alarm.{key} must be a BCM pin 2..27, or 0 for none")
+        pins[key] = pin or None
+    if pins["led_pin"] is not None and pins["led_pin"] == pins["buzzer_pin"]:
+        raise ConfigError("alarm.led_pin and alarm.buzzer_pin must differ")
+    max_ms = int(_bounded(_get(al, "alarm", "max_ms", int, default=10_000), "alarm.max_ms", 100, 30_000))
+    max_cont = int(_bounded(_get(al, "alarm", "max_continuous_ms", int, default=30_000), "alarm.max_continuous_ms", 100, 300_000))
+    if max_cont < max_ms:
+        raise ConfigError("alarm.max_continuous_ms must be at least alarm.max_ms")
+    if enabled and pins["led_pin"] is None and pins["buzzer_pin"] is None:
+        raise ConfigError("alarm.enabled needs at least one of led_pin and buzzer_pin")
+    alarm = AlarmConfig(enabled, pins["led_pin"], pins["buzzer_pin"], max_ms, max_cont)
+    return Config(DeviceConfig(device_id, kind), backend, session, serial, camera, state_dir, limits, images, alarm)
 
 
 def load_config(path: str | os.PathLike) -> Config:

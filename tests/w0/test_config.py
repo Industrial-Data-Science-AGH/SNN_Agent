@@ -124,6 +124,55 @@ def test_token_file_must_be_private_and_hold_one_token(tmp_path):
         read_token(c)
 
 
+def test_the_alarm_is_off_by_default_and_pins_are_validated():
+    assert parse_config(GOOD).alarm.enabled is False
+    c = parse_config(cfg(alarm__enabled=True, alarm__led_pin=17, alarm__buzzer_pin=27, alarm__max_ms=5000))
+    assert (c.alarm.enabled, c.alarm.led_pin, c.alarm.buzzer_pin, c.alarm.max_ms) == (True, 17, 27, 5000)
+    assert parse_config(cfg(alarm__enabled=True)).alarm.buzzer_pin is None  # the buzzer is an explicit opt-in
+    assert parse_config(cfg(alarm__enabled=True, alarm__led_pin=0, alarm__buzzer_pin=27)).alarm.led_pin is None
+
+
+@pytest.mark.parametrize(
+    "changes,needle",
+    [
+        ({"alarm__led_pin": 1}, "BCM pin"),
+        ({"alarm__led_pin": 28}, "BCM pin"),
+        ({"alarm__buzzer_pin": 99}, "BCM pin"),
+        ({"alarm__led_pin": 17, "alarm__buzzer_pin": 17}, "must differ"),
+        ({"alarm__max_ms": 40000}, "max_ms"),
+        ({"alarm__max_ms": 20000, "alarm__max_continuous_ms": 10000}, "at least alarm.max_ms"),
+        ({"alarm__enabled": True, "alarm__led_pin": 0}, "at least one"),
+        ({"alarm__enabled": "yes"}, "wrong type"),
+        ({"alarm__enabled": 1}, "wrong type"),
+        ({"alarm__led_pin": True}, "wrong type"),
+        ({"alarm__pin": 17}, "unknown key"),
+    ],
+)
+def test_invalid_alarm_settings_are_refused(changes, needle):
+    with pytest.raises(ConfigError, match=needle):
+        parse_config(cfg(**changes))
+
+
+def test_a_replay_image_needs_a_replay_session_and_excludes_a_real_camera():
+    c = parse_config(cfg(session__mode="replay", camera__replay_image="/srv/scene.jpg"))
+    assert c.camera.replay_image == "/srv/scene.jpg" and c.camera.serial is None
+    with pytest.raises(ConfigError, match="needs session.mode"):
+        parse_config(cfg(session__mode="demo", camera__replay_image="/srv/scene.jpg"))  # a file must never stand in for a live camera
+    with pytest.raises(ConfigError, match="alternatives"):
+        parse_config(cfg(session__mode="replay", camera__replay_image="/srv/scene.jpg", camera__serial="308643024550"))
+
+
+def test_camera_tuning_is_optional_bounded_and_typed():
+    c = parse_config(cfg(camera__serial="308643024550"))
+    assert (c.camera.width, c.camera.fps, c.camera.dynamic_framerate, c.camera.enhance) == (None, None, None, None)
+    c = parse_config(cfg(camera__serial="308643024550", camera__width=640, camera__height=480, camera__fps=30,
+                         camera__dynamic_framerate=False, camera__enhance=False))  # fmt: skip
+    assert (c.camera.width, c.camera.height, c.camera.fps, c.camera.dynamic_framerate, c.camera.enhance) == (640, 480, 30, False, False)
+    for key, value in (("fps", 0), ("fps", 61), ("width", 100), ("height", 2000), ("enhance", 1), ("dynamic_framerate", "yes"), ("fps", 1.5)):
+        with pytest.raises(ConfigError):
+            parse_config(cfg(camera__serial="308643024550", **{f"camera__{key}": value}))
+
+
 def test_the_shipped_example_config_stays_valid():
     from pathlib import Path
 
@@ -131,6 +180,7 @@ def test_the_shipped_example_config_stays_valid():
     c = load_config(example)
     assert c.device.input_kind == "stand_in" and len(c.serial.channels) == 7 and c.camera.serial == "308643024550"
     assert c.serial.path.startswith("/dev/serial/by-id/") and c.images.local_dir is None
+    assert c.alarm.enabled is False  # the shipped example never energises a pin by itself
 
 
 def test_module_imports_without_site_packages():

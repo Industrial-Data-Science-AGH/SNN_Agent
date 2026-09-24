@@ -18,6 +18,7 @@ overflow of any buffer is counted and reported in the heartbeat.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import hashlib
 import json
 import logging
@@ -37,7 +38,7 @@ from rpi_agents.agent.batching import BatchAssembler, BatchDraft, to_spike_batch
 from rpi_agents.agent.commands import CommandHandler, ImageSink, SessionRef
 from rpi_agents.agent.config import Config, ConfigError, load_config, read_token
 from rpi_agents.agent.outbox import Entry, Outbox
-from rpi_agents.agent.ports import CameraAdapter
+from rpi_agents.agent.ports import AlarmAdapter, CameraAdapter
 from rpi_agents.agent.serial_protocol import (
     BootEvent,
     BootLine,
@@ -61,6 +62,7 @@ SCHEMA_VERSION = "1.0"
 MAX_CLOSED_CONTEXTS = 8
 SESSION_RETRY_PERMANENT_S = 30.0
 DEFAULT_IMAGE_BYTES, DEFAULT_MAX_FRAMES = 1_048_576, 3
+SESSION_DEAD_CODES = ("SESSION_LOST", "SESSION_STOPPED", "SESSION_MISMATCH")  # the backend no longer has this session
 
 
 def _rid(prefix: str, ident: str) -> str:
@@ -91,6 +93,8 @@ class BootContext:
     pre_session: deque = field(default_factory=deque)  # drafts waiting for their session
     create: _Create | None = None  # set once the first frame fixes the session's source_start_us
     session: SessionRef | None = None
+    seq_base: int | None = None  # batch_seq of the first batch stamped for the current session (each session counts from 0)
+    recreations: int = 0
     closed: bool = False
     cancelled: bool = False  # abandoned before its session existed; a late creation must be stopped at once
 
@@ -117,6 +121,7 @@ class Bridge:
         source_factory: Callable[[], ByteSource],
         camera: CameraAdapter | None = None,
         sink: ImageSink | None = None,
+        alarm: AlarmAdapter | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         utc_now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         new_boot_id: Callable[[], str] = lambda: uuid.uuid4().hex[:16],
@@ -124,12 +129,14 @@ class Bridge:
         worker_tick_s: float = 0.2,
     ):
         self._cfg, self._api, self._state, self._source_factory = config, api, state, source_factory
-        self._camera, self._mono, self._utc_now, self._new_boot_id = camera, monotonic, utc_now, new_boot_id
+        self._camera, self._alarm = camera, alarm
+        self._mono, self._utc_now, self._new_boot_id = monotonic, utc_now, new_boot_id
         self._version, self._tick_s = agent_version, worker_tick_s
         self._lock = threading.Lock()
         self._current: BootContext | None = None
         self._closed: list[BootContext] = []
         self._create_queue: deque[BootContext] = deque()
+        self._dead_sessions: set[str] = set()  # reported by the worker, acted on by the main thread
         self._unstopped: dict[str, str | None] = {}  # session_id -> request_id of its stop, once enqueued
         self._counters = Counters()
         self._connected, self._stalled, self._draining = False, False, False
@@ -140,7 +147,7 @@ class Bridge:
         self._retry_at, self._backoff = 0.0, Backoff(0.5, 30.0)
         self._worker_stop, self._commands_stop = threading.Event(), threading.Event()
         self._handler = CommandHandler(
-            device_id=config.device.id, state=state, camera=camera, sink=sink,
+            device_id=config.device.id, state=state, camera=camera, sink=sink, alarm=alarm,
             session=self._session_ref, enqueue_ack=lambda ack: self._enqueue(ack["request_id"], ack, "ack"),
             utc_now=utc_now, monotonic=monotonic,
         )  # fmt: skip
@@ -153,6 +160,7 @@ class Bridge:
 
     def run(self, stop: threading.Event) -> int:
         """Serve until `stop` is set or a finite (replay) source ends. Returns a process exit code."""
+        self._init_alarm()
         self._recover_startup()
         worker = threading.Thread(target=self._worker_loop, name="snn-edge-worker", daemon=True)
         commands = threading.Thread(target=self._command_loop, name="snn-edge-commands", daemon=True)
@@ -295,6 +303,9 @@ class Bridge:
             self._put_batch(ctx, ctx.pre_session.popleft())
 
     def _put_batch(self, ctx: BootContext, draft: BatchDraft) -> None:
+        if ctx.seq_base is None:
+            ctx.seq_base = draft.batch_seq  # a session counts its own batches from 0
+        draft = dataclasses.replace(draft, batch_seq=draft.batch_seq - ctx.seq_base)
         payload = to_spike_batch(
             draft, device_id=self._cfg.device.id, session_id=ctx.session.session_id, epoch=ctx.session.epoch,
             encoder_hash=self._cfg.session.encoder_hash,
@@ -327,8 +338,31 @@ class Bridge:
             log.error("dropping boot %s: its session was never created", lost.boot_id)
         self._maintain()
 
+    def _replace_dead_sessions(self) -> None:
+        """A session the backend no longer has: open a new one for the same boot, starting where the data goes on."""
+        with self._lock:
+            dead, self._dead_sessions = self._dead_sessions, set()
+        if not dead:
+            return
+        for ctx in [c for c in [self._current, *self._closed] if c is not None]:
+            if ctx.session is None or ctx.session.session_id not in dead:
+                continue
+            log.warning("session %s is gone on the backend (boot %s)", ctx.session.session_id, ctx.boot_id)
+            ctx.session, ctx.seq_base = None, None
+            if ctx is self._current and ctx.assembler is not None:
+                ctx.recreations += 1
+                start = ctx.assembler.next_batch_start_us
+                ctx.create = _Create(_rid("create", f"{ctx.boot_id}-{ctx.recreations}"), start if start is not None else 0)
+                with self._lock:
+                    self._create_queue.append(ctx)
+            elif ctx in self._closed:  # a finished boot: nothing more to send, what was buffered is lost
+                self._counters.dropped_pre_session += len(ctx.pre_session)
+                ctx.pre_session.clear()
+                self._closed.remove(ctx)
+
     def _maintain(self) -> None:
         """Finalise closed contexts whose session exists, and hand buffered batches to the current one."""
+        self._replace_dead_sessions()
         if self._current is not None:
             self._drain(self._current)
         for ctx in list(self._closed):
@@ -352,6 +386,24 @@ class Bridge:
         ctx = self._current
         return ctx.session if ctx is not None else None
 
+    def _init_alarm(self) -> None:
+        """Outputs start OFF. A missing GPIO backend is logged; alarm commands then fail visibly."""
+        initialize = getattr(self._alarm, "initialize", None)
+        if initialize is None:
+            return
+        try:
+            initialize()
+        except Exception as exc:
+            log.error("alarm outputs unavailable: %s", exc)
+
+    def _alarm_off(self) -> None:
+        if self._alarm is None:
+            return
+        try:
+            self._alarm.off()
+        except Exception:
+            log.error("could not confirm the alarm outputs are off")
+
     def _recover_startup(self) -> None:
         """A session left running by a previous process is stopped; commands it interrupted are failed."""
         raw = self._state.kv_get("session")
@@ -369,6 +421,7 @@ class Bridge:
         self._draining = True
         self._commands_stop.set()
         commands.join(timeout=self._cfg.limits.drain_s + 5)
+        self._alarm_off()  # no command can start one now; nothing may stay on after the bridge stops
         self._close_current()
         deadline = self._mono() + self._cfg.limits.drain_s
         while self._mono() < deadline:
@@ -456,12 +509,21 @@ class Bridge:
                 self._state.mark_sent(entry.request_id)
                 self._backoff.reset()
             elif result.outcome is Outcome.PERMANENT:
+                if entry.kind == "batch" and result.code in SESSION_DEAD_CODES:
+                    self._report_dead_session(entry.payload["session_id"])
                 self._state.mark_dead(entry.request_id, f"{result.status} {result.code or ''}".strip())
                 log.error("dead-lettered %s %s: HTTP %s %s", entry.kind, entry.request_id, result.status, result.code)
             else:
                 self._state.record_failure(entry.request_id, result.code or result.detail)
                 self._retry_at = now + self._backoff.next_delay(result.retry_after_s)
                 return  # keep order: nothing after a failed entry is sent first
+
+    def _report_dead_session(self, session_id: str) -> None:
+        with self._lock:
+            self._dead_sessions.add(session_id)
+            self._unstopped.pop(session_id, None)  # the backend has already ended it: nothing left to stop
+        if self._state.kv_get("session") and session_id in self._state.kv_get("session"):
+            self._state.kv_delete("session")
 
     def _deliver(self, entry: Entry) -> Result:
         payload = entry.payload
@@ -559,16 +621,36 @@ def build_bridge(config: Config, *, camera=None, sink=None) -> Bridge:
         def source_factory() -> ByteSource:
             return SerialPortSource(serial.path, serial.baud)
 
+    if sink is None and config.images.upload:
+        from rpi_agents.agent.sinks import BackendImageSink
+
+        sink = BackendImageSink(api)
     if sink is None and config.images.local_dir:
         from rpi_agents.agent.sinks import LocalDirSink
 
         sink = LocalDirSink(config.images.local_dir, config.images.keep)
+    alarm = None
+    if config.alarm.enabled:
+        from rpi_agents.agent.alarm import GpioAlarm
+
+        alarm = GpioAlarm(
+            led_pin=config.alarm.led_pin, buzzer_pin=config.alarm.buzzer_pin,
+            max_ms=config.alarm.max_ms, max_continuous_ms=config.alarm.max_continuous_ms,
+        )  # fmt: skip
+    if camera is None and config.camera.replay_image:
+        from rpi_agents.agent.camera import ReplayCamera
+
+        camera = ReplayCamera(config.camera.replay_image)
     if camera is None and config.camera.serial:
         from rpi_agents.agent.camera import CameraConfig, UvcCamera
 
-        camera = UvcCamera(CameraConfig(serial=config.camera.serial))
+        tuning = {k: v for k, v in (
+            ("width", config.camera.width), ("height", config.camera.height), ("fps", config.camera.fps),
+            ("dynamic_framerate", config.camera.dynamic_framerate), ("enhance", config.camera.enhance),
+        ) if v is not None}  # fmt: skip
+        camera = UvcCamera(CameraConfig(serial=config.camera.serial, **tuning))
     return Bridge(
-        config, api=api, state=state, source_factory=source_factory, camera=camera, sink=sink,
+        config, api=api, state=state, source_factory=source_factory, camera=camera, sink=sink, alarm=alarm,
         agent_version=os.environ.get("SNN_EDGE_VERSION", "dev"),
     )  # fmt: skip
 

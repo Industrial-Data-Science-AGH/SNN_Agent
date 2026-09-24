@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import copy
+import re
 
 from contracts.validation import ContractError, content_hash, validate
 from rpi_agents.cloud.app.context import Context
@@ -52,6 +53,16 @@ def session_state(record: dict, ctx: Context) -> dict:
                    "max_frames": ctx.settings.capture_frames},
         "demo": record["mode"] != "live",
     }  # fmt: skip
+
+
+_STABLE_CODE = re.compile(r"[A-Z][A-Z0-9_]{2,47}")
+
+
+def _reason(exc: Exception) -> str:
+    """Why a runtime refused: its own stable code when it has one (RuntimeLoadError.code, e.g. DT_ENCODER_MISMATCH),
+    else only the exception type. Never the message: that is prose and may quote model contents."""
+    code = getattr(exc, "code", None)
+    return code if isinstance(code, str) and _STABLE_CODE.fullmatch(code) else type(exc).__name__
 
 
 class SessionService:
@@ -97,7 +108,7 @@ class SessionService:
         try:  # a refused model must leave no trace
             runtime.load(ctx.manifest)
         except Exception as exc:
-            raise ContractError("RUNTIME_REFUSED", f"Runtime refused the model: {type(exc).__name__}", 409) from None
+            raise ContractError("RUNTIME_REFUSED", f"Runtime refused the model: {_reason(exc)}", 409) from None
 
         for _ in range(_CAS_ATTEMPTS):
             device = tables.get(T_DEVICES, DEVICES_PK, device_id)
@@ -108,7 +119,7 @@ class SessionService:
             try:
                 runtime.reset(epoch=epoch, source_time_us=body["source_start_us"])
             except Exception as exc:
-                raise ContractError("RUNTIME_REFUSED", f"Runtime could not start: {type(exc).__name__}", 409) from None
+                raise ContractError("RUNTIME_REFUSED", f"Runtime could not start: {_reason(exc)}", 409) from None
             try:
                 tables.replace(T_DEVICES, DEVICES_PK, device_id,
                                device.data | {"epoch": epoch, "active_session_id": session_id}, device.etag)  # fmt: skip

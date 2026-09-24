@@ -152,3 +152,30 @@ def test_interrupting_a_session_ends_it_and_frees_the_device():
     record = env.storage.tables.get(T_SESSIONS, "demo-pi", state["session_id"]).data
     assert (record["state"], record["stop_reason"]) == ("stopped", "runtime_state_unknown")
     assert env.sessions.create("demo-pi", env.create_body(request_id="create-2"))["epoch"] == 2
+
+
+class CodedError(ValueError):
+    def __init__(self, code, message):
+        super().__init__(f"{code}: {message}")
+        self.code = code
+
+
+@pytest.mark.parametrize("failing", ["load_error", "reset_error"])
+def test_a_runtimes_stable_error_code_reaches_the_caller_but_its_message_does_not(failing):
+    env = Env()
+    env.runtime_kwargs = {failing: CodedError("DT_ENCODER_MISMATCH", "secret model detail 12345")}
+    with pytest.raises(ContractError) as error:
+        env.open_session()
+    assert code(error) == ("RUNTIME_REFUSED", 409)
+    assert "DT_ENCODER_MISMATCH" in error.value.args[0] and "secret" not in error.value.args[0]
+
+
+@pytest.mark.parametrize("odd", ["dt mismatch", "lower_case", "X", "A" * 60, "BAD CODE", 5, None])
+def test_a_code_that_is_not_a_plain_identifier_is_ignored_in_favour_of_the_type_name(odd):
+    env = Env()
+    err = ValueError("boom")
+    err.code = odd
+    env.runtime_kwargs = {"load_error": err}
+    with pytest.raises(ContractError) as error:
+        env.open_session()
+    assert "ValueError" in error.value.args[0] and str(odd) not in error.value.args[0].replace("ValueError", "")

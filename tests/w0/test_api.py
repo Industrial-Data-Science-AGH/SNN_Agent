@@ -15,6 +15,7 @@ from rpi_agents.agent.api import (
     TransportError,
     UrllibTransport,
     classify,
+    is_local_host,
     validate_base_url,
 )
 
@@ -34,7 +35,7 @@ class Server:
         class Handler(BaseHTTPRequestHandler):
             def _serve(self):
                 length = int(self.headers.get("Content-Length") or 0)
-                body = self.rfile.read(length).decode() if length else ""
+                body = self.rfile.read(length).decode("latin-1") if length else ""
                 outer.requests.append((self.command, self.path, dict(self.headers), body))
                 status, payload, extra = outer.script.pop(0) if outer.script else (200, {"ok": True}, {})
                 raw = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
@@ -170,6 +171,24 @@ def test_client_builds_paths_query_and_idempotency_headers(server):
     assert "Idempotency-Key" not in server.requests[2][2]
 
 
+def test_an_image_is_sent_as_raw_bytes_with_a_stable_idempotency_key_and_its_hash(server):
+    api = ApiClient(UrllibTransport(server.url, token="s3cret"))
+    jpeg = b"\xff\xd8" + bytes(range(256)) * 4 + b"\xff\xd9"
+    server.script.append((200, {"image_id": "evt-0"}, {}))
+    result = api.upload_image("evt", 0, jpeg, sha256="ab" * 32, captured_at="2026-09-24T12:00:04Z")
+    assert (result.outcome, result.body) == (Outcome.OK, {"image_id": "evt-0"})
+    method, path, headers, body = server.requests[0]
+    assert (method, path) == ("POST", "/v1/events/evt/image")
+    assert headers["Content-Type"] == "image/jpeg" and headers["Idempotency-Key"] == "evt-0"
+    assert headers["X-Image-Index"] == "0" and headers["X-Image-Sha256"] == "ab" * 32 and headers["X-Captured-At"] == "2026-09-24T12:00:04Z"
+    assert headers["Authorization"] == "Bearer s3cret" and body.encode("latin-1") == jpeg  # the bytes arrive untouched, not JSON-encoded
+
+
+def test_a_request_cannot_carry_both_a_json_body_and_raw_bytes(server):
+    with pytest.raises(ValueError, match="either"):
+        UrllibTransport(server.url).request("POST", "/x", {"a": 1}, raw=b"x")
+
+
 def test_client_maps_a_dead_server_to_retry_not_an_exception():
     class Dead:
         def request(self, *a, **k):
@@ -190,3 +209,25 @@ def test_backoff_grows_is_capped_honours_hints_and_resets():
 
 def test_module_imports_without_site_packages():
     subprocess.run([sys.executable, "-S", "-c", "import rpi_agents.agent.api"], check=True)
+
+
+@pytest.mark.parametrize("host", ["localhost", "127.0.0.1", "::1", "169.254.129.1", "10.0.0.4", "192.168.1.9", "172.16.3.3", "100.64.100.2", "100.127.255.254", "fd00::1"])
+def test_local_http_is_allowed_only_for_local_and_private_addresses(host):
+    assert is_local_host(host)
+    literal = f"[{host}]" if ":" in host else host
+    assert validate_base_url(f"http://{literal}:42356/msi/token", local_http=True).startswith("http://")
+
+
+@pytest.mark.parametrize("host", ["example.com", "8.8.8.8", "1.1.1.1", "100.63.255.255", "100.128.0.1", "2606:4700::1111", "169.254.169.254.evil.com", "localhost.evil.com", "", None])
+def test_local_http_never_opens_plain_http_to_the_internet(host):
+    assert not is_local_host(host)
+    if host:
+        with pytest.raises(ValueError, match="plain http"):
+            validate_base_url(f"http://{host}/x", local_http=True)
+
+
+def test_a_private_address_is_still_refused_without_the_local_http_flag():
+    with pytest.raises(ValueError, match="plain http"):
+        validate_base_url("http://169.254.129.1:8081/msi/token")
+    with pytest.raises(ValueError, match="plain http"):
+        UrllibTransport("http://10.0.0.4:8000")

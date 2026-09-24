@@ -251,9 +251,12 @@ def test_the_pre_session_buffer_keeps_the_newest_batches_and_the_loss_is_a_visib
     rig.transport.down = True
     threading.Timer(0.5, lambda: setattr(rig.transport, "down", False)).start()
     rig.make(Data(scenario("glass", 200))).run(threading.Event())
-    sent = [b[2]["batch_seq"] for b in rig.transport.log if b[1].endswith("/batches")]
-    assert sent == [6, 7] and rig.bridge.counters.dropped_pre_session == 6  # only the newest two survived
+    posts = [b for b in rig.transport.log if b[1].endswith("/batches")]
+    assert [b[2]["batch_seq"] for b in posts] == [0, 1]  # the session counts its own batches from 0
+    assert rig.bridge.counters.dropped_pre_session == 6  # only the newest two survived
     assert rig.gap_reasons() == ["missing_batch"]  # and the six lost ones are reported, not hidden
+    (gap,) = [g for ack in rig.batch_acks() for g in ack["gaps"]]
+    assert (gap["source_start_us"], gap["source_end_us"]) == (0, posts[0][2]["source_start_us"]) and gap["source_end_us"] > 0  # as a time hole
 
 
 def test_boots_abandoned_while_the_backend_is_down_never_leave_a_session_running(make_rig):
@@ -265,6 +268,53 @@ def test_boots_abandoned_while_the_backend_is_down_never_leave_a_session_running
     assert len(states) == 8 and set(states) == {"stopped"}  # the two oldest boots were dropped, not orphaned
     assert rig.bridge.counters.dropped_pre_session >= 2 and rig.bridge.counters.boots == 10
     assert rig.outbox.stats().pending == 0
+
+
+class Phased(Hold):
+    """Delivers its first chunk at once; each later chunk only after its gate is set. Silent in between."""
+
+    def __init__(self, first, later):
+        super().__init__(first)
+        self.later = list(later)  # [(gate, bytes), ...]
+
+    def read(self, max_bytes, timeout_s):
+        if self.pos >= len(self.data) and self.later and self.later[0][0].is_set():
+            self.data += self.later.pop(0)[1]
+        return super().read(max_bytes, timeout_s)
+
+
+def test_a_session_the_backend_ended_is_replaced_and_the_stream_goes_on_without_a_false_gap(make_rig):
+    rig = make_rig()
+    probe, more = threading.Event(), threading.Event()
+    frames = scenario("silence", 200).splitlines(keepends=True)  # [boot line, 200 frames]
+    rig.make(Phased(b"".join(frames[:101]), [(probe, b"".join(frames[101:126])), (more, b"".join(frames[126:]))]))
+    rig.start()
+    try:
+        assert wait_for(lambda: rig.sessions() and rig.sessions()[0]["received_seq"] == 3)  # the first 100 hops arrived
+        (old,) = rig.sessions()
+        stop = {"schema_version": "1.0", "request_id": "ext-stop", "device_id": "demo-pi", "session_id": old["session_id"], "epoch": old["epoch"]}
+        assert rig.client.post(f"/v1/sessions/{old['session_id']}/stop", json=stop, headers={"Idempotency-Key": "ext-stop"}).status_code == 200
+        probe.set()  # one batch that the backend will refuse, which is how the bridge finds out
+        assert wait_for(lambda: len(rig.sessions()) == 2)  # a new session for the same boot
+        more.set()  # and the rest of the stream, which now has somewhere to go
+        assert wait_for(lambda: rig.sessions()[1]["received_seq"] is not None and rig.sessions()[1]["received_seq"] >= 2)
+    finally:
+        rig.finish()
+    first, second = rig.sessions()
+    assert first["state"] == "stopped" and second["state"] == "stopped" and second["session_id"] != first["session_id"]
+    to_second = [b for b in rig.transport.log if b[1] == f"/v1/sessions/{second['session_id']}/batches" and b[3] == 200]
+    assert [b[2]["batch_seq"] for b in to_second][:3] == [0, 1, 2]  # the new session counts from 0
+    assert all(b[4]["gaps"] == [] for b in to_second)  # it starts exactly where the data goes on: no false gap
+    assert to_second[0][2]["source_start_us"] >= 25 * 9984 * 4  # after everything that went to the dead session
+    assert rig.bridge.counters.boots == 1 and rig.outbox.stats().dead >= 1  # one boot, two sessions, the lost batch counted
+
+
+def test_a_dead_session_of_a_finished_boot_is_forgotten_without_disturbing_the_current_one(make_rig):
+    rig = make_rig()
+    rig.make(Data(scenario("reset", 100)))
+    rig.transport.overrides.append((lambda m, p, b: p.endswith("/batches") and b["batch_seq"] == 1 and b["boot_id"] != "x", Response(409, {"error": {"code": "SESSION_STOPPED"}})))
+    rig.bridge.run(threading.Event())  # must finish cleanly whatever the backend says about old sessions
+    assert rig.outbox.stats().pending == 0 and rig.bridge.counters.boots == 2
 
 
 def test_a_permanently_rejected_batch_is_dead_lettered_and_does_not_block_the_rest(make_rig):
@@ -392,6 +442,38 @@ def test_the_command_thread_is_stopped_before_the_boot_and_its_session_are_close
     assert closes and not any(closes)  # every stop-time close, or a capture could outlive its own session
 
 
+class FakeAlarm:
+    led_available = buzzer_available = True
+
+    def __init__(self, init_error=None):
+        self.events, self.init_error = [], init_error
+
+    def initialize(self):
+        self.events.append("initialize")
+        if self.init_error:
+            raise self.init_error
+
+    def apply(self, *, duration_ms, led, buzzer):
+        self.events.append(("apply", duration_ms, led, buzzer))
+
+    def off(self):
+        self.events.append("off")
+
+
+def test_alarm_outputs_start_off_and_are_switched_off_when_the_bridge_stops(make_rig):
+    rig = make_rig()
+    alarm = FakeAlarm()
+    rig.make(Data(scenario("glass", 60)), alarm=alarm).run(threading.Event())
+    assert alarm.events[0] == "initialize" and alarm.events[-1] == "off" and alarm.events.count("off") >= 1
+    assert rig.sessions()[0]["state"] == "stopped"
+
+
+def test_a_broken_gpio_backend_is_logged_and_never_stops_data(make_rig):
+    rig = make_rig()
+    rig.make(Data(scenario("glass", 200)), alarm=FakeAlarm(init_error=RuntimeError("no lgpio"))).run(threading.Event())
+    assert rig.sessions()[0]["received_seq"] == 7
+
+
 def test_a_capture_without_a_camera_is_failed_honestly_and_nothing_is_taken(make_rig):
     rig = make_rig(backend__demo_scenario="trigger")
     rig.make(Hold(scenario("glass", 200)), camera=None, sink=Sink())
@@ -448,3 +530,38 @@ def test_the_bridge_and_all_its_modules_import_without_site_packages():
 
     code = "import rpi_agents.agent.bridge, rpi_agents.agent.commands, rpi_agents.agent.sinks, rpi_agents.agent.api"
     subprocess.run([sys.executable, "-S", "-c", code], check=True)
+
+
+def test_build_bridge_serves_a_synthetic_image_only_from_a_replay_session(tmp_path):
+    import copy
+
+    from rpi_agents.agent.bridge import build_bridge
+    from rpi_agents.agent.camera import ReplayCamera
+    from rpi_agents.agent.config import parse_config
+    from tests.w0.test_config import GOOD
+
+    image = tmp_path / "scene.jpg"
+    image.write_bytes(b"\xff\xd8scene\xff\xd9")
+    data = copy.deepcopy(GOOD)
+    data["session"]["mode"] = "replay"
+    data["camera"] = {"replay_image": str(image)}
+    data["state"] = {"dir": str(tmp_path / "state")}
+    bridge = build_bridge(parse_config(data))
+    assert isinstance(bridge._camera, ReplayCamera)
+
+
+def test_build_bridge_passes_camera_tuning_to_the_adapter_and_keeps_defaults_otherwise(tmp_path):
+    import copy
+
+    from rpi_agents.agent.bridge import build_bridge
+    from rpi_agents.agent.config import parse_config
+    from tests.w0.test_config import GOOD
+
+    data = copy.deepcopy(GOOD)
+    data["state"] = {"dir": str(tmp_path / "state")}
+    data["camera"] = {"serial": "308643024550"}
+    default = build_bridge(parse_config(data))._camera._cfg
+    assert (default.width, default.height, default.fps, default.dynamic_framerate, default.enhance) == (1280, 720, 15, True, True)
+    data["camera"] = {"serial": "308643024550", "width": 640, "height": 480, "fps": 30, "dynamic_framerate": False, "enhance": False}
+    tuned = build_bridge(parse_config(data))._camera._cfg
+    assert (tuned.width, tuned.height, tuned.fps, tuned.dynamic_framerate, tuned.enhance) == (640, 480, 30, False, False)

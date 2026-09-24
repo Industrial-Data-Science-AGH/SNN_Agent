@@ -35,11 +35,28 @@ stall_s = 2.0
 
 [camera]
 serial = "308643024550"           # USB serial number of the camera (RealSense D415 here); empty = no camera
+# Optional tuning; the defaults are 1280x720, 15 fps ceiling, dynamic frame rate on, enhance on. In a dim room the camera
+# lengthens its exposure (down to a lower frame rate) instead of coming out dark and noisy; "enhance" removes colour speckle
+# and lifts a dark frame. Frames are never averaged, so a moving person is not smeared.
+# width = 1280
+# height = 720
+# fps = 15
+# dynamic_framerate = true
+# enhance = true
 
 [images]
 # DEMO ONLY: keep captured JPEGs on this device (newest `keep`). Nothing is uploaded. Photos can show people.
 # local_dir = "/var/lib/snn-edge/images"
 # keep = 20
+
+[alarm]
+# Off by default: no GPIO pin is touched unless enabled. BCM pin numbers. The defaults come from the previous
+# agent (LED GPIO17, buzzer GPIO27, where the buzzer was not wired): verify the wiring before enabling.
+enabled = false
+# led_pin = 17
+# buzzer_pin = 27                 # 0 or absent = no buzzer
+max_ms = 10000                    # local limit per activation, whatever the command asks for (<= 30000)
+max_continuous_ms = 30000         # re-applying cannot keep the alarm on longer than this in a row
 
 [state]
 dir = "/var/lib/snn-edge"         # outbox database and session state; created with mode 0700

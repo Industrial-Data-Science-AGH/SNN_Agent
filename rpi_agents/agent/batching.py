@@ -74,6 +74,13 @@ class BatchAssembler:
         """Start of the first observed hop: the `source_start_us` for creating the session."""
         return None if self._origin is None else self._at(self._first_hop)
 
+    @property
+    def next_batch_start_us(self) -> int | None:
+        """Where the next batch to be emitted will start: the open batch's start, or the next hop if none is open."""
+        if self._origin is None:
+            return None
+        return self._at(self._start if self._start is not None else self._cursor)
+
     def _grid(self, hop_index: int) -> int:
         return (hop_index * self._hop * 1_000_000 + self._fs // 2) // self._fs
 

@@ -1,9 +1,11 @@
-"""Capture-command handling for the edge. Standard library only; no hardware is touched here directly.
+"""Command handling for the edge (capture and alarm). Standard library only; hardware is reached only through
+the camera and alarm adapters.
 
 Rules this module enforces:
 - Never photograph unless the image can be stored: without an ImageSink or camera the command fails first.
-- Never actuate: any command that is not `capture` (an alarm, for instance) is answered `failed /
-  UNSUPPORTED_COMMAND`. Alarm output needs its own adapter with a local time limit.
+- Never actuate unless it is safe: an alarm needs a configured adapter, valid parameters, a matching session
+  and a TTL that has not run out at the moment of the apply. Every other command type is answered `failed /
+  UNSUPPORTED_COMMAND`. The adapter itself enforces the local time limit, independent of the cloud.
 - A command_id is handled at most once, durably (a restart cannot repeat it): duplicates do nothing.
 - Expiry is decided on a local monotonic clock fixed when the command is received, so a wall-clock jump
   cannot extend it.
@@ -23,13 +25,15 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable, Protocol
 
+from rpi_agents.agent.alarm import AlarmUnavailable
 from rpi_agents.agent.camera import CameraDisconnected, CameraError, CameraOversize
 from rpi_agents.agent.outbox import Outbox
-from rpi_agents.agent.ports import CameraAdapter
+from rpi_agents.agent.ports import AlarmAdapter, CameraAdapter
 
 log = logging.getLogger("snn_edge.commands")
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
 SCHEMA_VERSION = "1.0"
+MAX_TTL_S = 30  # contract: a command lives at most 30 seconds
 
 
 class SinkUnavailable(RuntimeError):
@@ -79,10 +83,12 @@ class CommandHandler:
         sink: ImageSink | None,
         session: Callable[[], SessionRef | None],
         enqueue_ack: Callable[[dict], None],
+        alarm: AlarmAdapter | None = None,
         utc_now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         monotonic: Callable[[], float] = time.monotonic,
     ):
         self._device_id, self._state, self._camera, self._sink = device_id, state, camera, sink
+        self._alarm_adapter = alarm
         self._session, self._enqueue, self._utc_now, self._mono = session, enqueue_ack, utc_now, monotonic
 
     def _ack(self, command: dict, status: str, *, error: str | None = None, image_id: str | None = None) -> None:
@@ -152,11 +158,14 @@ class CommandHandler:
             return "duplicate"
         self._state.kv_set(f"cmd:{command_id}", json.dumps({k: command[k] for k in ids}))
         self._ack(command, "accepted")
+        if command["type"] == "alarm":
+            return self._alarm(command, deadline=received + remaining)
         return self._capture(command, deadline=received + remaining)
 
     def _problem(self, command: dict) -> str | None:
         """An error code when the command must not be executed, else None."""
-        if command.get("type") != "capture":
+        kind = command.get("type")
+        if kind not in ("capture", "alarm"):
             return "UNSUPPORTED_COMMAND"
         if command.get("schema_version") != SCHEMA_VERSION or not isinstance(command.get("event_id"), str):
             return "INVALID_COMMAND"
@@ -165,24 +174,74 @@ class CommandHandler:
         issued, expires = _parse_utc(command.get("issued_at")), _parse_utc(command.get("expires_at"))
         if issued is None or expires is None or expires <= issued:
             return "INVALID_COMMAND"
+        if (expires - issued).total_seconds() > MAX_TTL_S:
+            return "INVALID_COMMAND"
+        problem = self._capture_parameters(command) if kind == "capture" else self._alarm_parameters(command)
+        if problem is not None:
+            return problem
+        session = self._session()
+        if session is None or (session.session_id, session.epoch) != (command["session_id"], command["epoch"]):
+            return "SESSION_MISMATCH"
+        if command.get("mode") != ("live" if session.mode == "live" else "demo"):
+            return "MODE_MISMATCH"
+        return self._capture_resources() if kind == "capture" else self._alarm_resources(command["parameters"])
+
+    @staticmethod
+    def _capture_parameters(command: dict) -> str | None:
         params = command.get("parameters")
         if not isinstance(params, dict) or set(params) != {"frames", "max_bytes"}:
             return "INVALID_COMMAND"
         frames, size = params["frames"], params["max_bytes"]
         if any(isinstance(v, bool) or not isinstance(v, int) for v in (frames, size)):
             return "INVALID_COMMAND"
-        if not (1 <= frames <= 3 and 1 <= size <= 1_048_576):
+        return None if 1 <= frames <= 3 and 1 <= size <= 1_048_576 else "INVALID_COMMAND"
+
+    @staticmethod
+    def _alarm_parameters(command: dict) -> str | None:
+        params = command.get("parameters")
+        policy = command.get("policy_version")
+        if not isinstance(policy, str) or not _ID.fullmatch(policy):
             return "INVALID_COMMAND"
-        session = self._session()
-        if session is None or (session.session_id, session.epoch) != (command["session_id"], command["epoch"]):
-            return "SESSION_MISMATCH"
-        if command.get("mode") != ("live" if session.mode == "live" else "demo"):
-            return "MODE_MISMATCH"
+        if not isinstance(params, dict) or set(params) != {"duration_ms", "led", "buzzer"}:
+            return "INVALID_COMMAND"
+        duration = params["duration_ms"]
+        if isinstance(duration, bool) or not isinstance(duration, int) or not 1 <= duration <= 30_000:
+            return "INVALID_COMMAND"
+        if not isinstance(params["led"], bool) or not isinstance(params["buzzer"], bool):
+            return "INVALID_COMMAND"
+        return None if params["led"] or params["buzzer"] else "INVALID_COMMAND"
+
+    def _capture_resources(self) -> str | None:
         if self._camera is None:
             return "CAMERA_NOT_CONFIGURED"
         if self._sink is None:
             return "IMAGE_SINK_UNAVAILABLE"  # nothing could store the image, so do not take it
         return None
+
+    def _alarm_resources(self, params: dict) -> str | None:
+        if self._alarm_adapter is None:
+            return "ALARM_NOT_CONFIGURED"
+        for name in ("led", "buzzer"):
+            if params[name] and not getattr(self._alarm_adapter, f"{name}_available", True):
+                return "OUTPUT_NOT_CONFIGURED"  # refuse before energising the outputs that are wired
+        return None
+
+    def _alarm(self, command: dict, *, deadline: float) -> str:
+        params = command["parameters"]
+        if self._mono() >= deadline:  # never switch an alarm on after its command has expired
+            return self._terminal(command, "expired", "COMMAND_EXPIRED")
+        try:
+            self._alarm_adapter.apply(duration_ms=params["duration_ms"], led=params["led"], buzzer=params["buzzer"])
+        except AlarmUnavailable:
+            return self._terminal(command, "failed", "ALARM_UNAVAILABLE")
+        except Exception as exc:  # whatever went wrong, leave the outputs off
+            log.exception("alarm command %s crashed: %s", command["command_id"], type(exc).__name__)
+            try:
+                self._alarm_adapter.off()
+            except Exception:
+                log.error("alarm off after a failed apply also failed")
+            return self._terminal(command, "failed", "ALARM_FAILED")
+        return self._terminal(command, "completed", None)
 
     def _capture(self, command: dict, *, deadline: float) -> str:
         session = self._session()

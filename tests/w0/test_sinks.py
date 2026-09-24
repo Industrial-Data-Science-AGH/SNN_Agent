@@ -6,9 +6,10 @@ import sys
 import pytest
 
 from contracts.validation import fixture
+from rpi_agents.agent.api import Outcome, Result
 from rpi_agents.agent.commands import SinkUnavailable
 from rpi_agents.agent.config import ConfigError, parse_config
-from rpi_agents.agent.sinks import LocalDirSink
+from rpi_agents.agent.sinks import BackendImageSink, LocalDirSink
 
 CREATE = fixture("session-create")
 GOOD = {
@@ -73,3 +74,62 @@ def test_the_images_section_is_parsed_and_validated():
 
 def test_module_imports_without_site_packages():
     subprocess.run([sys.executable, "-S", "-c", "import rpi_agents.agent.sinks"], check=True)
+
+
+class FakeApi:
+    def __init__(self, results):
+        self.results, self.calls = list(results), []
+
+    def upload_image(self, event_id, index, jpeg, *, sha256, captured_at):
+        self.calls.append((event_id, index, jpeg, sha256, captured_at))
+        return self.results.pop(0)
+
+
+def ok(image_id="evt-0"):
+    return Result(Outcome.OK, 200, None, {"image_id": image_id})
+
+
+def test_the_backend_sink_uploads_and_returns_the_image_id_the_backend_assigned():
+    import hashlib
+
+    api = FakeApi([ok("evt-0")])
+    sink = BackendImageSink(api)
+    assert store(sink, command_id="c1") == "evt-0"
+    (event_id, index, jpeg, sha, when) = api.calls[0]
+    assert (event_id, index, when) == ("e1", 0, "2026-09-24T12:00:00Z") and sha == hashlib.sha256(jpeg).hexdigest()
+
+
+def test_a_transient_upload_failure_is_retried_and_then_reported_as_an_unavailable_sink():
+    flaky = FakeApi([Result(Outcome.RETRY, 503, None, None), ok()])
+    assert store(BackendImageSink(flaky, attempts=2)) == "evt-0" and len(flaky.calls) == 2
+    down = FakeApi([Result(Outcome.RETRY, None, "TRANSPORT_ERROR", None)] * 2)
+    with pytest.raises(SinkUnavailable, match="TRANSPORT_ERROR"):
+        store(BackendImageSink(down, attempts=2))
+    assert len(down.calls) == 2
+
+
+def test_a_permanent_refusal_is_not_retried():
+    refused = FakeApi([Result(Outcome.PERMANENT, 422, "NOT_JPEG", {"error": {"code": "NOT_JPEG"}})])
+    with pytest.raises(SinkUnavailable, match="NOT_JPEG"):
+        store(BackendImageSink(refused, attempts=3))
+    assert len(refused.calls) == 1
+
+
+@pytest.mark.parametrize("body", [None, {}, {"image_id": 5}, {"image_id": None}, {"other": "x"}])
+def test_a_success_response_without_an_image_id_is_not_trusted(body):
+    with pytest.raises(SinkUnavailable):
+        store(BackendImageSink(FakeApi([Result(Outcome.OK, 200, None, body)]), attempts=1))
+
+
+def test_the_backend_sink_needs_at_least_one_attempt():
+    with pytest.raises(ValueError):
+        BackendImageSink(FakeApi([]), attempts=0)
+
+
+def test_upload_and_local_directory_are_alternative_sinks():
+    assert parse_config(cfg(images={"upload": True})).images.upload is True
+    assert parse_config(GOOD).images.upload is False
+    with pytest.raises(ConfigError, match="alternatives"):
+        parse_config(cfg(images={"upload": True, "local_dir": "/x"}))
+    with pytest.raises(ConfigError, match="wrong type"):
+        parse_config(cfg(images={"upload": "yes"}))

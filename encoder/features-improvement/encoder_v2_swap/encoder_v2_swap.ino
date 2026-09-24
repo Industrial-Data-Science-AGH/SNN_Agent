@@ -24,27 +24,55 @@
 #include <util/atomic.h>
 
 // ================================================================ FLAGI KOMPILACJI
-// define'y zamiast infdefów żeby nie było pomyłek
-// Wszystkie domyślnie 0 => kod IDENTYCZNY z encoder_v2.ino (sprawdzane w tools/run_predictions.sh).
-#define ENC_SET_SWAP 0       // 0: wyłączone (zachowujemy oryginalne kanały)
-#define ENC_PARITY 1         // 1: włącza poprawki zgodności z encoder_twin.py
-#define ENC_DC_FIX 1         // włączone przez ENC_PARITY
-#define ENC_HF_ROUND 1       // włączone przez ENC_PARITY
-#define ENC_EPS_FLOOR 1      // włączone przez ENC_PARITY
-#define ENC_ACC32 0          // 0: wyłączone w czystym wariancie 'parity'
-#define ENC_DEBUG_FEAT 0     // 0: tryb normalny/bench
-#define ENC_BAUD 115200      // Prędkość UART
-#define ENC_ADC_PRESCALER 64 // 64 => ADC 250 kHz => 19231 Hz
-#define ENC_ISR_PIN 0        // 0: wyłączone
-#define ENC_BENCH 1          // 1: tryb pomiarowy - WYŁĄCZ do ostatecznej wersji
+// Wszystkie domyślnie ustawione pod docelowy wariant swap_full. Skrypty mogą je nadpisywać (-D).
+#ifndef ENC_SET_SWAP
+#define ENC_SET_SWAP 1    // 1: peak_cnt -> hjorth_mobility, cv -> autocorr_lag1
+#endif
+#ifndef ENC_PARITY
+#define ENC_PARITY 1      // 1: włącza poprawki zgodności z encoder_twin.py
+#endif
+#ifndef ENC_DC_FIX
+#define ENC_DC_FIX ENC_PARITY
+#endif
+#ifndef ENC_HF_ROUND
+#define ENC_HF_ROUND ENC_PARITY
+#endif
+#ifndef ENC_EPS_FLOOR
+#define ENC_EPS_FLOOR ENC_PARITY
+#endif
+#ifndef ENC_ACC32
+#define ENC_ACC32 1       // 1: 32-bitowe akumulatory 
+#endif
+#ifndef ENC_DEBUG_FEAT
+#define ENC_DEBUG_FEAT 0  // 0: domyślnie milczy. parity_test.py samo nadpisze to na 1
+#endif
+#ifndef ENC_BAUD
+#define ENC_BAUD 115200   // parity_test.py samo nadpisze to na 2000000 dla symulatora
+#endif
+#ifndef ENC_ADC_PRESCALER
+#define ENC_ADC_PRESCALER 64
+#endif
+#ifndef ENC_ISR_PIN
+#define ENC_ISR_PIN 0
+#endif
+#ifndef ENC_BENCH
+#define ENC_BENCH 0       // MUSI BYĆ 0, inaczej pętla główna nie wypisze ramek!
+#endif
 
-// Progi bezwzględne nowych kanałów (poziom kształtu widma, jak hf_lo/hf_hi — NIE z-score).
-// WSTAW wartości z phase0_analysis.py (recommended_thresholds). Domyślnie kanał MILCZY.
-#define MOB_FIRE_BELOW 0     // mobility: odpala gdy mob > MOB_THR
-#define AC_FIRE_BELOW 1      // autocorr_lag1: odpala gdy ac < AC_THR
-#define MOB_THR 2.497324f    // Próg mobility z phase0
-#define AC_THR -0.233599f    // Próg autokorelacji z phase0
 
+// Progi bezwzględne nowych kanałów wyznaczone w fazie 0
+#ifndef MOB_FIRE_BELOW
+#define MOB_FIRE_BELOW 0
+#endif
+#ifndef AC_FIRE_BELOW
+#define AC_FIRE_BELOW 1
+#endif
+#ifndef MOB_THR
+#define MOB_THR 2.497324f
+#endif
+#ifndef AC_THR
+#define AC_THR -0.233599f
+#endif
 // ---------------------------------------------------------------- konfiguracja
 
 #define FS_HZ        19231UL   // realna fs przy prescalerze 32
@@ -146,7 +174,7 @@ static uint32_t pulse_off_us = 0;
 static bool     pulse_active = false;
 
 // tryby
-static bool debug_csv = false;
+static bool debug_csv = true;
 static bool calib_mode = false;
 
 // ---------------------------------------------------------------- ADC

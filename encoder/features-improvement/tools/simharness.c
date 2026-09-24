@@ -1,4 +1,5 @@
 /*
+ * (ma być skompilowany bo inaczej trzeba biblioteki trzymać)
  * simharness.c — uruchamia PRAWDZIWY firmware (fw.elf, ATmega328P @16 MHz) w symulatorze simavr,
  * wstrzykuje próbki ADC (kody 10-bit) co SAMPLE_CYCLES cykli, mierzy liczbę cykli każdego wywołania
  * ISR(ADC_vect) i zbiera wydruk UART (linie debug enkodera).

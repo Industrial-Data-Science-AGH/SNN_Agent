@@ -99,7 +99,7 @@ def compare(twin_mod, codes_u16, fw_rows, kind, event_rms):
         tw = [ff["peak"], None, ff["cv"], ff["zcr"], flux, ff["hf_ratio"], ff["hf_ratio"]]
     bits_tw = et.encode_file("dummy", gain=1.0)              # spike'i twina (ramki po primingu)
     frames = [k for k in range(PRIME, n) if k in fw_rows]
-    evt = np.array([rms[k] >= event_rms for k in frames])    # ramki "zdarzeniowe" (głośne)
+    evt = np.array([rms[k] >= event_rms for k in frames], dtype=bool)    # ramki "zdarzeniowe" (głośne)
     res = {"frames_twin": int(n - PRIME), "frames_fw": len(frames), "event_rms": event_rms,
            "n_event_frames": int(evt.sum()), "features": {}, "channels": {}}
     for c in (0, 1, 2, 3, 4, 5):
@@ -108,8 +108,12 @@ def compare(twin_mod, codes_u16, fw_rows, kind, event_rms):
         a = np.array([fw_rows[k][0][c] for k in frames])
         b = np.array([tw[c][k] for k in frames])
         res["features"][names[c]] = dict(event=_stats(a[evt], b[evt]), background=_stats(a[~evt], b[~evt]))
-    fb_all = np.array([fw_rows[k][1] for k in frames])
-    tb_all = np.array([bits_tw[k - PRIME] for k in frames])
+    fb_all = np.array([fw_rows[k][1] for k in frames], dtype=int)
+    tb_all = np.array([bits_tw[k - PRIME] for k in frames], dtype=int)
+    if fb_all.ndim == 1:
+        fb_all = fb_all.reshape(-1, 7)
+    if tb_all.ndim == 1:
+        tb_all = tb_all.reshape(-1, 7)
     for c in range(7):
         mis = fb_all[:, c] != tb_all[:, c]
         res["channels"][c] = dict(mismatch=int(mis.sum()), mismatch_event=int(mis[evt].sum()),
@@ -144,7 +148,7 @@ def main():
     ap.add_argument("--gain", type=float, default=1.0)
     ap.add_argument("--variant", default="baseline", help="baseline|dcfix|swap|swap_full|all")
     ap.add_argument("--twin", default=os.path.join(KIT, "twin", "encoder_twin_swap.py"))
-    ap.add_argument("--ino", default=os.path.join(KIT, "firmware", "encoder_v2_swap.ino"))
+    ap.add_argument("--ino", default=os.path.join(KIT, "encoder_v2_swap", "encoder_v2_swap.ino"))
     ap.add_argument("--mob-thr", type=float, default=None)
     ap.add_argument("--ac-thr", type=float, default=None)
     ap.add_argument("--seed", type=int, default=0)

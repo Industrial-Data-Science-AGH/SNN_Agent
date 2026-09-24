@@ -11,8 +11,11 @@ from rpi_agents.agent.camera import (
     CameraDisconnected,
     CameraError,
     CameraOversize,
+    ReplayCamera,
     UvcCamera,
     find_v4l2_device,
+    shadow_lift_table,
+    tune_v4l2,
     grab_v4l2_frame,
     yuyv_to_jpeg,
 )
@@ -123,16 +126,18 @@ def camera(sizes, *, find=lambda s, f: "/dev/video4", grab=None, cfg=None):
     seen = iter(sizes)
     calls = {"grab": [], "quality": []}
 
-    def default_grab(*args):
+    def default_grab(*args, fps=None):
         calls["grab"].append(args)
+        calls.setdefault("fps", []).append(fps)
         return b"raw"
 
     def encode(raw, w, h, q):
         calls["quality"].append(q)
         return b"j" * next(seen)
 
+    calls["tune"] = []
     cam = UvcCamera(cfg or CameraConfig(serial=SERIAL), find=find, grab=grab or default_grab, encode=encode,
-                    clock=lambda: NOW)  # fmt: skip
+                    tune=lambda device, controls: calls["tune"].append((device, dict(controls))), clock=lambda: NOW)  # fmt: skip
     return cam, calls
 
 
@@ -142,7 +147,8 @@ def test_capture_returns_utc_timestamp_and_uses_configured_stream():
     assert len(image.jpeg) == 100
     assert image.captured_at == "2026-09-24T10:00:00.123Z"
     assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z", image.captured_at)
-    assert calls["grab"] == [("/dev/video4", 640, 480, "YUYV", 15, 8.0)]  # 14 warmup + the kept frame
+    assert calls["grab"] == [("/dev/video4", 1280, 720, "YUYV", 21, 12.0)]  # 20 warmup + the kept frame
+    assert calls["fps"] == [15]
 
 
 def test_capture_lowers_quality_until_it_fits():
@@ -175,7 +181,8 @@ def test_capture_rejects_non_positive_limit():
 
 @pytest.mark.parametrize(
     "kwargs", [{"serial": ""}, {"serial": "x", "width": 641}, {"serial": "x", "pixel_format": "MJPG"},
-               {"serial": "x", "timeout_s": 0}, {"serial": "x", "jpeg_qualities": ()}],
+               {"serial": "x", "timeout_s": 0}, {"serial": "x", "jpeg_qualities": ()},
+               {"serial": "x", "fps": 0}, {"serial": "x", "fps": 61}],
 )  # fmt: skip
 def test_config_validation(kwargs):
     with pytest.raises(ValueError):
@@ -184,3 +191,129 @@ def test_config_validation(kwargs):
 
 def test_module_imports_without_site_packages():
     subprocess.run([sys.executable, "-S", "-c", "import rpi_agents.agent.camera"], check=True)
+
+
+# ------------------------------------------------------------------------------------ replay camera
+
+JPEG_BYTES = b"\xff\xd8" + b"scene" * 10 + b"\xff\xd9"
+
+
+def test_replay_camera_serves_the_file_with_a_utc_capture_time(tmp_path):
+    path = tmp_path / "scene.jpg"
+    path.write_bytes(JPEG_BYTES)
+    now = datetime(2026, 9, 24, 12, 0, 0, 123000, tzinfo=timezone.utc)
+    camera = ReplayCamera(str(path), clock=lambda: now)
+    path.write_bytes(b"changed after start")  # read once at start-up: a running service does not follow the file
+    image = camera.capture(max_bytes=10_000)
+    assert image.jpeg == JPEG_BYTES and image.captured_at == "2026-09-24T12:00:00.123Z"
+
+
+def test_replay_camera_refuses_a_missing_file_a_non_jpeg_and_an_oversize_frame(tmp_path):
+    with pytest.raises(CameraError, match="cannot read"):
+        ReplayCamera(str(tmp_path / "missing.jpg"))
+    bad = tmp_path / "bad.jpg"
+    bad.write_bytes(b"GIF89a-not-a-jpeg")
+    with pytest.raises(CameraError, match="not a JPEG"):
+        ReplayCamera(str(bad))
+    ok = tmp_path / "ok.jpg"
+    ok.write_bytes(JPEG_BYTES)
+    camera = ReplayCamera(str(ok))
+    with pytest.raises(CameraOversize):
+        camera.capture(max_bytes=len(JPEG_BYTES) - 1)
+    with pytest.raises(ValueError):
+        camera.capture(max_bytes=0)
+    assert camera.capture(max_bytes=len(JPEG_BYTES)).jpeg == JPEG_BYTES
+
+
+# ------------------------------------------------------------------------------------ image quality
+
+
+def test_capture_states_the_dynamic_framerate_control_every_time_in_both_directions():
+    cam, calls = camera([100, 100], cfg=CameraConfig(serial=SERIAL, dynamic_framerate=True))
+    cam.capture(max_bytes=1000)
+    assert calls["tune"] == [("/dev/video4", {"exposure_dynamic_framerate": 1})]
+    cam, calls = camera([100], cfg=CameraConfig(serial=SERIAL, dynamic_framerate=False))
+    cam.capture(max_bytes=1000)
+    assert calls["tune"] == [("/dev/video4", {"exposure_dynamic_framerate": 0})]  # never left over from an earlier setting
+
+
+def test_grab_passes_the_frame_rate_to_the_stream_command_only_when_given(tmp_path):
+    script = tmp_path / "fake-v4l2"
+    script.write_text("#!/bin/sh\necho \"$@\" > " + str(tmp_path / "argv") + "\nhead -c 8 /dev/zero\n")
+    script.chmod(0o755)
+    grab_v4l2_frame("/dev/video4", 2, 2, "YUYV", 1, 5.0, command=(str(script),), fps=15)
+    assert "--set-parm=15" in (tmp_path / "argv").read_text()
+    grab_v4l2_frame("/dev/video4", 2, 2, "YUYV", 1, 5.0, command=(str(script),))
+    assert "--set-parm" not in (tmp_path / "argv").read_text()
+
+
+def test_a_control_the_camera_refuses_is_logged_and_the_others_still_apply(caplog):
+    calls = []
+
+    def run(argv, **kw):
+        calls.append(argv[-1])
+        code = 255 if argv[-1].startswith("gain") else 0
+        return subprocess.CompletedProcess(argv, code, "", "gain: Permission denied")
+
+    with caplog.at_level("WARNING", logger="snn_edge.camera"):
+        tune_v4l2("/dev/video4", {"gain": 70, "exposure_dynamic_framerate": 1}, run=run)
+    assert calls == ["gain=70", "exposure_dynamic_framerate=1"]
+    assert [r.getMessage() for r in caplog.records] == ["camera control gain=70 not applied: gain: Permission denied"]
+
+
+def test_a_missing_v4l2_tool_is_logged_not_raised(caplog):
+    def run(argv, **kw):
+        raise FileNotFoundError("v4l2-ctl")
+
+    with caplog.at_level("WARNING", logger="snn_edge.camera"):
+        tune_v4l2("/dev/video4", {"exposure_dynamic_framerate": 1}, run=run)
+    assert "FileNotFoundError" in caplog.text
+
+
+def test_the_shadow_lift_only_touches_dark_frames_and_never_over_lifts():
+    assert shadow_lift_table(90.0) is None and shadow_lift_table(200.0) is None  # bright enough: untouched
+    table = shadow_lift_table(40.0)
+    assert table[0] == 0 and table[255] == 255 and all(a <= b for a, b in zip(table, table[1:]))  # monotonic, ends fixed
+    assert table[40] > 40 and abs(table[40] - 105) < 25  # the mean moves towards the target
+    darkest = shadow_lift_table(0.0)
+    assert darkest[20] <= round(255 * (20 / 255) ** 0.5) + 1  # gamma is floored at 0.5: black does not become grey noise
+
+
+def _yuyv(width, height, y, u=128, v=128, speckles=()):
+    raw = bytearray([y, u, y, v] * (width * height // 2))
+    for x, row in speckles:  # a coloured speck: one chroma pair far from grey
+        pair = (row * (width // 2) + x // 2) * 4
+        raw[pair + 1], raw[pair + 3] = 40, 60
+    return bytes(raw)
+
+
+def _decode(jpeg):
+    from PIL import Image
+
+    return Image.open(io.BytesIO(jpeg)).convert("RGB")
+
+
+def test_enhance_removes_isolated_colour_speckle_but_the_plain_conversion_keeps_it():
+    pytest.importorskip("PIL")
+    raw = _yuyv(64, 64, 100, speckles=[(20, 20), (40, 30), (10, 50)])
+    plain, clean = _decode(yuyv_to_jpeg(raw, 64, 64, 95)), _decode(yuyv_to_jpeg(raw, 64, 64, 95, enhance=True))
+    spread = lambda im: max(max(p) - min(p) for p in (im.getpixel((20, 20)), im.getpixel((40, 30)), im.getpixel((10, 50))))  # noqa: E731
+    assert spread(plain) > 40  # the speck is a visible colour
+    assert spread(clean) < 12  # and is gone, leaving grey
+
+
+def test_enhance_lifts_a_dark_frame_and_leaves_a_bright_one_alone():
+    pytest.importorskip("PIL")
+    from PIL import ImageStat
+
+    dark, bright = _yuyv(64, 64, 40), _yuyv(64, 64, 180)
+    mean = lambda raw, enhance: ImageStat.Stat(_decode(yuyv_to_jpeg(raw, 64, 64, 95, enhance=enhance)).convert("L")).mean[0]  # noqa: E731
+    assert mean(dark, True) > mean(dark, False) + 25
+    assert abs(mean(bright, True) - mean(bright, False)) < 2
+
+
+def test_enhance_keeps_the_colour_relationship_of_a_dark_frame():
+    pytest.importorskip("PIL")
+    raw = _yuyv(64, 64, 50, u=110, v=160)  # reddish
+    r, g, b = _decode(yuyv_to_jpeg(raw, 64, 64, 95, enhance=True)).getpixel((32, 32))
+    assert r > g > b or r > b  # still red-dominant after the lift: only luma was moved

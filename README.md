@@ -1,4 +1,6 @@
-> **Start zespołu:** [W0 — kontrakty, mock API, CI i instrukcja branchy](docs/project/W0_START_HERE.md) · [Dokumentacja projektu](docs/project/README.md)
+> **Aktualne założenia:** [zakres i protokół badania](docs/project/CURRENT_ASSUMPTIONS.md) · [W0 — start zespołu](docs/project/W0_START_HERE.md) · [praca z Raspberry Pi](docs/project/RASPBERRY_PI_DEVELOPMENT.md) · [pełna dokumentacja](docs/project/README.md)
+
+> Opis warstw poniżej jest historycznym szkicem koncepcji. Obowiązująca implementacja POC używa Arduino Uno, Raspberry Pi 5 i symulacji Lu.i w Azure. Zakres badawczy oraz granice porównania określa dokument aktualnych założeń.
 
 # Wake-Up AI: Hybrid Neuromorphic Edge System
 

@@ -156,8 +156,14 @@ def run_ext_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[str,
     start_time = time.time()
     
     # 3. Uruchomienie pojedynczego testu
+    # POPRAWKA (M1 punkt 2, 25.09.2026 -- Marcel): `budget` w RealFitness.__call__
+    # skaluje EPOKI (zakres 0..1, jak przy halvingu) -- to NIE jest stream_budget
+    # (FA/h, osobny argument konstruktora, już ustawiony wyżej na 6.0). Pomylenie
+    # tych dwóch "budgetów" (budget=6.0) trenowało 6x więcej epok niż
+    # config.train.proxy_epochs mówi, po cichu. budget=1.0 = pełne proxy_epochs,
+    # zgodnie z tym, czego reszta pipeline'u (np. run_ga_stage) i tak oczekuje.
     rf_ext = RealFitness(**rf_kwargs)
-    ext_score = rf_ext(g, budget=6.0) 
+    ext_score = rf_ext(g, budget=1.0)
     
     # 4. Logowanie do trackera (bezpieczne rzutowanie na listę)
     tracker.log_stage_time("ext_eval_stage", time.time() - start_time)
@@ -175,29 +181,54 @@ def run_final_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[st
     """
     Etap 3: Ostateczna ewaluacja (Test Split / Continuous).
     Tymczasowo korzysta ze standardowego zbioru testowego. Gotowe do przepięcia na zbiór Kacpra.
+
+    POPRAWKA (M1 punkt 2 -- "żaden checkpoint/seed/próg nie jest wybrany po
+    końcowym teście", 25.09.2026, Marcel):
+
+    Wcześniej val_data i test_data wskazywały na TEN SAM plik (test). RealFitness
+    (fitness.py) NIE robi selekcji "po drodze" -- train_once trenuje przez
+    ustaloną liczbę epok i raz na końcu woła eval_events(..., split="val");
+    __call__ tylko uśrednia wynik po fitness_seeds (nie wybiera najlepszego
+    seeda). Więc to nie był klasyczny cherry-picking po teście -- ale przez
+    aliasing val=test kod czytał test pod etykietą "val" (myląco, i 3x w jednym
+    wywołaniu, po fitness_seeds=3), co zaprasza przyszły błąd (ktoś doda
+    prawdziwą selekcję "po val" nie wiedząc, że to w istocie test) i łamie
+    zasadę "test dotykany raz, na końcu, wyłącznie do raportu".
+
+    Teraz: val_data to prawdziwy, ODDZIELNY split walidacyjny (RealFitness go
+    wymaga wewnętrznie, choć w tym etapie i tak nie wpływa na żadną decyzję --
+    train_once nie ma early stoppingu). Wynik testowy liczony jest JAWNIE przez
+    eval_events(model, split="test") na modelu ze świeżego treningu, osobno dla
+    każdego seeda -- test czytany dokładnie raz na seed, wyłącznie do raportu,
+    nigdy do żadnej decyzji (średnia po seedach nie jest selekcją: żaden seed
+    nie jest odrzucany ani preferowany na podstawie wyniku na teście).
+
+    Druga poprawka: usunięty błędny `budget=6.0` (patrz run_ext_evaluation_stage
+    -- ten sam mixup `budget`/`stream_budget`, trenował 6x więcej epok niż
+    config.train.proxy_epochs).
     """
     print(f"\n>>> [ETAP 3/4] Finalna ewaluacja ciągła...")
-    
+
     # 1. Przygotowanie ścieżek
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     train_abs = os.path.join(project_root, config.data.train)
+    val_abs = os.path.join(project_root, config.data.val)
     arch_dir = os.path.dirname(os.path.dirname(train_abs))
-    
+
     # UWAGA: Tutaj podmienić 'config.data.test' na 'config.data.continuous_kacper' - Dataset od Kacpra
     target_test_abs = os.path.join(project_root, config.data.test)
-    
+
     g = Genome.from_dict(best_topology)
-    
-    # Inicjalizacja środowiska stricte pod test
-    # (Wyłączamy wpływ zbioru walidacyjnego, skupiamy się na teście)
+
+    # Prawdziwy, ROZDZIELONY val/test -- żadnego aliasingu.
     rf_kwargs = dict(
         arch_dir=arch_dir,
         data=train_abs,
-        val_data=target_test_abs,   # Używamy testu jako punktu odniesienia
-        test_data=target_test_abs,  # Właściwy cel ewaluacji
+        val_data=val_abs,           # prawdziwy split walidacyjny (config.data.val)
+        test_data=target_test_abs,  # prawdziwy, nietknięty test -- czytany jawnie niżej
         limit=None,
         epochs=config.train.proxy_epochs,
-        num_samples=config.train.num_samples, 
+        num_samples=config.train.num_samples,
         k=2,
         metric=config.ga.fitness_metric,
         fitness_seeds=3,
@@ -210,27 +241,40 @@ def run_final_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[st
         seed=config.seed,
         device=tracker.device
     )
-    
+
     print(f"[TEST] Ładowanie modelu na strumień testowy: {target_test_abs}")
     start_time = time.time()
-    
-    # 3. Wywołanie (ponowny trening/finetuning na kanonicznym i test na docelowym)
+
     rf_final = RealFitness(**rf_kwargs)
-    final_score = rf_final(g, budget=6.0)
-    
+
+    # fitness_seeds świeżych treningów; TEST czytany jawnie i raz na seed,
+    # wyłącznie do raportu -- średnia po seedach nie jest selekcją.
+    metric_key = config.ga.fitness_metric
+    test_scores = []
+    for si in range(rf_final.fitness_seeds):
+        _, _, _, model = rf_final.train_once(
+            g, epochs=config.train.proxy_epochs, seed=config.seed + si, return_model=True
+        )
+        test_m = rf_final.eval_events(model, split="test")
+        test_scores.append(test_m.get(metric_key, test_m.get("clip_f1", 0.0)))
+
+    final_score = sum(test_scores) / len(test_scores)
+
     elapsed = time.time() - start_time
     tracker.log_stage_time("final_eval_stage", elapsed)
-    
-    # Zebranie metryk - obecnie wpadnie tu finalny wynik fitness, 
+
+    # Zebranie metryk - obecnie wpadnie tu finalny wynik fitness,
     # ale struktura jest gotowa na przyjęcie pełnego słownika z FA/h i AP z logiki Kacpra
     real_test_metrics = {
         "dataset": "canonical_test_placeholder",
-        f"test_{config.ga.fitness_metric}": final_score,
+        f"test_{metric_key}": final_score,
+        f"test_{metric_key}_per_seed": test_scores,
         "latency_sec": elapsed
     }
-    
+
     tracker.log_metrics("continuous_test", real_test_metrics)
-    print(f"[ETAP 3/4] Wynik testowy ({config.ga.fitness_metric}: {final_score:.4f}) zapisany w manifeście.")
+    print(f"[ETAP 3/4] Wynik testowy ({metric_key}: {final_score:.4f}, "
+          f"per-seed: {[f'{s:.4f}' for s in test_scores]}) zapisany w manifeście.")
 
 
 def run_hardware_export_stage(config: Any, tracker: Any, best_topology: Dict[str, Any]):

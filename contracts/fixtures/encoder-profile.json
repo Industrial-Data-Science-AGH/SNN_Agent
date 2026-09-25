@@ -3,7 +3,7 @@
   "profile_id": "encoder_v3",
   "provenance": "measured",
   "implementation_sha": "73fd8df2645460eee95539f745ea1fc920e02ab1",
-  "config_sha256": "sha256:???",
+  "config_sha256": "sha256:fec5ee948b16d578d073178a7f706865d28776a00b0b75b83d8c75cb7443f862",
   "sample_rate_hz": 19231,
   "hop_samples": 192,
   "pulse_width_us": 6000,

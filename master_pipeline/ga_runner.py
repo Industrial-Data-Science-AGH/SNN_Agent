@@ -380,7 +380,25 @@ def run_hardware_export_stage(config: Any, tracker: Any, best_topology: Dict[str
     print(f"[EXPORT] Zrzucanie wag i topologii do {export_path}...")
     extra_meta = {
         "best_clip_f1": metrics.get(f"val_{config.ga.fitness_metric}", 0.0),
-        "topology_manifest": best_topology
+        "topology_manifest": best_topology,
+        # M1 punkt 1/3 (25.09.2026, Marcel): RAM/czas kompilacji dla Uno (ATmega328P)
+        # są dziś zmierzone tylko przez `simavr` (symulator cyklowo-dokładny) --
+        # Kacper nie ma obecnie możliwości uruchomienia tego na fizycznej płytce
+        # (tylko on ma do niej dostęp, brak czasu). Decyzja: nie blokujemy M1 na
+        # tym punkcie, ale jawnie oznaczamy wynik jako "Estimated", nie "Measured"
+        # (ta sama konwencja co ekran Energy w planie UI), żeby ryzyko było widoczne
+        # w artefakcie używanym do budowy fizycznej, a nie ciche.
+        "platform_validation": {
+            "uno_atmega328p": {
+                "status": "Estimated",
+                "source": "simavr (cycle-accurate simulator, nie fizyczny krzem)",
+                "note": (
+                    "RAM/czas kompilacji NIE potwierdzone na fizycznym ATmega328P. "
+                    "Do zweryfikowania przez Kacpra, gdy będzie miał czas/dostęp do "
+                    "płytki. Nie blokuje M1 -- traktować jako otwarte ryzyko."
+                ),
+            }
+        },
     }
     export_genome_config(final_model, export_path, extra=extra_meta)
     

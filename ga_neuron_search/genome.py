@@ -32,8 +32,15 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 # Kanały encodera (musi zgadzać się z CHANNELS w snn_hw_pipeline.py)
+# POPRAWKA (M1, 25.09.2026 -- Marcel): nazwy zsynchronizowane z zamrożonym
+# encoder/encoder_config.json (K1, Kacper, encoder_variant=encoder_v2_swap.ino,
+# implementation_sha=73fd8df2645460eee95539f745ea1fc920e02ab1) -- poprzednio
+# indeksy 1/2 miały tu "peak_cnt"/"cv", a encoder faktycznie liczy na tych
+# kanałach "hjorth_mobility"/"autocorr_lag1". Trening mechanicznie działał
+# (GA operuje na indeksach, nie nazwach), ale każdy raport "które cechy
+# wybrało GA" miał błędne etykiety.
 N_FEATURES = 7
-FEATURE_NAMES = ["peak", "peak_cnt", "cv", "zcr", "flux", "hf_lo", "hf_hi"]
+FEATURE_NAMES = ["peak", "hjorth_mobility", "autocorr_lag1", "zcr", "flux", "hf_lo", "hf_hi"]
 
 MAX_FANIN = 3
 MAX_FANOUT = 3

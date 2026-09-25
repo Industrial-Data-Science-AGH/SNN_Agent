@@ -139,3 +139,38 @@ więc fizyczne ograniczenie płytki Lu.i jest już częścią kontraktu.
 
 `models/hw_v2_recallfa_s0.json` i `models/v2_recallfa_s0.pt` są na branchu
 `fah-metric-kn`, który nie jest jeszcze scalony do `master`.
+
+## 6. Co P2 zmieniło w tej tabeli
+
+Do P1 powyższe braki były opisem. Od P2 runtime naprawdę całkuje sieć i naprawdę
+decyduje, więc trzy z nich przestały być notatką, a stały się liczbą, która
+działa na produkcji.
+
+**`decoder.*` nie jest już kosmetyczny.** Konwerter wpisuje dziś placeholdery:
+`threshold = 1`, `window_us = 1 ramka`, `cooldown_us = 5 s` (za stałą
+`DEFAULT_REFRAC = 500` w `stream_eval.py`). To znaczy „alarmuj na pierwszy spike
+D i milcz przez pięć sekund", czyli w najgorszym razie **720 alarmów na godzinę**.
+Operacyjny punkt pracy z `models/WYNIKI.md` był mierzony przy zupełnie innej
+regule i tego związku nic dziś nie przechowuje. Dopóki Marcel nie eksportuje
+`decoder.*` razem z wagami, manifest i zmierzone FA/h opisują dwa różne
+detektory. To jest najpoważniejsza pozycja z tej tabeli.
+
+**`neurons[].refractory_us` jest teraz wykonywane.** Runtime zaokrągla refrakcję
+w górę do pełnych ramek i w tym czasie trzyma neuron przy `v_reset`. Przy `0`,
+czyli tym, co dziś eksportujemy, nic się nie zmienia, ale jeśli A2 zmierzy
+niezerową refrakcję na płytce, ta wartość zacznie zmieniać decyzje.
+
+**`connections[].delay_us` musi leżeć na siatce ramki.** Runtime odmawia
+pakietu z opóźnieniem, które nie jest wielokrotnością `dt_us`
+(`DELAY_NOT_ON_GRID`), i odmawia pętli zbudowanej z samych połączeń
+bezopóźnieniowych (`CYCLIC_TOPOLOGY`), bo taka ramka nie ma kolejności
+wyliczania. Nasza sieć jest jednokierunkowa i ma same zera, więc to nic dziś
+nie kosztuje; ogranicza za to edytor topologii z P3, jeśli Karolina ma pozwalać
+na rekurencję.
+
+Jedna rzecz, której runtime świadomie **nie** robi: nie wymyśla rozgrzewki
+enkodera. Sesja startuje z membraną w spoczynku, co jest stanem prawdziwym, a
+nie założeniem, więc pierwszy batch jest od razu `valid`. Jeżeli enkoder na
+ATmedze potrzebuje N ramek, zanim jego `floor`/`MAD` coś znaczą (a wygląda na
+to, że potrzebuje), to jest własność enkodera i musi trafić do
+`EncoderProfile`, a nie zostać zgadnięta tutaj. To pytanie do K1.

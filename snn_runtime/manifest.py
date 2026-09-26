@@ -10,6 +10,7 @@ actually be *integrated*, not about whether it is well formed:
   * the step is small enough for the time constants it is asked to integrate,
   * the decoder rule is expressible on that step grid,
   * exactly one neuron carries the decision,
+  * the frame has an evaluation order and every delay lands on the grid,
   * the artifacts named in the manifest exist and hash to what was declared,
   * a package claiming volts also names the calibration that produced them.
 
@@ -29,6 +30,7 @@ from typing import Any, Mapping, Sequence
 from contracts.validation import ContractError, content_hash, validate
 
 from .errors import RuntimeLoadError
+from .integrator import NetworkPlan, build_plan
 from .units import (
     CALIBRATED_POTENTIAL_UNITS,
     DT_TOLERANCE_FRACTION,
@@ -84,6 +86,7 @@ class LoadedModel:
     channel_index: Mapping[str, int]
     unused_channels: tuple[str, ...]
     decoder: Mapping[str, Any]
+    plan: NetworkPlan
     manifest: Mapping[str, Any]
 
     @property
@@ -332,5 +335,12 @@ def load_manifest(
         channel_index=MappingProxyType(channel_index),
         unused_channels=tuple(sorted(set(channel_index) - wired)),
         decoder=_freeze(manifest["decoder"]),
+        plan=build_plan(
+            neurons=manifest["topology"]["neurons"],
+            bindings=bindings,
+            channel_index=channel_index,
+            dt_us=dt_us,
+            decision_neuron=decision_neuron,
+        ),
         manifest=_freeze(manifest),
     )

@@ -8,6 +8,7 @@ import { mountNetworkEditor } from "./network.js";
 import { createRuntime } from "./runtime.js";
 import { mountInspector } from "./inspector.js";
 import { mountRaster } from "./raster.js";
+import { mountEvents, mountExperiments, mountEnergy } from "./c4.js";
 import { el, clear, kv, statusRow, stateLoading, stateEmpty, stateError } from "./ui.js";
 
 const $ = (sel) => document.querySelector(sel);
@@ -291,59 +292,22 @@ function buildRuntimeControls(isDemo) {
   };
 }
 
-//  Events (details & timeline are C4) 
+//  Events (details: photo, timeline, glass/person/authorization, ACK, error)
 async function renderEvents(panel) {
   head(panel, "Events", "Detection events with capture, vision and alarm timeline.");
-  const card = el("div", { class: "card" }, [el("h3", { text: "Event timeline" })]);
-  card.append(stateLoading());
-  panel.append(card);
-  try {
-    const events = await source.listEvents();
-    clear(card);
-    card.append(el("h3", { text: "Event timeline" }));
-    if (!events.length) {
-      card.append(stateEmpty("No events", source.isDemo ? "No demo events available." : "No events recorded yet."));
-      return;
-    }
-    const table = el("table", {}, [
-      el("thead", {}, el("tr", {}, [
-        el("th", { text: "Event" }), el("th", { text: "Stage" }), el("th", { text: "Status" }),
-      ])),
-    ]);
-    const tbody = el("tbody");
-    for (const ev of events) {
-      const status = ev.status || (ev.trigger ? "trigger" : "");
-      tbody.append(el("tr", {}, [
-        el("td", { text: ev.event_id || "—" }),
-        el("td", { text: ev.stage || "SNN trigger" }),
-        el("td", {}, el("span", { class: "tag muted", text: status || "—" })),
-      ]));
-    }
-    table.append(tbody);
-    card.append(table);
-    card.append(el("p", { class: "topbar-meta", text: "Full event details land in task C4." }));
-  } catch (err) {
-    clear(card);
-    card.append(el("h3", { text: "Event timeline" }));
-    card.append(stateError("Could not load events", err.message));
-  }
+  await mountEvents(panel, source);
 }
 
-// Experiments (metrics are C4) 
+//  Experiments (SNN vs whole-system metrics; filter never mixes runs)
 async function renderExperiments(panel) {
-  head(panel, "Experiments", "Split, seed, model/encoder hashes, FA/h and recall.");
-  const card = el("div", { class: "card" }, [el("h3", { text: "Experiment results" })]);
-  card.append(comingSoon("C4", "Metrics with confidence intervals"));
-  panel.append(card);
+  head(panel, "Experiments", "Split, seed, model/encoder hashes, FA/h with confidence interval and recall.");
+  await mountExperiments(panel, source);
 }
 
-//  Energy (measurements are C4 / A2) 
+//  Energy (measured/estimated kept separate; missing = Not available, never zero)
 async function renderEnergy(panel) {
-  head(panel, "Energy", "Measured or estimated power and energy per session.");
-  const card = el("div", { class: "card" }, [el("h3", { text: "Power & energy" })]);
-  // Honest: no measurement yet — never shown as zero.
-  card.append(stateEmpty("No measurement", "Energy figures arrive with tasks A2 / C4."));
-  panel.append(card);
+  head(panel, "Energy", "Measured or estimated power and energy, with the measurement boundary.");
+  await mountEnergy(panel, source);
 }
 
 //  Device (fully rendered in C1 from the DeviceStatus contract) 

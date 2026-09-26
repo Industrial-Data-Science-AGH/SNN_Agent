@@ -39,7 +39,7 @@ async function getJSON(url, opts = {}) {
   return res.json();
 }
 
-// --------------------------------------------------------------- demo source
+//  demo source
 
 class DemoSource {
   constructor() {
@@ -63,23 +63,31 @@ class DemoSource {
     return this._fixture("trigger"); // SNNDecision
   }
 
+  async _demo(name) {
+    const res = await fetch(`/static/demo/${name}.json`);
+    return res.json();
+  }
+
   async listEvents() {
-    // No standalone "events" fixture in the contracts; C4 builds the real
-    // timeline. In demo we surface the one scripted decision as a single row
-    // so the pipeline is visible without inventing data.
-    const decision = await this.getLatestDecision().catch(() => null);
-    if (!decision) return [];
-    return [{
-      event_id: decision.event_id,
-      stage: "SNN trigger",
-      trigger: decision.trigger,
-      status: decision.status,
-      source_time_us: decision.source_time_us,
-    }];
+    const doc = await this._demo("events");
+    return doc.items || [];
+  }
+
+  async getEvent(id) {
+    const doc = await this._demo("events");
+    return (doc.items || []).find((e) => e.event_id === id) || null;
+  }
+
+  async getExperiments() {
+    return this._demo("experiments"); // { runs: [...] }
+  }
+
+  async getEnergy() {
+    return this._demo("energy"); // { sources: [...] }
   }
 }
 
-// --------------------------------------------------------------- live source
+//  live source
 
 // Which device the operator is looking at. In C1 there is no device picker yet,
 // so we target the demo device id the backend seeds; C4/W wire real selection.
@@ -106,6 +114,20 @@ class LiveSource {
   async listEvents() {
     const body = await getJSON("/v1/events?limit=20");
     return body.items || [];
+  }
+
+  async getEvent(id) {
+    return getJSON(`/v1/events/${id}`);
+  }
+
+  async getExperiments() {
+    // No experiment-metrics endpoint in the v1 contract yet (W2 / Marcel).
+    return null;
+  }
+
+  async getEnergy() {
+    // No energy endpoint yet (A2 / Andrzej). Never fabricated as zeros.
+    return null;
   }
 }
 

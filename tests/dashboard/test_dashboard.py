@@ -116,6 +116,52 @@ def test_runtime_modules_served(client: TestClient) -> None:
     assert "mountRaster" in client.get("/static/js/raster.js").text
 
 
+# C4 events / experiments / energy
+
+def test_events_fixture_shape(client: TestClient) -> None:
+    doc = client.get("/static/demo/events.json").json()
+    assert doc["demo"] is True
+    ids = {e["event_id"] for e in doc["items"]}
+    assert {"evt-001", "evt-002", "evt-004"} <= ids
+    for ev in doc["items"]:
+        assert "decision" in ev and "vision" in ev and "commands" in ev
+    # a failed event with no vision result exercises the "Not available" path
+    failed = next(e for e in doc["items"] if e["event_id"] == "evt-004")
+    assert failed["vision"] is None
+
+
+def test_experiments_metrics_are_separated_with_ci(client: TestClient) -> None:
+    doc = client.get("/static/demo/experiments.json").json()
+    assert doc["demo"] is True
+    runs = doc["runs"]
+    assert len(runs) >= 2
+    # different models/datasets so the filter must not mix them
+    assert len({r["model_hash"] for r in runs}) >= 2
+    for r in runs:
+        for scope in ("snn", "system"):  # SNN vs whole-system kept separate
+            fa = r[scope]["fa_per_h"]
+            assert {"value", "ci_low", "ci_high"} <= fa.keys()
+            assert "recall" in r[scope]
+
+
+def test_energy_keeps_sources_separate_and_allows_missing(client: TestClient) -> None:
+    doc = client.get("/static/demo/energy.json").json()
+    assert doc["demo"] is True
+    kinds = {s["source"] for s in doc["sources"]}
+    assert "measured" in kinds and "estimated" in kinds  # not mixed into one number
+    for s in doc["sources"]:
+        assert "boundary" in s
+    # a source with no measurement is null, never 0
+    missing = [s for s in doc["sources"] if s["power_w"] is None]
+    assert missing and all(s["energy_j"] is None for s in missing)
+
+
+def test_c4_module_served(client: TestClient) -> None:
+    body = client.get("/static/js/c4.js").text
+    for fn in ("mountEvents", "mountExperiments", "mountEnergy"):
+        assert fn in body
+
+
 def test_login_then_session_and_logout(client: TestClient) -> None:
     res = client.post("/auth/login", json={"username": "operator", "password": "demo"})
     assert res.status_code == 200

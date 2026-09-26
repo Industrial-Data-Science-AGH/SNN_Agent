@@ -11,5 +11,6 @@
   "capture-command": "CaptureCommand",
   "alarm-command": "AlarmCommand",
   "vision-unavailable": "VisionResult",
-  "command-ack": "CommandAck"
+  "command-ack": "CommandAck",
+  "device-status": "DeviceStatus"
 }

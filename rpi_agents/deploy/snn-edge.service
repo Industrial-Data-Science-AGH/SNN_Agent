@@ -1,0 +1,52 @@
+# System unit for production on the Raspberry Pi. Install as /etc/systemd/system/snn-edge.service.
+# Paths assume the release is unpacked in /opt/snn-edge with its own virtualenv; adjust to your layout.
+[Unit]
+Description=SNN edge bridge (Uno serial to backend)
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=snn-edge
+Group=snn-edge
+# dialout: the serial port; video: the camera
+SupplementaryGroups=dialout video
+WorkingDirectory=/opt/snn-edge
+Environment=PYTHONUNBUFFERED=1
+Environment=SNN_EDGE_VERSION=release-REPLACE-ME
+ExecStart=/opt/snn-edge/.venv/bin/python -m rpi_agents.agent.bridge --config /etc/snn-edge/edge.toml
+Restart=on-failure
+RestartSec=3
+# Exit code 2 is a configuration error: restarting cannot fix it.
+RestartPreventExitStatus=2
+# SIGTERM flushes the outbox for up to limits.drain_s (default 5 s) and stops the session.
+KillSignal=SIGTERM
+TimeoutStopSec=20
+StateDirectory=snn-edge
+StateDirectoryMode=0700
+
+# Sandbox. The service needs the network, its state directory, the serial port and the camera, nothing else.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+DevicePolicy=closed
+DeviceAllow=char-ttyUSB rw
+DeviceAllow=char-ttyACM rw
+DeviceAllow=char-video4linux rw
+DeviceAllow=char-usb_device rw
+ReadOnlyPaths=/etc/snn-edge
+
+[Install]
+WantedBy=multi-user.target

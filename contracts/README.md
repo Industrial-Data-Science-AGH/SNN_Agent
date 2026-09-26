@@ -41,6 +41,7 @@ trwającego GA ani na Pi. Pi docelowo używa tylko lekkich adapterów W1.
 | NeuronFrame | Patryk → Karolina |
 | CaptureCommand / AlarmCommand | Backend Wiktora → edge Wiktora |
 | CommandAck | Edge → backend |
+| DeviceStatus | Edge (heartbeat) → backend → Karolina |
 | VisionResult | Worker Wiktora → polityka i Karolina |
 | BatchAck / StreamGap | Backend → edge i obserwacja sesji |
 | Event | Backend → Karolina |
@@ -101,6 +102,17 @@ artefakt; sam napis `evaluated_champion` nie dowodzi jakości eksperymentu.
 - `received_seq`, `processed_seq`, `durable_seq` mają różne znaczenia.
   Mock zawsze zwraca `durable_seq=null`, bo nie zapisuje nic trwale.
 
+## DeviceStatus (heartbeat)
+
+Edge wysyła raport co kilka sekund; liczy się tylko ostatni, to nie jest dziennik audytu. `state`:
+`starting`, `running`, `reconnecting` (brak łącza szeregowego), `stalled` (port otwarty, brak
+ważnych ramek), `error` (np. niezgodna mapa kanałów; powód w `detail`), `stopping`. `input_kind`
+odróżnia `uno` od `stand_in` (płytka zastępcza, nie enkoder) i `replay`; wyniki ze `stand_in`
+i `replay` nie są wynikami rzeczywistego toru. `session_id` i `epoch` są ustawione razem albo oba
+puste. `serial.gaps/rejected/stalls` to liczniki od startu procesu, `outbox.dead` to wiadomości
+odrzucone przez backend na stałe, a `outbox.dropped_total` to wiadomości usunięte z pełnej
+kolejki (każda taka strata jest jawną luką w sekwencji).
+
 ## Idempotencja i błędy
 
 Każdy POST JSON zawiera `request_id`. Nagłówek `Idempotency-Key` musi być tą samą
@@ -155,6 +167,8 @@ luki tworzy zdarzenie. Fixture `gap` opuszcza seq=2 i zakres 500000–750000 us.
 | POST /v1/sessions/{session_id}/stop | stop i wycofanie oczekujących komend |
 | GET /v1/devices/{device_id}/commands | wyłącznie ważne demo capture |
 | POST /v1/commands/{command_id}/ack | rejestruje wynik mocka, bez side effect |
+| POST /v1/devices/{device_id}/status | heartbeat urządzenia; zapamiętuje tylko ostatni raport (max 16 urządzeń), poza budżetem idempotencji |
+| GET /v1/devices/{device_id}/status | ostatni raport lub 404 |
 | GET /v1/sessions/{session_id}/telemetry | SSE snapshot, retry:1000, następnie EOF |
 | GET /v1/events?limit=20&offset=0 | stronicowana historia demo |
 | GET /v1/events/{event_id} | szczegół wraz z vision unavailable |

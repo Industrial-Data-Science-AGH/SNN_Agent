@@ -174,6 +174,11 @@ def validate(name: str, value: dict, *, manifest: dict | None = None) -> dict:
             )
     elif name == "StreamGap":
         require(value["source_end_us"] >= value["source_start_us"], "Gap end precedes start")
+    elif name == "DeviceStatus":
+        require(
+            (value["session_id"] is None) == (value["epoch"] is None),
+            "session_id and epoch must be set together",
+        )
     elif name == "CommandAck":
         if value["status"] == "completed":
             require(value["completed_at"] is not None, "Completed ACK requires UTC timestamp")

@@ -111,3 +111,13 @@ def test_demo_artifacts_match_manifest_bytes():
         assert "sha256:" + hashlib.sha256(raw).hexdigest() == a["sha256"]
     assert fixture("session-create")["model_hash"] == content_hash(manifest)
     assert fixture("session-create")["encoder_hash"] == content_hash(fixture("encoder-profile"))
+
+
+def test_device_status_requires_session_and_epoch_together():
+    status = fixture("device-status")
+    validate("DeviceStatus", status)
+    validate("DeviceStatus", status | {"session_id": None, "epoch": None, "boot_id": None, "state": "starting"})
+    for change in ({"epoch": None}, {"session_id": None}):
+        with pytest.raises(ContractError) as error:
+            validate("DeviceStatus", status | change)
+        assert error.value.code == "INVALID_CONTRACT"

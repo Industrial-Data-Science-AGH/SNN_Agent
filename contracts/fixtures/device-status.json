@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "request_id": "status-1",
+  "device_id": "demo-pi",
+  "reported_at": "2026-09-24T00:00:05Z",
+  "agent_version": "dev",
+  "input_kind": "stand_in",
+  "state": "running",
+  "detail": null,
+  "boot_id": "demo-boot",
+  "session_id": "demo-session",
+  "epoch": 1,
+  "uptime_s": 42,
+  "serial": {
+    "connected": true,
+    "frames": 4200,
+    "gaps": 0,
+    "rejected": 0,
+    "stalls": 0,
+    "reconnects": 0,
+    "last_frame_age_ms": 8
+  },
+  "camera": {
+    "configured": true
+  },
+  "outbox": {
+    "pending": 0,
+    "dead": 0,
+    "dropped_total": 0
+  }
+}

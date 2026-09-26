@@ -1,6 +1,8 @@
 # Architektura systemu SNN Agent
 ## Detekcja stłuczenia szkła i cyfrowa reprezentacja sieci Lu.i
-Wersja 1.0 • 23 września 2026 • dokument dla zespołu koła naukowego
+Wersja 1.1 • 24 września 2026 • dokument dla zespołu koła naukowego
+
+Aktualny priorytet i granice eksperymentu: [CURRENT_ASSUMPTIONS.md](../CURRENT_ASSUMPTIONS.md). Ten dokument zachowuje pełną architekturę demonstratora; fizyczna sieć Lu.i jest rozszerzeniem badania, zależnym od walidacji płytek i czasu.
 
 Budujemy kompletny demonstrator na Arduino Uno i Raspberry Pi 5. Arduino odczytuje analogowy mikrofon MAX4466 i koduje sygnał do impulsów. Raspberry Pi przesyła je do Azure, wykonuje zdjęcia na żądanie i steruje alarmem. Symulacja SNN, analiza obrazu w Foundry, reguły decyzji, historia i dashboard działają w chmurze.
 
@@ -16,7 +18,7 @@ Wzorzec wyglądu dashboardu: zatwierdzona ciemna referencja UI v2; interfejs pro
 ## Rezultat pierwszego wdrożenia
 Pierwsza wersja ma przeprowadzić cały łańcuch: dźwięk, impulsy, decyzja SNN, zdjęcie, analiza obrazu, reguła alarmu, LED i buzzer oraz e-mail. Operator widzi przebieg w dashboardzie i potrafi powiązać każdą reakcję z konkretnym zdarzeniem i wersją modelu. Raspberry Pi pozostaje włączone; „wybudzenie” oznacza uruchomienie ścieżki zdjęcia i analizy, nie start systemu po halt.
 
-Drugim rezultatem jest stanowisko badawcze. Ten sam protokół ocenia symulację SNN, fizyczną sieć Lu.i i baseline Arduino z FFT. Demonstrowanie przepływu impulsów i pomiar skuteczności to osobne funkcje. Animacja nie jest dowodem zgodności sprzętowej ani efektywności energetycznej.
+Drugim rezultatem jest stanowisko badawcze. Podstawowy protokół porównuje detektor symulowanej sieci SNN z detektorem FFT na Arduino dla tego samego strumienia audio i na tej samej granicy decyzyjnej. Ocena fizycznej sieci Lu.i jest rozszerzeniem po potwierdzeniu sprawności i kalibracji płytek. Demonstracja przepływu impulsów, agent wizualny i dashboard są oddzielone od miar jakości detektora akustycznego. Animacja nie jest dowodem zgodności sprzętowej ani efektywności energetycznej.
 
 ## Nawigacja
 | Rozdziały | Tematy | Główni odbiorcy |
@@ -386,7 +388,7 @@ Raportuje się surowe triggery, aktywacje po cooldown i końcowe alarmy. To pozw
 # 25 Granice pomiaru energii
 @fig assets/09-energia.png | Oddzielne granice pomiaru lokalnego i rozszerzonej estymacji | 4.0
 
-Porównujemy co najmniej: symulację SNN w chmurze, SNN na Lu.i i Uno z klasycznym detektorem FFT. Wariant FFT na komputerze może być dodatkowym punktem odniesienia jakości. Dla każdej konfiguracji zapisujemy miejsce enkodera, model, tor transmisji, identyczny zbiór testowy i stan hosta. Inna granica pomiaru oznacza inny wynik, nawet przy tej samej nazwie „SNN”.
+Porównanie obowiązkowe: symulowany detektor SNN i klasyczny detektor FFT na Uno. Fizyczne Lu.i oraz FFT na komputerze są dodatkowymi punktami odniesienia, wyłącznie jeśli zostaną uruchomione i ocenione według tego samego protokołu. Raportujemy osobno (a) jakość i czas samego detektora przy wspólnej granicy oraz (b) właściwości całego wdrożonego toru Uno–Pi–sieć–Azure. W wariancie (b) uwzględniamy transmisję i pobór energii urządzeń; nie można pominąć ich z powodu przyszłego wariantu analogowego. Dla każdej konfiguracji zapisujemy miejsce enkodera, model, tor transmisji, identyczny zbiór testowy i stan hosta. Inna granica pomiaru oznacza inny wynik, nawet przy tej samej nazwie „SNN”.
 
 Pomiar edge obejmuje mikrofon, Uno, Pi, kamerę, alarm i ewentualne Lu.i, jeśli należą do danego wariantu. Przy zasilaniu Uno z Pi nie dodajemy ponownie jego energii do pomiaru na wspólnym wejściu USB. Pomiar przy zasilaczu zawiera jego straty, a na szynie DC może ich nie zawierać; punkt pomiarowy musi być opisany.
 

@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "encoder_v3",
+  "provenance": "measured",
+  "implementation_sha": "73fd8df2645460eee95539f745ea1fc920e02ab1",
+  "config_sha256": "sha256:fec5ee948b16d578d073178a7f706865d28776a00b0b75b83d8c75cb7443f862",
+  "sample_rate_hz": 19231,
+  "hop_samples": 192,
+  "pulse_width_us": 6000,
+  "clock": "source_monotonic_us",
+  "channel_map": [
+    { "index": 0, "channel": "ch1", "feature": "peak" },
+    { "index": 1, "channel": "ch2", "feature": "hjorth_mobility" },
+    { "index": 2, "channel": "ch3", "feature": "autocorr_lag1" },
+    { "index": 3, "channel": "ch4", "feature": "zcr" },
+    { "index": 4, "channel": "ch5", "feature": "flux" },
+    { "index": 5, "channel": "ch6", "feature": "hf_lo" },
+    { "index": 6, "channel": "ch7", "feature": "hf_hi" }
+  ]
+}

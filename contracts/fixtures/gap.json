@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "request_id": "batch-3",
+  "device_id": "demo-pi",
+  "session_id": "demo-session",
+  "epoch": 1,
+  "boot_id": "demo-boot",
+  "batch_seq": 3,
+  "encoder_hash": "sha256:cf0a898563e7f8d928454f91faaf5a92dc29d41afd3be7feabf58d267ff0e78c",
+  "source_start_us": 750000,
+  "source_end_us": 1000000,
+  "spikes": [],
+  "quality": {
+    "dropped_events": 0,
+    "adc_clipped": false
+  }
+}

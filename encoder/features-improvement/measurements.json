@@ -1,0 +1,197 @@
+{
+  "_README": "Wyniki POMIARÓW FIZYCZNYCH. Wypełniaj przez tools/capture_bench.py (sekcja 'board') albo ręcznie. null = jeszcze nie zmierzone. sim_reference to wynik SYMULACJI simavr (nie płytki) — punkt odniesienia. ",
+  "_meta": {
+    "board": "Arduino Uno",
+    "mcu": "ATmega328P @16 MHz",
+    "date": "2026-09-21",
+    "toolchain": null,
+    "firmware_git": null,
+    "notes": "Separacja klas (Cohen's d): Osiągnięto wysokie wartości dla nowych kanałów: mobility d=+1.046 oraz autocorr d=-1.125. Wyniki te wskazują, jak wyraźnie dana cecha oddziela sygnał tła od docelowych zdarzeń audio.Korelacja: ρ(mobility, autocorr) wynosi -0.87. Zgodnie z wytycznymi, wartość poniżej 0.9 oznacza, że oba kanały niosą częściowo unikalne informacje i warto zachować je oba.   Przyrost wydajności (ΔAUC): Nieliniowy model GBM wykazał statystycznie istotny wzrost zdolności rozróżniania klas. Przedział ufności (CI) dla przyrostu ΔAUC względem bazowego zestawu wynosi [+0.016, +0.041], co w całości znajduje się powyżej zera.   Progi odcięcia: Ustalono rekomendowane progi absolutne: mob_thr = 2.4973 (odpala powyżej progu) oraz ac_thr = -0.2336 (odpala poniżej progu)."
+  },
+  "fs_check": {
+    "_opis": "Krok 0.1: realne fs przy prescalerze 32 (oryginał) i 64. Wpisz fs_hz z linii '#BENCH fs_hz=' (build z -DENC_BENCH=1 [-DENC_ADC_PRESCALER=64]).",
+    "prescaler_32_fs_hz": 27050.6,
+    "prescaler_64_fs_hz": 19230.5,
+    "wniosek": "Prescaler 32 jest błędem (ADC jest szybszy niż ISR, co skutkuje brakiem ramek w pętli głównej). Do prawidłowej pracy należy ustawić prescaler 64."
+  },
+  "board": {
+    "baseline": {
+      "fs_hz": 19230.5,
+      "isr_cpu_pct": 70.97,
+      "isr_us_mean": 36.91,
+      "isr_cycles_mean": 590.5,
+      "p1": {
+        "frames": 448,
+        "late": 0,
+        "sn_max": 192,
+        "proc_us_mean": 2885,
+        "proc_us_max": 4148,
+        "per_us_min": 9936,
+        "per_us_mean": 9983,
+        "per_us_max": 10032
+      },
+      "p2": {
+        "frames": 501,
+        "late": 0,
+        "sn_max": 192,
+        "proc_us_mean": 3077,
+        "proc_us_max": 4116,
+        "per_us_min": 9936,
+        "per_us_mean": 9983,
+        "per_us_max": 10032
+      },
+      "scope": {
+        "isr_pulse_us_min": null,
+        "isr_pulse_us_max": null,
+        "note": "opcjonalnie: ENC_ISR_PIN=1, D9"
+      },
+      "captured_at": null,
+      "firmware_flags": null
+    },
+    "parity": {
+      "fs_hz": 19230.8,
+      "isr_cpu_pct": 61.02,
+      "isr_us_mean": 31.73,
+      "isr_cycles_mean": 507.7,
+      "p1": {
+        "frames": 448,
+        "late": 0,
+        "sn_max": 192,
+        "proc_us_mean": 2956,
+        "proc_us_max": 3164,
+        "per_us_min": 9976,
+        "per_us_mean": 9984,
+        "per_us_max": 9992
+      },
+      "p2": {
+        "frames": 501,
+        "late": 0,
+        "sn_max": 192,
+        "proc_us_mean": 2633,
+        "proc_us_max": 3164,
+        "per_us_min": 9948,
+        "per_us_mean": 9984,
+        "per_us_max": 10020
+      },
+      "scope": {
+        "isr_pulse_us_min": null,
+        "isr_pulse_us_max": null,
+        "note": "opcjonalnie: ENC_ISR_PIN=1, D9"
+      },
+      "captured_at": "20260924_182806",
+      "firmware_flags": {
+        "cfg_swap": 0,
+        "cfg_dc_fix": 1,
+        "cfg_hf_round": 1,
+        "cfg_eps_floor": 1,
+        "cfg_acc32": 0,
+        "adcsra_ps_bits": 6
+      }
+    },
+    "swap_full": {
+      "fs_hz": 19230.6,
+      "isr_cpu_pct": 69.29,
+      "isr_us_mean": 36.03,
+      "isr_cycles_mean": 576.5,
+      "p1": {
+        "frames": 448,
+        "late": 0,
+        "sn_max": 192,
+        "proc_us_mean": 2717,
+        "proc_us_max": 3008,
+        "per_us_min": 9976,
+        "per_us_mean": 9983,
+        "per_us_max": 9988
+      },
+      "p2": {
+        "frames": 501,
+        "late": 0,
+        "sn_max": 192,
+        "proc_us_mean": 2709,
+        "proc_us_max": 2952,
+        "per_us_min": 9980,
+        "per_us_mean": 9983,
+        "per_us_max": 9988
+      },
+      "scope": {
+        "isr_pulse_us_min": null,
+        "isr_pulse_us_max": null,
+        "note": "opcjonalnie: ENC_ISR_PIN=1, D9"
+      },
+      "captured_at": "20260924_182143",
+      "firmware_flags": {
+        "cfg_swap": 1,
+        "cfg_dc_fix": 1,
+        "cfg_hf_round": 1,
+        "cfg_eps_floor": 1,
+        "cfg_acc32": 1,
+        "adcsra_ps_bits": 6
+      }
+    }
+  },
+  "parity": {
+    "_opis": "Kryterium 3. Wypełnia tools/parity_test.py --json (symulacja) i/lub porównanie na płytce. agree_pct_event = zgodność spike'ów na ramkach zdarzeniowych.",
+    "sim": null,
+    "board": null
+  },
+  "ab": {
+    "_opis": "Krok 5: A/B na spikes_v2 (ten sam split, te same seedy). recall@FA/h z eval_stream.py, clip-F1 z winner.py/pipeline.",
+    "seeds": null,
+    "baseline": {
+      "recall_at_1_fah": null,
+      "recall_at_6_fah": null,
+      "clip_f1": null,
+      "clip_fa_rate": null
+    },
+    "swap": {
+      "recall_at_1_fah": null,
+      "recall_at_6_fah": null,
+      "clip_f1": null,
+      "clip_fa_rate": null
+    },
+    "delta_paired_bootstrap_ci95": null,
+    "wniosek": null
+  },
+  "phase0": {
+    "recommended_thresholds": {
+      "mob_thr": 2.497323989868164,
+      "ac_thr": -0.23359893262386322
+    },
+    "decision": "OBA (wariant B_swap)"
+  },
+  "sim_reference": {
+    "_opis": "SYMULACJA simavr (cykl-dokładna, fs wymuszone 19231 Hz, szum N(512,60)) — oczekiwane wartości do porównania z płytką.",
+    "baseline": {
+      "isr_cycles_mean": 597.0,
+      "isr_cycles_max": 621,
+      "bench_isr_cycles_mean": 602.5,
+      "isr_cpu_pct": 72.4,
+      "p1": {
+        "late": 94,
+        "frames": 448,
+        "proc_us_mean": 6760
+      },
+      "p2": {
+        "late": 115,
+        "frames": 500,
+        "proc_us_mean": 4253
+      }
+    },
+    "swap_full": {
+      "isr_cycles_mean": 517.7,
+      "isr_cycles_max": 533,
+      "bench_isr_cycles_mean": 518.5,
+      "isr_cpu_pct": 62.3,
+      "p1": {
+        "late": 0,
+        "frames": 448,
+        "proc_us_mean": 4791
+      },
+      "p2": {
+        "late": 0,
+        "frames": 501,
+        "proc_us_mean": 2852
+      }
+    }
+  }
+}

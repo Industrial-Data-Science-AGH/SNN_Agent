@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NeuronFrame",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "device_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "session_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "epoch": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "source_time_us": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "model_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "frame_seq": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "topology_version": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "status": {
+      "enum": [
+        "running",
+        "warmup",
+        "gap",
+        "stopped"
+      ]
+    },
+    "provenance": {
+      "enum": [
+        "demo",
+        "simulated",
+        "measured"
+      ]
+    },
+    "potential_unit": {
+      "enum": [
+        "a.u.",
+        "V"
+      ]
+    },
+    "neurons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "neuron_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+          },
+          "v_mem": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "v_threshold": {
+            "type": "number"
+          },
+          "v_reset": {
+            "type": "number"
+          },
+          "spiked": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "neuron_id",
+          "v_mem",
+          "v_threshold",
+          "v_reset",
+          "spiked"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 50,
+      "minItems": 0
+    }
+  },
+  "required": [
+    "schema_version",
+    "device_id",
+    "session_id",
+    "epoch",
+    "source_time_us",
+    "model_hash",
+    "frame_seq",
+    "topology_version",
+    "status",
+    "provenance",
+    "potential_unit",
+    "neurons"
+  ],
+  "additionalProperties": false
+}

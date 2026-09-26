@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 120" width="210" height="120">
+  <!-- Lu.i analog-neuron board, stylised after the real PCB: an organic neuron
+       silhouette (soma + three dendrite arms + a long axon), NOT a rectangle or
+       circle. Distinct LAYERS the editor and the runtime view address on their own:
+         .board-sel        selection halo (shown when the board is selected)
+         .board-body       the neuron silhouette + soma knob + silk
+         .board-ports      the three dendrite input pads (left)
+         .led-potential     membrane-potential (Vmem) LED in the soma  — driven in C3
+         .led-spike         spike LED strip along the axon             — driven in C3
+       Cloned by the canvas with <use href="#lui-board">. -->
+  <symbol id="lui-board" viewBox="0 0 210 120">
+    <!-- selection halo: the same silhouette, slightly larger, behind the body -->
+    <g class="board-sel" fill="#9a80ff" stroke="#9a80ff" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M96 60 L34 22" stroke-width="28" fill="none"/>
+      <path d="M96 60 L14 60" stroke-width="28" fill="none"/>
+      <path d="M96 60 L36 100" stroke-width="28" fill="none"/>
+      <path d="M100 60 L198 60" stroke-width="26" fill="none"/>
+      <path d="M196 60 L206 96" stroke-width="16" fill="none"/>
+      <ellipse cx="96" cy="60" rx="49" ry="43"/>
+    </g>
+
+    <!-- neuron body (arms + soma + axon share one colour → a single silhouette) -->
+    <g class="board-body">
+      <g fill="none" stroke="#271b40" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M96 60 L34 22" stroke-width="22"/>
+        <path d="M96 60 L14 60" stroke-width="22"/>
+        <path d="M96 60 L36 100" stroke-width="22"/>
+        <path d="M100 60 L198 60" stroke-width="20"/>
+        <path d="M196 60 L206 96" stroke-width="10"/>
+      </g>
+      <ellipse cx="96" cy="60" rx="46" ry="40" fill="#271b40"/>
+      <ellipse cx="96" cy="60" rx="46" ry="40" fill="url(#board-sheen)"/>
+
+      <!-- silk: logo + traces -->
+      <path d="M70 30 l4 -6 l1 5 l4 -3" fill="none" stroke="#8f7ec4" stroke-width="1.4" stroke-linecap="round"/>
+      <text x="80" y="30" font-family="monospace" font-size="9" fill="#9a88cc">Lu.i</text>
+      <line x1="120" y1="52" x2="150" y2="52" stroke="#3d2f63" stroke-width="1"/>
+
+      <!-- soma potentiometer knob (metallic) -->
+      <circle cx="80" cy="62" r="12" fill="url(#knob)"/>
+      <circle cx="80" cy="62" r="12" fill="none" stroke="#15102a" stroke-width="1.2"/>
+    </g>
+
+    <!-- dendrite input pads -->
+    <g class="board-ports" fill="#1b1230" stroke="#6f5eaa" stroke-width="2">
+      <circle cx="30" cy="20" r="6"/>
+      <circle cx="12" cy="60" r="6"/>
+      <circle cx="32" cy="102" r="6"/>
+    </g>
+
+    <!-- membrane-potential (Vmem) LED in the soma. Dim by default; lit in C3. -->
+    <g class="led-potential" transform="translate(104,60)">
+      <circle class="led-glow" r="11" fill="#ff9a3c" opacity="0.18"/>
+      <circle class="led-core" r="6" fill="#7a5230"/>
+    </g>
+
+    <!-- spike LED strip along the axon + SPIKE label -->
+    <g class="led-spike" transform="translate(150,60)" fill="#7a5230">
+      <circle cx="0" cy="0" r="2.6"/><circle cx="9" cy="0" r="2.6"/><circle cx="18" cy="0" r="2.6"/>
+      <circle cx="27" cy="0" r="2.6"/><circle cx="36" cy="0" r="2.6"/>
+      <circle class="spike-tip" cx="45" cy="0" r="3.2" fill="#ff9a3c"/>
+    </g>
+    <text x="168" y="76" font-family="monospace" font-size="7" fill="#8a7ab0" letter-spacing="1">SPIKE</text>
+  </symbol>
+
+  <defs>
+    <linearGradient id="board-sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.08"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.16"/>
+    </linearGradient>
+    <radialGradient id="knob" cx="0.4" cy="0.35" r="0.75">
+      <stop offset="0" stop-color="#e9e9ef"/>
+      <stop offset="0.5" stop-color="#9a9aa6"/>
+      <stop offset="1" stop-color="#55555f"/>
+    </radialGradient>
+  </defs>
+
+  <!-- preview when opened directly -->
+  <use href="#lui-board"/>
+</svg>

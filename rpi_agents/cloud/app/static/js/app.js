@@ -4,6 +4,7 @@
 
 import { createSource } from "./data.js";
 import * as auth from "./auth.js";
+import { mountNetworkEditor } from "./network.js";
 import { el, clear, kv, statusRow, stateLoading, stateEmpty, stateError } from "./ui.js";
 
 const $ = (sel) => document.querySelector(sel);
@@ -17,7 +18,7 @@ let source = null; // the active DataSource (demo or live)
 let mode = null;    // "demo" | "live"
 const rendered = new Set(); // tabs already drawn (lazy, drawn once)
 
-// --------------------------------------------------------------- entry points
+//  entry points
 
 async function start() {
   const session = await auth.currentSession();
@@ -115,7 +116,7 @@ function selectTab(tab) {
   }
 }
 
-// --------------------------------------------------------------- tab rendering
+//  tab rendering
 
 const TABS = {
   network: renderNetwork,
@@ -143,36 +144,15 @@ function comingSoon(task, what) {
   return stateEmpty(`${what}`, `Built in task ${task}.`);
 }
 
-// ---- Network (full editor is C2, inspector is C3) ----
+//  Network (board editor C2; neuron inspector / runtime LEDs are C3) 
 async function renderNetwork(panel) {
-  head(panel, "Network", "Lu.i board topology and neuron inspector.");
-  const card = el("div", { class: "card" }, [el("h3", { text: "Board editor" })]);
-  card.append(comingSoon("C2 / C3", "Board layout, neuron inspector, spike raster"));
+  head(panel, "Network", "Lu.i board topology — draft editor. Neuron inspector and live signals arrive in C3.");
+  const card = el("div", { class: "card" });
   panel.append(card);
-
-  // Demo proof that the model contract is reachable through the data layer.
-  if (source.isDemo) {
-    const box = el("div", { class: "card" }, [el("h3", { text: "Loaded model (demo)" })]);
-    box.append(stateLoading());
-    panel.append(box);
-    try {
-      const manifest = await source.getModelManifest();
-      clear(box);
-      box.append(el("h3", { text: "Loaded model (demo)" }));
-      box.append(kv([
-        ["Model hash", manifest?.model_hash],
-        ["Topology", manifest?.topology_version ?? manifest?.topology?.version],
-        ["Schema", manifest?.schema_version],
-      ]));
-    } catch (err) {
-      clear(box);
-      box.append(el("h3", { text: "Loaded model (demo)" }));
-      box.append(stateError("Could not load model manifest", err.message));
-    }
-  }
+  await mountNetworkEditor(card, { readonly: false });
 }
 
-// ---- Events (details & timeline are C4) ----
+//  Events (details & timeline are C4) 
 async function renderEvents(panel) {
   head(panel, "Events", "Detection events with capture, vision and alarm timeline.");
   const card = el("div", { class: "card" }, [el("h3", { text: "Event timeline" })]);
@@ -210,7 +190,7 @@ async function renderEvents(panel) {
   }
 }
 
-// ---- Experiments (metrics are C4) ----
+// Experiments (metrics are C4) 
 async function renderExperiments(panel) {
   head(panel, "Experiments", "Split, seed, model/encoder hashes, FA/h and recall.");
   const card = el("div", { class: "card" }, [el("h3", { text: "Experiment results" })]);
@@ -218,7 +198,7 @@ async function renderExperiments(panel) {
   panel.append(card);
 }
 
-// ---- Energy (measurements are C4 / A2) ----
+//  Energy (measurements are C4 / A2) 
 async function renderEnergy(panel) {
   head(panel, "Energy", "Measured or estimated power and energy per session.");
   const card = el("div", { class: "card" }, [el("h3", { text: "Power & energy" })]);
@@ -227,7 +207,7 @@ async function renderEnergy(panel) {
   panel.append(card);
 }
 
-// ---- Device (fully rendered in C1 from the DeviceStatus contract) ----
+//  Device (fully rendered in C1 from the DeviceStatus contract) 
 async function renderDevice(panel) {
   head(panel, "Device", "Edge agent heartbeat, serial link, camera and outbox.");
   const card = el("div", { class: "card" }, [el("h3", { text: "Device status" })]);
@@ -278,7 +258,7 @@ async function renderDevice(panel) {
   }
 }
 
-// --------------------------------------------------------------- go
+// go
 
 wireLogin();
 wireShell();

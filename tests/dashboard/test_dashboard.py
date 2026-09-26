@@ -73,6 +73,22 @@ def test_login_rejects_wrong_credentials(client: TestClient) -> None:
     assert res.json()["error"]["code"] == "INVALID_CREDENTIALS"
 
 
+#  C2 network editor
+
+def test_neuron_svg_has_distinct_layers(client: TestClient) -> None:
+    body = client.get("/static/img/neuron.svg").text
+    assert client.get("/static/img/neuron.svg").status_code == 200
+    # Not a plain circle: named layers the editor/runtime address separately.
+    for layer in ("lui-board", "board-sel", "board-ports", "led-potential", "led-spike"):
+        assert layer in body
+
+
+def test_network_module_is_served(client: TestClient) -> None:
+    res = client.get("/static/js/network.js")
+    assert res.status_code == 200
+    assert "mountNetworkEditor" in res.text
+
+
 def test_login_then_session_and_logout(client: TestClient) -> None:
     res = client.post("/auth/login", json={"username": "operator", "password": "demo"})
     assert res.status_code == 200

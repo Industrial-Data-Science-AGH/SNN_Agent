@@ -1,0 +1,35 @@
+{
+  "freeze_schema_version": "1.0",
+  "milestone": "M1 punkt 1",
+  "frozen_at": "2026-09-26T08:04:48.977993+00:00",
+  "seed": 42,
+  "splits": {
+    "train": {
+      "path": "/home/marceld/IDS/SNN/SNN_Agent/architecture_14_neurons_patryk_09_07/spikes_v2/train",
+      "n_files": 7116,
+      "manifest_sha256": "a4b2e3f881b0cf2b8f167cd463a56d6b5282da1f62031742f53dc7a3c6e248be"
+    },
+    "val": {
+      "path": "/home/marceld/IDS/SNN/SNN_Agent/architecture_14_neurons_patryk_09_07/spikes_v2/val",
+      "n_files": 1869,
+      "manifest_sha256": "5d7e79c0ba2e7f8d14058d54a7eb9d07a1debe234c4ccc28c6a9d79ee16ffe28"
+    },
+    "test": {
+      "path": "/home/marceld/IDS/SNN/SNN_Agent/architecture_14_neurons_patryk_09_07/spikes_v2/test",
+      "n_files": 1870,
+      "manifest_sha256": "52cf2cffc4ed3a1c875b594924354a437910b09a4faf71b7f7ae2a44f031817b"
+    }
+  },
+  "encoder": {
+    "profile_id": "encoder_v3",
+    "encoder_variant": null,
+    "encoder_hash": "sha256:fec5ee948b16d578d073178a7f706865d28776a00b0b75b83d8c75cb7443f862",
+    "encoder_hash_source": "config_sha256 z encoder-profile.json (obliczony przez Kacpra)",
+    "note": "profile_id 'encoder_v3' i encoder_variant 'encoder_v2_swap.ino' to TEN SAM zamrozony wariant (potwierdzone przez Kacpra 25.09.2026) -- 'v3' to wewnetrzny numer wersji configu, nie osobny firmware."
+  },
+  "selection_target": {
+    "metric": "clip_f1",
+    "evaluated_on": "val",
+    "note": "Cel wyboru modelu na walidacji (M1 punkt 1). Zgodny z GAConfig.fitness_metric po poprawce literowki 'recal_fa' -> 'recall_fa' (25.09.2026, Marcel)."
+  }
+}

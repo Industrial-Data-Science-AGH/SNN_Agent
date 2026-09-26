@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TopologyDraft",
+  "description": "A wiring sketch from the network editor. A draft is not a model: it carries no weights, decoder, artifacts or provenance, and no session can be started from it. It exists so that a layout can be exchanged, reviewed and refused before anyone builds a model out of it.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "draft_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "boards": {
+      "description": "Lu.i boards placed in the editor. Zero boards is an empty editor, not a classifier.",
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          }
+        },
+        "required": ["id", "x", "y"],
+        "additionalProperties": false
+      }
+    },
+    "connections": {
+      "description": "Wires. A Lu.i board has three physical synapse inputs, so target_port is 1, 2 or 3 and each one takes a single wire.",
+      "type": "array",
+      "minItems": 0,
+      "maxItems": 150,
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "source_kind": {
+            "enum": ["channel", "board"]
+          },
+          "target": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+          },
+          "target_port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "kind": {
+            "enum": ["excitatory", "inhibitory"]
+          }
+        },
+        "required": ["id", "source", "source_kind", "target", "target_port", "kind"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["schema_version", "draft_id", "boards", "connections"],
+  "additionalProperties": false
+}

@@ -37,9 +37,11 @@ import os
 from typing import Any, Mapping, Sequence
 
 from .decoder import KOfWDecoder
-from .errors import RuntimeStateError
+from .errors import RuntimeLoadError, RuntimeStateError
 from .integrator import LuiIntegrator
 from .manifest import LoadedModel, load_manifest
+from .telemetry import build_frame, frame_provenance
+from .topology import describe_refusal, looks_like_a_draft
 
 # How many membrane time constants of unobserved input the runtime treats as
 # "the state no longer remembers what it missed". Below this it integrates the
@@ -70,6 +72,17 @@ class LuiRuntime:
         self._decoder: KOfWDecoder | None = None
         self._settle_frames = 0
         self._warmup_left = 0
+        # Telemetry (task P3). The identity of the stream is the device's, not
+        # ours: it arrives on every SpikeBatch and a session may also declare it
+        # up front, so a viewer attached before the first batch still gets a
+        # frame that names the session it belongs to.
+        self._device_id: str | None = None
+        self._session_id: str | None = None
+        self._frame_seq = 0
+        self._stopped = False
+        self._gap_pending = False
+        self._observed = False
+        self._last_spikes: tuple[bool, ...] = ()
 
     # ------------------------------------------------------------------ state
 
@@ -96,6 +109,11 @@ class LuiRuntime:
 
     def load(self, manifest: Mapping[str, Any]) -> None:
         """Accept or reject a package. Rejection leaves the previous state intact."""
+        if looks_like_a_draft(manifest):
+            # The editor can hand a sketch to anything that takes JSON. Saying
+            # what it is beats failing later on a missing key, and it is the
+            # guarantee that redrawing the network cannot replace the champion.
+            raise RuntimeLoadError("DRAFT_NOT_A_MODEL", describe_refusal(manifest))
         accepted = load_manifest(
             manifest, artifact_root=self._artifact_root, require_artifacts=not self._allow_unverified,
         )
@@ -105,8 +123,20 @@ class LuiRuntime:
         self._integrator = None
         self._decoder = None
 
-    def reset(self, *, epoch: int, source_time_us: int) -> None:
-        """Start a session epoch. Membrane, synapses, refractory and decoder all go."""
+    def reset(
+        self,
+        *,
+        epoch: int,
+        source_time_us: int,
+        device_id: str | None = None,
+        session_id: str | None = None,
+    ) -> None:
+        """Start a session epoch. Membrane, synapses, refractory and decoder all go.
+
+        ``device_id`` and ``session_id`` are optional and only name the stream
+        for telemetry; the batches carry them too, and a mismatch between the
+        two is refused in ``step`` rather than silently preferred one way.
+        """
         model = self.model
         if epoch < 1:
             raise RuntimeStateError("INVALID_EPOCH", "session epoch counts from 1")
@@ -122,6 +152,16 @@ class LuiRuntime:
         # A fresh session starts at rest, which is a real state and not an
         # assumption, so the only thing still unknown is the delay lines.
         self._warmup_left = model.plan.warmup_frames
+        self._device_id = device_id or self._device_id
+        self._session_id = session_id or self._session_id
+        self._frame_seq = 0
+        self._last_spikes = (False,) * len(model.plan.neurons)
+        # Nothing has been observed yet, so the state is rest by assumption
+        # rather than by measurement. That is exactly what warmup means here,
+        # and warmup_frames == 0 still means no input has been seen.
+        self._stopped = False
+        self._gap_pending = False
+        self._observed = False
 
     # ------------------------------------------------------------------- step
 
@@ -129,6 +169,7 @@ class LuiRuntime:
         """Consume one SpikeBatch and answer what the decoder now believes."""
         self._require_started()
         model = self.model
+        self._bind_stream(batch)
 
         if model.is_scripted:
             # A scripted package has no physics to integrate. Saying so is the
@@ -172,6 +213,7 @@ class LuiRuntime:
         frames = span // dt
         triggered, spikes = self._run(self._frame_inputs(batch, frames), frames)
         self._source_time_us = end
+        self._observed = True
 
         status = "warmup" if self._warmup_left > 0 else "valid"
         self._warmup_left = max(0, self._warmup_left - frames)
@@ -180,6 +222,20 @@ class LuiRuntime:
         )
 
     # ----------------------------------------------------------------- pieces
+
+    def _bind_stream(self, batch: Mapping[str, Any]) -> None:
+        """Learn which device and session this stream is, and keep it that way."""
+        for field, current in (("device_id", self._device_id), ("session_id", self._session_id)):
+            incoming = batch.get(field)
+            if incoming is None:
+                continue
+            if current is None:
+                setattr(self, f"_{field}", incoming)
+            elif incoming != current:
+                raise RuntimeStateError(
+                    "SESSION_MISMATCH",
+                    f"batch reports {field} {incoming!r} but this session is {current!r}",
+                )
 
     @property
     def _provenance(self) -> str:
@@ -208,7 +264,11 @@ class LuiRuntime:
         decision_index = self.model.plan.decision_index
         triggered, spikes = False, 0
         for frame in range(frames):
-            fired = integrator.step(grid[frame])[decision_index]
+            fired_all = integrator.step(grid[frame])
+            # Telemetry reports the last frame of the batch, so the spike flags
+            # belong to the same instant as the membrane values it reads.
+            self._last_spikes = tuple(bool(x) for x in fired_all)
+            fired = fired_all[decision_index]
             if fired:
                 spikes += 1
             # The decoder runs through warm-up too, so a cooldown opened there
@@ -231,12 +291,71 @@ class LuiRuntime:
         decoder.skip(missing)
         decoder.flush()
         self._warmup_left = max(self._warmup_left, self._settle_frames)
+        self._last_spikes = (False,) * len(self.model.plan.neurons)
+        # A viewer may be sampling far more slowly than the stream runs. The
+        # next frame it receives has to say a hole went past, so the flag waits
+        # for that frame instead of expiring with the batch that absorbed it.
+        self._gap_pending = True
 
-    # ------------------------------------------------------------ later tasks
+    # -------------------------------------------------------------- telemetry
+
+    def stop(self) -> None:
+        """Close the session for telemetry. The state stays readable, frozen."""
+        self._require_started()
+        self._stopped = True
+
+    @property
+    def telemetry_status(self) -> str:
+        """What a frame taken right now would say about the session."""
+        if self._stopped:
+            return "stopped"
+        if self._gap_pending:
+            return "gap"
+        # Decision warm-up and "nothing has arrived yet" are both states where
+        # the picture rests on an assumption, and the contract has one word for
+        # that. The decision path is untouched: this reads state, never sets it.
+        return "warmup" if self._warmup_left > 0 or not self._observed else "running"
 
     def snapshot(self) -> dict:
+        """One NeuronFrame for the state the network is in right now.
+
+        Reading telemetry never advances the simulation and never changes a
+        decision; the one thing it does change is the gap flag, which is cleared
+        by the frame that reports it, so a hole is announced exactly once and to
+        somebody rather than being dropped between two sampling points.
+        """
         self._require_started()
-        raise NotImplementedError("NeuronFrame telemetry is task P3")
+        model = self.model
+        if self._device_id is None or self._session_id is None:
+            raise RuntimeStateError(
+                "NO_STREAM_IDENTITY",
+                "the session has no device_id/session_id yet: pass them to reset() "
+                "or take the snapshot after the first batch",
+            )
+
+        neurons = model.manifest["topology"]["neurons"]
+        by_id = {n["neuron_id"]: n for n in neurons}
+        ordered = [by_id[name] for name in model.neuron_order]
+        membrane = None if model.is_scripted or self._integrator is None else self._integrator.membrane
+
+        frame = build_frame(
+            device_id=self._device_id,
+            session_id=self._session_id,
+            epoch=self._epoch or 0,
+            source_time_us=self._source_time_us or 0,
+            model_hash=model.model_hash,
+            frame_seq=self._frame_seq,
+            topology_version=model.manifest["topology"]["topology_version"],
+            status=self.telemetry_status,
+            provenance=frame_provenance(scripted=model.is_scripted, calibration=model.calibration),
+            potential_unit=model.potential_unit,
+            neurons=ordered,
+            membrane=membrane,
+            spiked=self._last_spikes,
+        )
+        self._frame_seq += 1
+        self._gap_pending = False
+        return frame
 
     def checkpoint(self) -> bytes:
         self._require_started()

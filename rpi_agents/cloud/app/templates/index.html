@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SNN Lab — Lu.i dashboard</title>
+  <meta name="description" content="SNN Lab operator dashboard for the Lu.i analog-neuron glass-break detector.">
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+  <!--  SIGN IN  -->
+  <section id="login-view" class="login-view" hidden>
+    <form id="login-form" class="login-card" novalidate autocomplete="off">
+      <div class="login-brand">
+        <span class="logo-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 16h5l3-9 5 18 4-13 2 4h7"></path>
+          </svg>
+        </span>
+        <span class="logo-text"><strong>SNN Lab</strong><small>Lu.i analog neuron digital twin</small></span>
+      </div>
+
+      <h1 class="login-title">Sign in</h1>
+      <p class="login-sub">Operator access to the glass-break detector.</p>
+
+      <label class="field">
+        <span class="field-label">Username</span>
+        <input id="username" name="username" type="text" autocomplete="username" required
+               autocapitalize="off" spellcheck="false">
+      </label>
+
+      <label class="field">
+        <span class="field-label">Password</span>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+      </label>
+
+      <p id="login-error" class="login-error" role="alert" aria-live="assertive" hidden></p>
+
+      <button id="login-submit" class="btn btn-primary btn-block" type="submit">
+        <span class="btn-label">Sign in</span>
+        <span class="spinner" aria-hidden="true"></span>
+      </button>
+
+      <button id="demo-enter" class="btn btn-ghost btn-block" type="button">Explore demo (no sign-in)</button>
+
+      <p class="login-hint">Demo credential: <code>operator</code> / <code>demo</code></p>
+    </form>
+  </section>
+
+  <!--  APP SHELL  -->
+  <div id="app-view" class="app" hidden>
+    <!-- top bar -->
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 16h5l3-9 5 18 4-13 2 4h7"></path>
+          </svg>
+        </span>
+        <span class="brand-text"><strong>SNN Lab</strong><small>Lu.i analog neuron digital twin</small></span>
+      </div>
+
+      <span id="demo-badge" class="demo-badge" hidden>DEMO · SAMPLE DATA</span>
+
+      <div class="topbar-right">
+        <span class="topbar-meta">Glass-break detector</span>
+        <span class="topbar-sep">·</span>
+        <span class="topbar-meta">Version 0.9.0</span>
+        <button id="logout-btn" class="btn btn-outline btn-sm" type="button">Log out</button>
+      </div>
+    </header>
+
+    <!-- toolbar: session/view controls, wired to the Network tab -->
+    <div class="toolbar" aria-label="Session controls">
+      <div class="toolbar-group" role="group" aria-label="Mode">
+        <button id="top-live" class="btn btn-primary btn-sm" type="button" disabled>Live</button>
+        <button id="top-replay" class="btn btn-outline btn-sm" type="button" disabled>Replay</button>
+        <button id="top-edit" class="btn btn-outline btn-sm" type="button" disabled>Edit</button>
+      </div>
+      <div class="toolbar-group">
+        <span class="toolbar-label">Board count</span>
+        <select id="top-board-count" class="select" disabled aria-label="Board count"><option>8</option></select>
+        <span class="toolbar-hint">0 – 50</span>
+      </div>
+      <div class="toolbar-group toolbar-right">
+        <button id="top-start" class="btn btn-primary btn-sm" type="button" disabled>Start</button>
+        <button id="top-pause" class="btn btn-outline btn-sm" type="button" disabled>Pause view</button>
+        <button id="top-fit" class="btn btn-outline btn-sm" type="button" disabled>Fit</button>
+      </div>
+    </div>
+
+    <div class="body">
+      <!-- left nav -->
+      <nav class="sidebar" aria-label="Sections">
+        <button class="nav-item" data-tab="network" type="button">
+          <span class="nav-ico" aria-hidden="true">◇</span> Network
+        </button>
+        <button class="nav-item" data-tab="events" type="button">
+          <span class="nav-ico" aria-hidden="true">≡</span> Events
+        </button>
+        <button class="nav-item" data-tab="experiments" type="button">
+          <span class="nav-ico" aria-hidden="true">⌕</span> Experiments
+        </button>
+        <button class="nav-item" data-tab="energy" type="button">
+          <span class="nav-ico" aria-hidden="true">⚡</span> Energy
+        </button>
+        <button class="nav-item" data-tab="device" type="button">
+          <span class="nav-ico" aria-hidden="true">▤</span> Device
+        </button>
+      </nav>
+
+      <!-- main content: one panel per tab, filled by app.js -->
+      <main class="content">
+        <section class="panel" data-panel="network" hidden></section>
+        <section class="panel" data-panel="events" hidden></section>
+        <section class="panel" data-panel="experiments" hidden></section>
+        <section class="panel" data-panel="energy" hidden></section>
+        <section class="panel" data-panel="device" hidden></section>
+      </main>
+    </div>
+
+    <footer class="footer">
+      <span>SNN Lab · Glass-break detection research</span>
+      <span id="footer-mode">UI reference v3 · English</span>
+    </footer>
+  </div>
+
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

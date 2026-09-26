@@ -1,0 +1,36 @@
+{
+  "schema_version": "1.0",
+  "demo": true,
+  "sources": [
+    {
+      "scope": "Edge device (RPi 5 + boards)",
+      "source": "measured",
+      "boundary": "USB-C inline meter, board + Pi",
+      "power_w": 3.8,
+      "energy_j": 13680.0,
+      "energy_wh": 3.8,
+      "window_s": 3600,
+      "note": "1 h idle-to-active demo run"
+    },
+    {
+      "scope": "SNN inference only",
+      "source": "estimated",
+      "boundary": "analog boards, excludes Pi",
+      "power_w": 0.42,
+      "energy_j": 1512.0,
+      "energy_wh": 0.42,
+      "window_s": 3600,
+      "note": "estimated from datasheet"
+    },
+    {
+      "scope": "Cloud (vision call)",
+      "source": "estimated",
+      "boundary": "per event, provider-side",
+      "power_w": null,
+      "energy_j": null,
+      "energy_wh": null,
+      "window_s": null,
+      "note": "provider does not expose energy"
+    }
+  ]
+}

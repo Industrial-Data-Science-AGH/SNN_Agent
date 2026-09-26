@@ -68,7 +68,7 @@ code { font-family: var(--font-mono); font-size: 0.9em; color: var(--text-second
   border-radius: var(--radius-sm);
 }
 
-/* ---------------- logo ---------------- */
+/*  logo  */
 
 .logo-mark { color: var(--accent-bright); display: inline-flex; }
 
@@ -76,7 +76,7 @@ code { font-family: var(--font-mono); font-size: 0.9em; color: var(--text-second
 .logo-text strong, .brand-text strong { font-size: 1.05rem; letter-spacing: -0.01em; }
 .logo-text small, .brand-text small { color: var(--text-muted); font-size: 0.72rem; }
 
-/* ---------------- buttons ---------------- */
+/*  buttons  */
 
 .btn {
   --btn-bg: var(--bg-elevated);
@@ -109,7 +109,7 @@ code { font-family: var(--font-mono); font-size: 0.9em; color: var(--text-second
 .btn-sm { padding: 0.35rem 0.7rem; font-size: 0.82rem; }
 .btn-block { width: 100%; margin-top: 0.5rem; }
 
-/* ---------------- sign in ---------------- */
+/*  sign in  */
 
 .login-view {
   min-height: 100vh;
@@ -170,7 +170,7 @@ code { font-family: var(--font-mono); font-size: 0.9em; color: var(--text-second
 .is-loading .btn-label { opacity: 0.7; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ---------------- app shell ---------------- */
+/*  app shell  */
 
 .app { display: flex; flex-direction: column; min-height: 100vh; }
 
@@ -267,7 +267,7 @@ code { font-family: var(--font-mono); font-size: 0.9em; color: var(--text-second
   flex-wrap: wrap;
 }
 
-/* ---------------- panels / cards ---------------- */
+/* panels / cards  */
 
 .panel-head { margin-bottom: 1.25rem; }
 .panel-head h2 { margin: 0; font-size: 1.25rem; letter-spacing: -0.01em; }
@@ -336,7 +336,7 @@ td { font-variant-numeric: tabular-nums; }
 
 .na { color: var(--text-muted); font-style: italic; }
 
-/* ---------------- responsive ---------------- */
+/*  responsive  */
 
 @media (max-width: 760px) {
   .sidebar {
@@ -350,7 +350,7 @@ td { font-variant-numeric: tabular-nums; }
   .nav-item { white-space: nowrap; }
 }
 
-/* ---------------- network editor (C2) ---------------- */
+/*  network editor (C2)  */
 
 .net-editor { display: flex; flex-direction: column; gap: 0.75rem; }
 
@@ -429,6 +429,100 @@ td { font-variant-numeric: tabular-nums; }
 
 .net-readout { color: var(--text-muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
 .net-readout.is-error { color: var(--alarm-fg); }
+
+/* runtime controls / layout (C3) */
+
+.runbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.conn-badge {
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: var(--state-neutral-bg, var(--bg-elevated));
+  color: var(--text-secondary);
+}
+.conn-badge.ok { background: var(--ok-bg); color: var(--ok-fg); }
+.conn-badge.warn { background: var(--warn-bg); color: var(--warn-fg); }
+.conn-badge.alarm { background: var(--alarm-bg); color: var(--alarm-fg); }
+.conn-time { color: var(--text-muted); font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+
+.net-scrub { flex: 1; min-width: 160px; accent-color: var(--accent); }
+.net-scrub:disabled { opacity: 0.4; }
+
+.net-layout { display: grid; grid-template-columns: 1fr 340px; gap: 1rem; align-items: start; }
+@media (max-width: 900px) { .net-layout { grid-template-columns: 1fr; } }
+.net-canvas-card { margin-bottom: 1rem; }
+.net-canvas-card .net-canvas-wrap { height: 52vh; }
+
+/* live LED behaviour */
+.led-potential .led-core { transition: fill 120ms linear; }
+.led-potential .led-glow { transition: opacity 120ms linear; }
+.led-spike circle { transition: fill 90ms linear; }
+@keyframes spikeFlash { 0%, 100% { fill: #7a5230; } 15% { fill: #ffd089; } }
+@keyframes spikeFlashTip { 0%, 100% { fill: #ff9a3c; } 15% { fill: #ffe0a8; } }
+.led-spike.spiking circle { animation: spikeFlash 340ms ease-out; }
+.led-spike.spiking .spike-tip { animation: spikeFlashTip 340ms ease-out; }
+
+/*  inspector  */
+
+.insp-card { position: sticky; top: 0.5rem; }
+.inspector { display: flex; flex-direction: column; gap: 0.75rem; }
+.insp-head { min-height: 1.5rem; }
+.insp-title { display: flex; align-items: center; gap: 0.5rem; font-size: 1.05rem; }
+.insp-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-muted); }
+.insp-dot.ok { background: var(--ok-fg); box-shadow: 0 0 0 3px var(--ok-bg); }
+.insp-state { color: var(--text-muted); font-size: 0.82rem; }
+.insp-empty { color: var(--text-muted); font-size: 0.9rem; padding: 0.5rem 0; }
+
+.insp-tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--border-subtle); }
+.insp-tab {
+  appearance: none; background: none; border: none; font: inherit;
+  color: var(--text-muted); padding: 0.4rem 0.6rem; cursor: pointer;
+  border-bottom: 2px solid transparent; font-weight: 600; font-size: 0.85rem;
+}
+.insp-tab:hover { color: var(--text-secondary); }
+.insp-tab.active { color: var(--accent-bright); border-bottom-color: var(--accent-bright); }
+
+.insp-body { min-height: 200px; }
+.insp-label { color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.3rem; }
+.insp-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.35rem 0; border-bottom: 1px solid var(--border-subtle); }
+.insp-row-label { color: var(--text-muted); font-size: 0.85rem; }
+.insp-row-value { font-variant-numeric: tabular-nums; }
+.insp-note { color: var(--text-muted); font-size: 0.78rem; margin: 0.5rem 0 0; }
+.insp-calib { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-muted); }
+.insp-notes {
+  width: 100%; font: inherit; color: var(--text-primary);
+  background: var(--bg-base); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md); padding: 0.5rem; resize: vertical;
+}
+
+/* vmem chart */
+.vmem-chart { width: 100%; height: 180px; }
+.vmem-chart .axis { stroke: var(--border-strong); stroke-width: 1; }
+.vmem-chart .axis-label { fill: var(--text-muted); font-size: 9px; font-family: var(--font-sans); }
+.vmem-line { fill: none; stroke: var(--accent-bright); stroke-width: 1.6; }
+.vmem-thresh { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 4 3; opacity: 0.8; }
+.vmem-spike { stroke: #ff9a3c; stroke-width: 1.5; }
+.vmem-cursor { stroke: var(--text-muted); stroke-width: 1; opacity: 0.5; }
+.vmem-legend { display: flex; gap: 0.9rem; margin-top: 0.4rem; color: var(--text-muted); font-size: 0.78rem; }
+.vmem-legend-item { display: inline-flex; align-items: center; gap: 0.3rem; }
+.vmem-swatch { width: 16px; height: 3px; border-radius: 2px; }
+.vmem-swatch.vmem { background: var(--accent-bright); }
+.vmem-swatch.thresh { background: var(--accent); }
+.vmem-swatch.spike { background: #ff9a3c; }
+
+/* raster */
+.raster { width: 100%; height: 240px; cursor: crosshair; }
+.raster .axis { stroke: var(--border-strong); stroke-width: 1; }
+.raster .axis-label { fill: var(--text-muted); font-size: 9px; font-family: var(--font-sans); }
+.raster-tick { stroke: #ff9a3c; stroke-width: 2; }
+.raster-cursor { stroke: var(--accent-bright); stroke-width: 1.5; opacity: 0.7; }
 
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }

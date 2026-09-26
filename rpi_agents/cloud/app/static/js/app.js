@@ -5,6 +5,9 @@
 import { createSource } from "./data.js";
 import * as auth from "./auth.js";
 import { mountNetworkEditor } from "./network.js";
+import { createRuntime } from "./runtime.js";
+import { mountInspector } from "./inspector.js";
+import { mountRaster } from "./raster.js";
 import { el, clear, kv, statusRow, stateLoading, stateEmpty, stateError } from "./ui.js";
 
 const $ = (sel) => document.querySelector(sel);
@@ -17,6 +20,34 @@ const footerMode = $("#footer-mode");
 let source = null; // the active DataSource (demo or live)
 let mode = null;    // "demo" | "live"
 const rendered = new Set(); // tabs already drawn (lazy, drawn once)
+let activeEditor = null; // the network editor, for the shared top toolbar
+
+// The top chrome toolbar and the editor's own toolbar drive the SAME editor and
+// stay in sync (board count, Fit). Top controls are live only on the Network tab.
+function wireTopToolbar(editor) {
+  const topCount = document.querySelector("#top-board-count");
+  const topFit = document.querySelector("#top-fit");
+  if (topCount && !topCount.dataset.wired) {
+    topCount.dataset.wired = "1";
+    topCount.replaceChildren(...Array.from({ length: 51 }, (_, i) => new Option(String(i), String(i))));
+    topCount.addEventListener("change", () => activeEditor?.setBoardCount(Number(topCount.value)));
+  }
+  if (topFit && !topFit.dataset.wired) {
+    topFit.dataset.wired = "1";
+    topFit.addEventListener("click", () => activeEditor?.fit());
+  }
+  // editor → top: any count change (from either toolbar) reflects here
+  editor.onCount((n) => { if (topCount) topCount.value = String(n); });
+  if (topCount) topCount.value = String(editor.getCount());
+}
+
+function updateTopToolbar(tab) {
+  const on = tab === "network" && !!activeEditor;
+  const topCount = document.querySelector("#top-board-count");
+  const topFit = document.querySelector("#top-fit");
+  if (topCount) { topCount.disabled = !on; if (on) topCount.value = String(activeEditor.getCount()); }
+  if (topFit) topFit.disabled = !on;
+}
 
 //  entry points
 
@@ -114,6 +145,7 @@ function selectTab(tab) {
     rendered.add(tab);
     renderTab(tab);
   }
+  updateTopToolbar(tab);
 }
 
 //  tab rendering
@@ -144,12 +176,119 @@ function comingSoon(task, what) {
   return stateEmpty(`${what}`, `Built in task ${task}.`);
 }
 
-//  Network (board editor C2; neuron inspector / runtime LEDs are C3) 
+//  Network (board editor C2 + runtime LEDs, inspector, raster, replay — C3)
 async function renderNetwork(panel) {
-  head(panel, "Network", "Lu.i board topology — draft editor. Neuron inspector and live signals arrive in C3.");
-  const card = el("div", { class: "card" });
-  panel.append(card);
-  await mountNetworkEditor(card, { readonly: false });
+  head(panel, "Network", "Lu.i board topology, live signals and neuron inspector.");
+
+  // runtime controls: Live / Replay / Pause view, status, replay scrubber
+  const controls = buildRuntimeControls(source.isDemo);
+  panel.append(controls.root);
+
+  // canvas + inspector side by side; raster below
+  const canvasCard = el("div", { class: "card net-canvas-card" });
+  const inspectorCard = el("div", { class: "card insp-card" });
+  panel.append(el("div", { class: "net-layout" }, [canvasCard, inspectorCard]));
+  const rasterCard = el("div", { class: "card" }, [el("h3", { text: "Spike raster" })]);
+  const rasterHost = el("div");
+  rasterCard.append(rasterHost);
+  panel.append(rasterCard);
+
+  const editor = await mountNetworkEditor(canvasCard, { readonly: false });
+  activeEditor = editor;
+  wireTopToolbar(editor);
+  updateTopToolbar("network");
+  const runtime = createRuntime(source.isDemo ? "demo" : "live");
+  await runtime.load();
+  const inspector = mountInspector(inspectorCard, runtime, editor);
+  const raster = mountRaster(rasterHost, runtime, (t) => { switchMode("replay"); runtime.seek(t); });
+
+  editor.onSelect((id) => inspector.selectNeuron(id));
+
+  runtime.on("frame", (frame, idx) => {
+    editor.applyFrame(frame);
+    inspector.update();
+    raster.update();
+    controls.setTime(runtime.currentTime, runtime.meta?.duration_s);
+    if (!controls.scrubbing) controls.scrubber.value = String(idx);
+  });
+  runtime.on("status", (st) => controls.setStatus(st));
+
+  //  control wiring 
+  let viewPaused = false;
+  function switchMode(mode) {
+    controls.setActiveMode(mode);
+    controls.scrubber.disabled = mode !== "replay";
+    viewPaused = false;
+    controls.setPaused(false);
+    runtime.play({ mode });
+  }
+  controls.liveBtn.addEventListener("click", () => switchMode("live"));
+  controls.replayBtn.addEventListener("click", () => switchMode("replay"));
+  controls.pauseBtn.addEventListener("click", () => {
+    viewPaused = !viewPaused;
+    controls.setPaused(viewPaused);
+    // Pause view stops advancing the view only — it never stops the session.
+    if (viewPaused) runtime.pause(); else runtime.resume();
+  });
+  controls.scrubber.max = String((runtime.meta?.frameCount || 1) - 1);
+  controls.scrubber.addEventListener("input", () => {
+    controls.scrubbing = true;
+    const frames = runtime.frames || [];
+    const idx = Math.min(frames.length - 1, Number(controls.scrubber.value));
+    if (frames[idx]) runtime.seek(frames[idx].t);
+  });
+  controls.scrubber.addEventListener("change", () => { controls.scrubbing = false; });
+  if (controls.lossBtn) {
+    controls.lossBtn.addEventListener("click", () => {
+      const on = controls.lossBtn.dataset.on !== "true";
+      controls.lossBtn.dataset.on = String(on);
+      controls.lossBtn.textContent = on ? "Restore connection" : "Simulate connection loss";
+      runtime.simulateLoss(on);
+    });
+  }
+
+  // default: live view, inspect a neuron so the chart is populated
+  editor.select("n5");
+  switchMode("live");
+}
+
+function buildRuntimeControls(isDemo) {
+  const liveBtn = el("button", { class: "btn btn-primary btn-sm", type: "button", text: "Live" });
+  const replayBtn = el("button", { class: "btn btn-outline btn-sm", type: "button", text: "Replay" });
+  const pauseBtn = el("button", { class: "btn btn-outline btn-sm", type: "button", text: "Pause view" });
+  const statusBadge = el("span", { class: "conn-badge", text: "Connecting…" });
+  const timeLabel = el("span", { class: "conn-time", text: "0 s" });
+  const scrubber = el("input", { type: "range", min: "0", max: "100", value: "0", class: "net-scrub", "aria-label": "Replay position" });
+  scrubber.disabled = true;
+  const lossBtn = isDemo
+    ? el("button", { class: "btn btn-ghost btn-sm", type: "button", "data-on": "false", text: "Simulate connection loss" })
+    : null;
+
+  const root = el("div", { class: "runbar" }, [
+    el("div", { class: "toolbar-group" }, [liveBtn, replayBtn, pauseBtn]),
+    statusBadge, timeLabel,
+    el("span", { class: "net-spacer" }),
+    scrubber,
+    lossBtn,
+  ]);
+
+  return {
+    root, liveBtn, replayBtn, pauseBtn, scrubber, lossBtn, scrubbing: false,
+    setActiveMode(mode) {
+      liveBtn.classList.toggle("btn-primary", mode === "live");
+      liveBtn.classList.toggle("btn-outline", mode !== "live");
+      replayBtn.classList.toggle("btn-primary", mode === "replay");
+      replayBtn.classList.toggle("btn-outline", mode !== "replay");
+    },
+    setPaused(p) { pauseBtn.textContent = p ? "Resume" : "Pause view"; },
+    setTime(t, dur) { timeLabel.textContent = dur ? `${t.toFixed(1)} / ${dur} s` : `${t.toFixed(1)} s`; },
+    setStatus(st) {
+      const map = { connected: ["ok", "Live"], stale: ["alarm", "Stale data"], reconnecting: ["warn", "Reconnecting…"] };
+      const [cls, text] = map[st] || ["muted", st];
+      statusBadge.className = `conn-badge ${cls}`;
+      statusBadge.textContent = text;
+    },
+  };
 }
 
 //  Events (details & timeline are C4) 

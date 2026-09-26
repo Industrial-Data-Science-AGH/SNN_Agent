@@ -11,10 +11,10 @@
 // and can never overwrite `loaded`/`session`.
 
 const SVGNS = "http://www.w3.org/2000/svg";
-const BW = 175;          // board width  (neuron.svg viewBox 210x120, same aspect)
-const BH = 100;          // board height
-const GAP_X = 55;        // grid gaps leave room for labels (no overlap)
-const GAP_Y = 64;
+const BW = 210;          // board width  (native neuron.svg viewBox — no scaling)
+const BH = 120;          // board height
+const GAP_X = 60;        // grid gaps leave room for labels (no overlap)
+const GAP_Y = 60;
 const MAX_BOARDS = 50;
 
 const KINDS = { excitatory: "excitatory", inhibitory: "inhibitory" };
@@ -94,6 +94,9 @@ export async function mountNetworkEditor(container, { readonly = false } = {}) {
     selectedId: null,
     view: { x: -40, y: -40, w: 900, h: 560 }, // viewBox
   };
+  const selectListeners = [];
+  const countListeners = [];
+  let symbolNode = null;
 
   // DOM scaffold 
   container.innerHTML = "";
@@ -114,8 +117,8 @@ export async function mountNetworkEditor(container, { readonly = false } = {}) {
   editor.append(toolbar.root, canvasWrap, buildLegend(), toolbar.readout);
   container.append(editor);
 
-  //  neuron.svg symbol (injected once) 
-  await injectSymbol(defs);
+  //  neuron.svg symbol (injected once)
+  symbolNode = await injectSymbol(defs);
 
   //  state helpers 
   function applyView() {
@@ -145,6 +148,7 @@ export async function mountNetworkEditor(container, { readonly = false } = {}) {
     toolbar.countInput.value = String(boards.length);
     render();
     fit();
+    countListeners.forEach((cb) => cb(boards.length)); // keep other controls in sync
   }
 
   function select(id) {
@@ -155,6 +159,17 @@ export async function mountNetworkEditor(container, { readonly = false } = {}) {
     toolbar.readout.textContent = board
       ? `Selected ${board.label} · ${state.draft.connections.filter((c) => c.source === id || c.target === id).length} connection(s)`
       : `${state.draft.boards.length} board(s) · draft topology`;
+    selectListeners.forEach((cb) => cb(id, board || null));
+  }
+
+  function connectionsOf(id) {
+    return state.draft.connections
+      .filter((c) => c.source === id || c.target === id)
+      .map((c) => ({
+        id: c.id, kind: c.kind,
+        direction: c.source === id ? "out" : "in",
+        other: c.source === id ? c.target : c.source,
+      }));
   }
 
   //  rendering 
@@ -187,17 +202,18 @@ export async function mountNetworkEditor(container, { readonly = false } = {}) {
       g.setAttribute("class", "board");
       g.dataset.id = b.id;
       g.setAttribute("transform", `translate(${b.x} ${b.y})`);
-      const use = document.createElementNS(SVGNS, "use");
-      use.setAttribute("href", "#lui-board");
-      use.setAttribute("width", BW);
-      use.setAttribute("height", BH);
+      // Inline-clone the symbol art (not <use>) so per-neuron LED layers are
+      // real DOM nodes the runtime can drive.
+      if (symbolNode) {
+        for (const child of symbolNode.children) g.append(child.cloneNode(true));
+      }
       const label = document.createElementNS(SVGNS, "text");
       label.setAttribute("class", "board-label");
       label.setAttribute("x", BW / 2);
       label.setAttribute("y", BH + 18);
       label.setAttribute("text-anchor", "middle");
       label.textContent = b.label;
-      g.append(use, label);
+      g.append(label);
       if (b.id === state.selectedId) g.classList.add("selected");
       gBoards.append(g);
     }
@@ -316,16 +332,63 @@ export async function mountNetworkEditor(container, { readonly = false } = {}) {
     }
   });
 
-  // ---- start --------------------------------------------------------------
+  //  runtime: drive LEDs from frame fields (C3) 
+  // The potential LED brightness comes from v_mem (normalised between reset and
+  // threshold); the spike flash is a SEPARATE, one-shot cue driven by `spiked`.
+  // No randomness, no tau-only animation.
+  function applyFrame(frame) {
+    if (!frame || !frame.neurons) return;
+    for (const n of frame.neurons) {
+      const g = gBoards.querySelector(`.board[data-id="${n.neuron_id}"]`);
+      if (!g) continue;
+      const vth = n.v_threshold ?? 1;
+      const vr = n.v_reset ?? 0;
+      const level = clamp((n.v_mem - vr) / (vth - vr || 1), 0, 1);
+      const core = g.querySelector(".led-potential .led-core");
+      const glow = g.querySelector(".led-potential .led-glow");
+      if (core) {
+        // lerp dim -> bright orange by membrane level
+        core.setAttribute("fill", level > 0.98 ? "#ffd089" : "#7a5230");
+        core.style.fill = mixOrange(level);
+      }
+      if (glow) glow.setAttribute("opacity", (0.12 + level * 0.5).toFixed(3));
+      if (n.spiked) flashSpike(g);
+    }
+  }
+
+  function flashSpike(g) {
+    const strip = g.querySelector(".led-spike");
+    if (!strip) return;
+    strip.classList.remove("spiking");
+    void strip.getBoundingClientRect(); // restart the CSS animation
+    strip.classList.add("spiking");
+  }
+
+  //  start 
   applyView();
   setBoardCount(8); // sensible default matching the reference
   return {
     setBoardCount,
+    getCount: () => state.draft.boards.length,
+    onCount: (cb) => countListeners.push(cb),
+    fit,
     getDraft: () => structuredClone(state.draft), // payload for Patryk (copy, not live state)
+    onSelect: (cb) => selectListeners.push(cb),
+    getSelected: () => state.selectedId,
+    connectionsOf,
+    select,
+    applyFrame,
   };
 }
 
-// ------------------------------------------------------------------ helpers
+/** dim brown -> bright amber as membrane level rises (LED colour, not random). */
+function mixOrange(level) {
+  const a = [0x4a, 0x34, 0x20], b = [0xff, 0xb2, 0x5a];
+  const c = a.map((v, i) => Math.round(v + (b[i] - v) * level));
+  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
+}
+
+//  helpers
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
@@ -380,8 +443,9 @@ async function injectSymbol(defs) {
     // Bring over the gradients (board-sheen, knob, …) and the board symbol.
     doc.querySelectorAll("defs > *").forEach((node) => defs.append(document.importNode(node, true)));
     const symbol = doc.querySelector("#lui-board");
-    if (symbol) defs.append(document.importNode(symbol, true));
+    if (symbol) return defs.appendChild(document.importNode(symbol, true));
   } catch {
     // If the asset can't be loaded the canvas still works, just without art.
   }
+  return null;
 }

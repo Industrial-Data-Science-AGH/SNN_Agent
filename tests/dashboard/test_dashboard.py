@@ -89,6 +89,33 @@ def test_network_module_is_served(client: TestClient) -> None:
     assert "mountNetworkEditor" in res.text
 
 
+# C3 runtime signals
+
+def test_golden_frames_served_and_consistent(client: TestClient) -> None:
+    doc = client.get("/static/demo/neuron-frames.json").json()
+    assert doc["demo"] is True
+    ids = doc["neuron_ids"]
+    assert ids == [f"n{i}" for i in range(1, 9)]
+    assert doc["frames"], "golden replay has frames"
+    assert "v_threshold" in doc and "potential_unit" in doc
+    # Every frame carries exactly the declared neurons with runtime fields —
+    # this is what makes the LEDs and the raster agree on neuron/time.
+    for frame in doc["frames"]:
+        assert [n["neuron_id"] for n in frame["neurons"]] == ids
+        for n in frame["neurons"]:
+            assert isinstance(n["spiked"], bool)
+            assert isinstance(n["v_mem"], (int, float))
+    # There is real spiking to render (not a dead/random signal).
+    spikes = sum(1 for f in doc["frames"] for n in f["neurons"] if n["spiked"])
+    assert spikes > 0
+
+
+def test_runtime_modules_served(client: TestClient) -> None:
+    assert "createRuntime" in client.get("/static/js/runtime.js").text
+    assert "mountInspector" in client.get("/static/js/inspector.js").text
+    assert "mountRaster" in client.get("/static/js/raster.js").text
+
+
 def test_login_then_session_and_logout(client: TestClient) -> None:
     res = client.post("/auth/login", json={"username": "operator", "password": "demo"})
     assert res.status_code == 200

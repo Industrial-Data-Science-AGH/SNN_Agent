@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="/static/css/dashboard.css">
 </head>
 <body>
-  <!-- ============================ SIGN IN ============================ -->
+  <!--  SIGN IN  -->
   <section id="login-view" class="login-view" hidden>
     <form id="login-form" class="login-card" novalidate autocomplete="off">
       <div class="login-brand">
@@ -48,7 +48,7 @@
     </form>
   </section>
 
-  <!-- ============================ APP SHELL ============================ -->
+  <!--  APP SHELL  -->
   <div id="app-view" class="app" hidden>
     <!-- top bar -->
     <header class="topbar">
@@ -81,13 +81,13 @@
       </div>
       <div class="toolbar-group">
         <span class="toolbar-label">Board count</span>
-        <select class="select" disabled aria-label="Board count"><option>8</option></select>
+        <select id="top-board-count" class="select" disabled aria-label="Board count"><option>8</option></select>
         <span class="toolbar-hint">0 – 50</span>
       </div>
       <div class="toolbar-group toolbar-right">
         <button class="btn btn-primary btn-sm" type="button" disabled>Start</button>
         <button class="btn btn-outline btn-sm" type="button" disabled>Pause view</button>
-        <button class="btn btn-outline btn-sm" type="button" disabled>Fit</button>
+        <button id="top-fit" class="btn btn-outline btn-sm" type="button" disabled>Fit</button>
       </div>
     </div>
 

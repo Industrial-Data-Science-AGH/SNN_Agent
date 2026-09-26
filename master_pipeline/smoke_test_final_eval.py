@@ -21,19 +21,22 @@ import math
 import multiprocessing
 import os
 import sys
+import tempfile
 
 
 class FakeTracker:
-    """Minimalny tracker -- ga_runner.py potrzebuje tylko .device,
-    .log_stage_time(name, elapsed) i .log_metrics(name, dict). Jeśli Twój
-    prawdziwy tracker.py ma dodatkowe wymagania (np. get_run_dir() używane w
-    run_hardware_export_stage -- nieużywane tutaj), ten smoke test i tak ich
-    nie potrzebuje dla etapu 2/3."""
+    """Minimalny tracker -- ga_runner.py potrzebuje .device, .log_stage_time,
+    .log_metrics i (od M2 punkt 2/3, 26.09.2026) .get_run_dir() -- teraz
+    używane też w run_final_evaluation_stage (zapis winner_checkpoint.pt) i
+    run_hardware_export_stage (katalog hardware_export/), nie tylko w
+    hardware exporcie jak wcześniej. Katalog jest tymczasowy per-run smoke
+    testu, żeby nie śmiecić w repo."""
 
     def __init__(self, device: str):
         self.device = device
         self.stage_times = {}
         self.metrics = {}
+        self._run_dir = tempfile.mkdtemp(prefix="smoke_run_")
 
     def log_stage_time(self, name, elapsed):
         self.stage_times[name] = elapsed
@@ -43,9 +46,21 @@ class FakeTracker:
         self.metrics[name] = d
         print(f"[TRACKER] metrics[{name}] = {d}")
 
+    def get_run_dir(self) -> str:
+        return self._run_dir
+
 
 def shrink_config_for_smoke_test(config, num_samples_cap: int):
     config.train.proxy_epochs = 1
+    # M2 punkt 2/3 (26.09.2026): run_final_evaluation_stage trenuje teraz
+    # przez winner.train_full (winner_epochs x winner_seeds pelnych,
+    # drogich przebiegow HAT->QAT), nie proxy_epochs -- bez przycięcia tych
+    # dwoch pol smoke test probowalby odpalic PRODUKCYJNY trening (domyslnie
+    # 60 epok x 5 seedow), co nie jest "smoke" tylko pelnym runem.
+    if hasattr(config.train, "winner_epochs"):
+        config.train.winner_epochs = 2
+    if hasattr(config.train, "winner_seeds"):
+        config.train.winner_seeds = 1
     if hasattr(config.train, "num_samples"):
         config.train.num_samples = min(config.train.num_samples, num_samples_cap)
     return config
@@ -106,38 +121,76 @@ def main():
 
     m = tracker.metrics.get("continuous_test", {})
     metric_key = f"test_{config.ga.fitness_metric}"
-    per_seed_key = f"{metric_key}_per_seed"
+    # M2 punkt 2/3 (26.09.2026): od poprawki nie ma juz `{metric_key}_per_seed`
+    # (usredniania kilku odczytow testu) -- jeden odczyt testu dla modelu
+    # wybranego jako mediana z winner_seeds przebiegow na val. Ten check byl
+    # dopasowany do starego formatu, teraz sprawdzamy zamiast tego obecnosc
+    # checkpointu i median_key.
+    median_key = f"val_{config.ga.fitness_metric}_median_of_{config.train.winner_seeds}_seeds"
 
-    print("\n[SMOKE] Sprawdzam wyniki...")
+    print("\n[SMOKE] Sprawdzam wyniki (etap 3)...")
     ok = True
 
     final_score = m.get(metric_key)
-    per_seed = m.get(per_seed_key, [])
+    checkpoint_path = m.get("checkpoint_path")
+    checkpoint_sha256 = m.get("checkpoint_sha256")
+    median_score = m.get(median_key)
 
     if final_score is None or not math.isfinite(final_score):
         print(f"  [BŁĄD] {metric_key}={final_score} -- brak albo nie-skończone")
         ok = False
     else:
-        print(f"  [OK] {metric_key}={final_score:.4f} (skończone)")
+        print(f"  [OK] {metric_key}={final_score:.4f} (skończone, 1 odczyt testu)")
 
-    if not per_seed or len(per_seed) != getattr(config.train, "fitness_seeds", 3) and len(per_seed) != 3:
-        print(f"  [UWAGA] liczba wyników per-seed ({len(per_seed)}) -- sprawdź czy zgadza się z oczekiwaną liczbą seedów")
-    if any(not math.isfinite(s) for s in per_seed):
-        print(f"  [BŁĄD] per-seed zawiera NaN/inf: {per_seed}")
+    if median_score is None or not math.isfinite(median_score):
+        print(f"  [BŁĄD] {median_key}={median_score} -- brak albo nie-skończone")
         ok = False
     else:
-        print(f"  [OK] per-seed skończone: {[f'{s:.4f}' for s in per_seed]}")
+        print(f"  [OK] {median_key}={median_score:.4f}")
 
-    if per_seed:
-        spread = max(per_seed) - min(per_seed)
-        print(f"  [INFO] rozrzut między seedami: {spread:.4f} (duży rozrzut = wysoka wariancja treningu, "
-              f"nie błąd tego skryptu, ale warto to mieć na uwadze przy interpretacji wyniku)")
+    if not checkpoint_path or not os.path.exists(checkpoint_path):
+        print(f"  [BŁĄD] checkpoint_path={checkpoint_path!r} -- brak pliku na dysku")
+        ok = False
+    elif not checkpoint_sha256:
+        print(f"  [BŁĄD] brak checkpoint_sha256 w metrykach")
+        ok = False
+    else:
+        print(f"  [OK] checkpoint zapisany: {checkpoint_path} (sha256={checkpoint_sha256[:16]}...)")
 
     if final_score == 0.0:
-        print("  [UWAGA] final_score == 0.0 dokładnie -- w RealFitness.__call__ to sygnatura "
-              "\"martwej sieci\" (guard f1<=1e-9), ale tutaj liczymy test bezpośrednio przez "
-              "eval_events, więc ten guard NIE działa. Jeśli GA na val dało sensowny wynik "
-              "(patrz wyżej), a test wyszedł 0.0 -- to podejrzane, zgłoś to.")
+        print("  [UWAGA] test_{metric} == 0.0 dokładnie -- przy tak małym budżecie smoke testu "
+              "(winner_epochs/winner_seeds przycięte) to może być zwykły artefakt niedouczenia, "
+              "nie błąd poprawki. Sprawdź na pełnym configu, jeśli to Cię niepokoi.")
+
+    print("\n== run_hardware_export_stage ==")
+    try:
+        ga_runner.run_hardware_export_stage(config, tracker, best_topology)
+        export_info = tracker.metrics.get("hardware_export", {})
+        export_path = export_info.get("export_path")
+        exported_hash = export_info.get("checkpoint_hash")
+        print("\n[SMOKE] Sprawdzam wyniki (etap 4)...")
+        if not export_path or not os.path.exists(export_path):
+            print(f"  [BŁĄD] export_path={export_path!r} -- brak hw_config.json na dysku")
+            ok = False
+        else:
+            print(f"  [OK] hw_config.json zapisany: {export_path}")
+        if exported_hash != checkpoint_sha256:
+            print(f"  [BŁĄD] checkpoint_hash w hardware_export ({exported_hash}) != "
+                  f"checkpoint_sha256 z continuous_test ({checkpoint_sha256}) -- "
+                  f"eksport NIE użył tego samego checkpointu co etap 3 (M2 punkt 2/3 złamane).")
+            ok = False
+        else:
+            print(f"  [OK] eksport użył dokładnie tego samego checkpointu co etap 3 "
+                  f"(sha256={exported_hash[:16]}...) -- M2 punkt 2/3: brak ponownego treningu.")
+        if not export_info.get("checkpoint_hash_verified_unchanged"):
+            print(f"  [BŁĄD] brak potwierdzenia niezmienności wag po eksporcie w metrykach")
+            ok = False
+        else:
+            print(f"  [OK] asercja niezmienności wag w run_hardware_export_stage przeszła "
+                  f"(sha256 checkpointu identyczny przed i po eksporcie).")
+    except Exception as exc:
+        print(f"  [BŁĄD] run_hardware_export_stage rzuciło wyjątek: {exc}")
+        ok = False
 
     print("\n[SMOKE] WYNIK:", "PASS" if ok else "FAIL")
     sys.exit(0 if ok else 1)

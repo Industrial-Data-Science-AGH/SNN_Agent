@@ -3,7 +3,7 @@ import sys
 import time
 import json
 from typing import Dict, Any
-from tracker import SetEncoder
+from tracker import get_git_sha
 
 # 1. Główny katalog projektu (SNN_Agent)
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -50,7 +50,13 @@ def run_ga_stage(config: Any, tracker: Any) -> Dict[str, Any]:
         num_samples=config.train.num_samples, 
         k=2,
         metric=config.ga.fitness_metric,
-        fitness_seeds=3,
+        # M2 punkt 4 (25.09.2026, Marcel): było zahardkodowane fitness_seeds=3,
+        # ignorując config.train.fitness_seeds (domyślnie 1 w TrainConfig) --
+        # profil eksperymentu był po cichu ignorowany. UWAGA: to zmienia
+        # faktyczne zachowanie na produkcyjne configi bez jawnego
+        # fitness_seeds=3 (koszt/wariancja proxy-fitnessu w GA spadnie z 3
+        # seedów do 1, chyba że config to nadpisze).
+        fitness_seeds=config.train.fitness_seeds,
         pos_weight=1.0,
         feature_penalty=config.ga.feature_penalty,
         channels_head=None,
@@ -141,7 +147,7 @@ def run_ext_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[str,
         num_samples=config.train.num_samples, 
         k=2,
         metric=config.ga.fitness_metric,
-        fitness_seeds=3,
+        fitness_seeds=config.train.fitness_seeds,  # M2 punkt 4 -- patrz run_ga_stage
         pos_weight=1.0,
         feature_penalty=config.ga.feature_penalty,
         channels_head=7,
@@ -177,48 +183,91 @@ def run_ext_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[str,
     print(f"[ETAP 2/4] Zakończono pomyślnie.")
 
 
+def _sha256_of_file(path: str, buf_size: int = 1 << 20) -> str:
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(buf_size), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _load_freeze_manifest(path: str = "freeze_manifest.json") -> Dict[str, Any]:
+    """M2 punkt 3 (26.09.2026, Marcel): wspolne zrodlo prawdy dla lineage
+    (encoder_hash, dataset hash), zamrozone w M1 punkt 1 przez freeze_m1.py.
+    Brak pliku nie wywala pipeline'u -- zwraca puste pola z jawna notatka,
+    zeby ktos nie pomyslal ze artefakt ma prawdziwy hash, ktorego nie ma."""
+    if not os.path.exists(path):
+        print(f"[LINEAGE] UWAGA: nie znaleziono {path} -- odpal freeze_m1.py "
+              f"(M1 punkt 1) zanim to pojdzie do produkcji. Pola lineage "
+              f"beda null.")
+        return {
+            "encoder_hash": None,
+            "dataset_manifest_hash": {"train": None, "val": None, "test": None},
+            "_source": None,
+        }
+    with open(path, "r", encoding="utf-8") as f:
+        fm = json.load(f)
+    return {
+        "encoder_hash": fm.get("encoder", {}).get("encoder_hash"),
+        "dataset_manifest_hash": {
+            name: info.get("manifest_sha256")
+            for name, info in fm.get("splits", {}).items()
+        },
+        "_source": path,
+    }
+
+
 def run_final_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[str, Any]):
     """
-    Etap 3: Ostateczna ewaluacja (Test Split / Continuous).
-    Tymczasowo korzysta ze standardowego zbioru testowego. Gotowe do przepięcia na zbiór Kacpra.
+    Etap 3: Trening zwycięskiej topologii + finalna ewaluacja testowa.
 
-    POPRAWKA (M1 punkt 2 -- "żaden checkpoint/seed/próg nie jest wybrany po
-    końcowym teście", 25.09.2026, Marcel):
+    POPRAWKA (M1 punkt 2, 25.09.2026, Marcel): val_data i test_data wskazywały
+    kiedyś na TEN SAM plik (test) -- teraz to prawdziwe, rozdzielone splity.
 
-    Wcześniej val_data i test_data wskazywały na TEN SAM plik (test). RealFitness
-    (fitness.py) NIE robi selekcji "po drodze" -- train_once trenuje przez
-    ustaloną liczbę epok i raz na końcu woła eval_events(..., split="val");
-    __call__ tylko uśrednia wynik po fitness_seeds (nie wybiera najlepszego
-    seeda). Więc to nie był klasyczny cherry-picking po teście -- ale przez
-    aliasing val=test kod czytał test pod etykietą "val" (myląco, i 3x w jednym
-    wywołaniu, po fitness_seeds=3), co zaprasza przyszły błąd (ktoś doda
-    prawdziwą selekcję "po val" nie wiedząc, że to w istocie test) i łamie
-    zasadę "test dotykany raz, na końcu, wyłącznie do raportu".
+    POPRAWKA (M2 punkt 2/3, 26.09.2026, Marcel): ten etap wcześniej miał
+    WŁASNĄ reimplementację treningu (fitness_seeds osobnych train_once, każdy
+    czytający test, uśrednionych na końcu) -- zduplikowaną i niespójną z tym,
+    co robi run_hardware_export_stage (który trenował JESZCZE RAZ, od zera,
+    innym seedem, z val_data=test_data=train_abs). To znaczyło, że wagi
+    wyeksportowane do hw_config.json NIE były tymi samymi wagami, których
+    wynik trafiał do raportu testowego.
 
-    Teraz: val_data to prawdziwy, ODDZIELNY split walidacyjny (RealFitness go
-    wymaga wewnętrznie, choć w tym etapie i tak nie wpływa na żadną decyzję --
-    train_once nie ma early stoppingu). Wynik testowy liczony jest JAWNIE przez
-    eval_events(model, split="test") na modelu ze świeżego treningu, osobno dla
-    każdego seeda -- test czytany dokładnie raz na seed, wyłącznie do raportu,
-    nigdy do żadnej decyzji (średnia po seedach nie jest selekcją: żaden seed
-    nie jest odrzucany ani preferowany na podstawie wyniku na teście).
+    Teraz: korzystamy z winner.train_full (ten sam kod projektu, już napisany
+    pod dokładnie ten cel) -- trenuje `winner_seeds` niezależnych przebiegów
+    HAT->QAT, wybiera MEDIANĘ po metryce walidacyjnej (odporność na przypadek,
+    nie "najlepszy z rzutu"), i czyta test DOKŁADNIE RAZ dla tego jednego
+    wybranego modelu (zgodnie z zasadą "test dotykany raz, wyłącznie do
+    raportu"). Zapisuje checkpoint na dysk -- run_hardware_export_stage
+    wczytuje TEN SAM plik zamiast trenować ponownie.
 
-    Druga poprawka: usunięty błędny `budget=6.0` (patrz run_ext_evaluation_stage
-    -- ten sam mixup `budget`/`stream_budget`, trenował 6x więcej epok niż
-    config.train.proxy_epochs).
+    UWAGA: to zmienia sposób raportowania względem poprzedniej wersji -- nie
+    ma już `test_{metric}_per_seed` (średnia z fitness_seeds odczytów testu).
+    Zamiast tego jest jeden odczyt testu dla wybranego (medianowego) modelu,
+    plus `val_{metric}_median_of_N_seeds` jako miara odporności na poziomie
+    walidacji. To ściślej trzyma się zasady odbioru M1 (test czytany raz), ale
+    to świadoma zmiana zakresu raportu -- flagowane tutaj, żeby nikt nie był
+    zaskoczony brakiem per-seed testu w manifeście.
     """
-    print(f"\n>>> [ETAP 3/4] Finalna ewaluacja ciągła...")
+    print(f"\n>>> [ETAP 3/4] Trening zwycięzcy (winner.train_full) + finalna ewaluacja...")
 
     # 1. Przygotowanie ścieżek
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     train_abs = os.path.join(project_root, config.data.train)
     val_abs = os.path.join(project_root, config.data.val)
     arch_dir = os.path.dirname(os.path.dirname(train_abs))
+    if arch_dir not in sys.path:
+        sys.path.insert(0, arch_dir)
 
-    # UWAGA: Tutaj podmienić 'config.data.test' na 'config.data.continuous_kacper' - Dataset od Kacpra
+    # UWAGA: Tutaj podmienić 'config.data.test' na 'config.data.continuous_eval'
+    # (patrz pipeline_config.py -- juz zbudowany, 26.09.2026) po potwierdzeniu
+    # ze RealFitness/eval_events umie czytac format continuous (audio+manifest),
+    # a nie tylko katalog splitu z files.csv.
     target_test_abs = os.path.join(project_root, config.data.test)
 
     g = Genome.from_dict(best_topology)
+
+    decoder_k = 2  # dekoder: >=k spikow D w oknie = alarm (patrz winner.tune_k)
 
     # Prawdziwy, ROZDZIELONY val/test -- żadnego aliasingu.
     rf_kwargs = dict(
@@ -227,11 +276,11 @@ def run_final_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[st
         val_data=val_abs,           # prawdziwy split walidacyjny (config.data.val)
         test_data=target_test_abs,  # prawdziwy, nietknięty test -- czytany jawnie niżej
         limit=None,
-        epochs=config.train.proxy_epochs,
+        epochs=config.train.winner_epochs,
         num_samples=config.train.num_samples,
-        k=2,
+        k=decoder_k,
         metric=config.ga.fitness_metric,
-        fitness_seeds=3,
+        fitness_seeds=config.train.fitness_seeds,  # M2 punkt 4 -- patrz run_ga_stage
         pos_weight=1.0,
         feature_penalty=0.0,        # Na etapie testu nie karzemy już za cechy
         channels_head=7,            # Ograniczenie do oryginalnych 7 kanałów
@@ -242,145 +291,152 @@ def run_final_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[st
         device=tracker.device
     )
 
-    print(f"[TEST] Ładowanie modelu na strumień testowy: {target_test_abs}")
+    print(f"[WINNER] Trening pełny (winner.train_full, epoki={config.train.winner_epochs}, "
+          f"winner_seeds={config.train.winner_seeds})...")
     start_time = time.time()
 
     rf_final = RealFitness(**rf_kwargs)
 
-    # fitness_seeds świeżych treningów; TEST czytany jawnie i raz na seed,
-    # wyłącznie do raportu -- średnia po seedach nie jest selekcją.
-    metric_key = config.ga.fitness_metric
-    test_scores = []
-    for si in range(rf_final.fitness_seeds):
-        _, _, _, model = rf_final.train_once(
-            g, epochs=config.train.proxy_epochs, seed=config.seed + si, return_model=True
-        )
-        test_m = rf_final.eval_events(model, split="test")
-        test_scores.append(test_m.get(metric_key, test_m.get("clip_f1", 0.0)))
+    from winner import train_full  # lokalny import -- wymaga arch_dir juz w sys.path
 
-    final_score = sum(test_scores) / len(test_scores)
+    ckpt_path = os.path.join(tracker.get_run_dir(), "winner_checkpoint.pt")
+    metric_key = config.ga.fitness_metric
+
+    best_model, median_m, final_m = train_full(
+        rf_final, g,
+        epochs=config.train.winner_epochs,
+        hat_frac=config.train.hat_frac,
+        lr=config.train.lr,
+        pos_weight=1.0,
+        seeds=config.train.winner_seeds,
+        select_metric=metric_key,
+        ckpt=ckpt_path,
+        log=print,
+    )
 
     elapsed = time.time() - start_time
     tracker.log_stage_time("final_eval_stage", elapsed)
 
-    # Zebranie metryk - obecnie wpadnie tu finalny wynik fitness,
-    # ale struktura jest gotowa na przyjęcie pełnego słownika z FA/h i AP z logiki Kacpra
+    checkpoint_sha256 = _sha256_of_file(ckpt_path) if os.path.exists(ckpt_path) else None
+
     real_test_metrics = {
-        "dataset": "canonical_test_placeholder",
-        f"test_{metric_key}": final_score,
-        f"test_{metric_key}_per_seed": test_scores,
-        "latency_sec": elapsed
+        # M2 punkt 1 (25.09.2026, Marcel): usunieta myląca etykieta
+        # "canonical_test_placeholder" pozostała po buggu z aliasingiem
+        # val=test (naprawionym w M1 punkt 2) -- teraz zapisujemy realną
+        # ścieżkę splitu testowego, żeby manifest był wiarygodny.
+        "dataset": config.data.test,
+        f"test_{metric_key}": final_m.get(metric_key, final_m.get("clip_f1", 0.0)),
+        # M2 punkt 2/3: jeden odczyt testu (dla modelu wybranego jako mediana
+        # z winner_seeds przebiegow na val) -- nie usredniamy juz odczytow testu.
+        f"val_{metric_key}_median_of_{config.train.winner_seeds}_seeds":
+            median_m.get(metric_key, median_m.get("clip_f1", 0.0)),
+        "winner_seeds": config.train.winner_seeds,
+        "decoder_k": decoder_k,
+        "latency_sec": elapsed,
+        "checkpoint_path": ckpt_path,
+        "checkpoint_sha256": checkpoint_sha256,
+        "seed": config.seed,
     }
 
     tracker.log_metrics("continuous_test", real_test_metrics)
-    print(f"[ETAP 3/4] Wynik testowy ({metric_key}: {final_score:.4f}, "
-          f"per-seed: {[f'{s:.4f}' for s in test_scores]}) zapisany w manifeście.")
+    print(f"[ETAP 3/4] Test ({metric_key}): {real_test_metrics[f'test_{metric_key}']:.4f} "
+          f"(checkpoint: {ckpt_path}, sha256={(checkpoint_sha256 or '')[:16]}...)")
 
 
 def run_hardware_export_stage(config: Any, tracker: Any, best_topology: Dict[str, Any]):
     """
     Etap 4: Eksport wyewoluowanej topologii i wag do formatu układu LUI.
-    Dostosowane do dynamicznych warstw GenomeNet z wykorzystaniem stałych sprzętowych Patryka.
+
+    POPRAWKA (M2 punkt 2/3, 26.09.2026, Marcel): ten etap trenował WŁASNY
+    model od zera (inny seed, val_data=test_data=train_abs -- nawet nie
+    prawdziwa walidacja) zamiast eksportować to, co run_final_evaluation_stage
+    już wytrenowało i oceniło na teście. Wagi w hw_config.json NIE były więc
+    tymi, których wynik trafiał do raportu.
+
+    Teraz: eksport NIE trenuje niczego. Wczytuje checkpoint zapisany przez
+    run_final_evaluation_stage (winner.train_full) i serializuje dokładnie
+    te wagi. Test niezmienności: liczymy sha256 pliku checkpointu przed i po
+    wywołaniu eksportu -- eksport jest czysto do odczytu, nigdy nie modyfikuje
+    ani nie retrenuje modelu.
     """
     print(f"\n>>> [ETAP 4/4] Eksport konfiguracji sprzętowej LUI...")
     start_time = time.time()
-    
+
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     train_abs = os.path.join(project_root, config.data.train)
     arch_dir = os.path.dirname(os.path.dirname(train_abs))
-    
+
     if arch_dir not in sys.path:
         sys.path.insert(0, arch_dir)
-    
-    # Uwaga: importowane lokalnie, ponieważ ścieżka do snn_hw_pipeline
-    # zależy od config.data.train, znanego dopiero w runtime stąd możliwe podkreślenie.
-    try:
-        from snn_hw_pipeline import DT, V_TH, CHANNELS, W_DEADZONE, W_MAX, pulses_to_fire
-    except ImportError as e:
-        print(f"[BŁĄD] Nie można zaimportować snn_hw_pipeline: {e}")
-        return
 
-    def export_genome_config(model, path, extra=None):
-        """Dynamiczny konwerter GenomeNet do LUI z obsługą zmiennej głębokości sieci."""
-        cfg = {"dt_s": DT, "v_th": V_TH, "channels": CHANNELS, "boards": {}}
-        if extra:
-            cfg.update(extra)
-            
-        # Zamiast hardcodować [CHANNELS, model.H, model.G], wyciągamy nazwy dynamicznie z każdej warstwy
-        pre_names = [CHANNELS] + [layer.names for layer in model.layers()[:-1]]
-        
-        for layer, pres in zip(model.layers(), pre_names):
-            W = layer.weights().detach()
-            vl, ts, tm = layer.v_leak().detach(), layer.tau_syn().detach(), layer.tau_mem().detach()
-            
-            for i, name in enumerate(layer.names):
-                w = W[i]
-                m = w.abs().max().item()
-                if m < W_DEADZONE:
-                    print(f"[!] {name}: wszystkie wagi w martwej strefie — neuron nieużywany")
-                    continue
-                    
-                V_LEAK_MIN_HW = 0.20 * V_TH
-                k_allow = (V_TH - V_LEAK_MIN_HW) / max(V_TH - vl[i].item(), 1e-3)
-                k = min(W_MAX / m, k_allow)
-                v_leak_hw = V_TH - k * (V_TH - vl[i].item())
-                
-                syn = []
-                for j, pre in enumerate(pres):
-                    if layer.mask[i, j] == 0:
-                        continue
-                    wij = w[j].item()
-                    pot = 100.0 * abs(wij) * k / W_MAX
-                    if pot < 5.0:
-                        continue
-                    syn.append({
-                        "port": f"J{len(syn)+1}",
-                        "from": pre,
-                        "sign": "+" if wij >= 0 else "-",
-                        "pot_pct": round(pot, 1),
-                        "w_sim": round(wij, 4),
-                        "pulses_to_fire_100Hz": pulses_to_fire(abs(wij) * k, ts[i].item(), tm[i].item(), v_leak_hw)
-                    })
-                    
-                cfg["boards"][name] = {
-                    "tau_syn_ms": round(1000 * ts[i].item(), 1),
-                    "tau_mem_ms": round(1000 * tm[i].item(), 1),
-                    "v_leak": round(v_leak_hw, 3),
-                    "led_bar_pct": round(50.0 * v_leak_hw / V_TH, 1),
-                    "scale_k": round(k, 3),
-                    "synapses": syn,
-                }
-                
-        with open(path, "w") as f:
-            json.dump(cfg, f, indent=2, ensure_ascii=False, cls=SetEncoder)
+    # 1. Znajdź checkpoint zapisany przez run_final_evaluation_stage. Wymaga,
+    # zeby etap 3 uruchomil sie najpierw w tym samym runie (albo zeby jego
+    # metryki zostaly odtworzone przez --resume z manifest.json) -- pipeline.py
+    # zawsze woła stage 3 przed stage 4, wiec w normalnym przebiegu to zawsze
+    # bedzie ustawione.
+    final_metrics = tracker.metrics.get("continuous_test", {})
+    ckpt_path = final_metrics.get("checkpoint_path")
+    if not ckpt_path or not os.path.exists(ckpt_path):
+        raise RuntimeError(
+            f"[EXPORT] Brak checkpointu z run_final_evaluation_stage (szukano: "
+            f"{ckpt_path!r}). M2 punkt 2: eksport nie trenuje juz wlasnego "
+            f"modelu -- uruchom najpierw etap 3 (final evaluation) w tym samym "
+            f"runie, albo wznow z --resume runu, ktory juz go ma."
+        )
 
-    # 2. Inicjalizacja środowiska i pełny trening modelu pod eksport sprzętowy
-    g = Genome.from_dict(best_topology)
-    rf_export = RealFitness(
-        arch_dir=arch_dir, 
-        data=train_abs, 
-        stream_budget=6.0,
-        val_data=train_abs, 
-        test_data=train_abs,
-        epochs=config.train.proxy_epochs, 
-        num_samples=config.train.num_samples, 
-        metric=config.ga.fitness_metric, 
-        channels_head=7, 
-        device=tracker.device
-    )
-    
-    print(f"[EXPORT] Trening finalnego modelu (Epoki: {config.train.proxy_epochs})...")
-    metrics, _, _, final_model = rf_export.train_once(g, epochs=config.train.proxy_epochs, seed=config.seed, return_model=True)
-    
-    # 3. Wywołanie naszego dynamicznego konwertera
+    checkpoint_sha256_before = _sha256_of_file(ckpt_path)
+
+    # 2. Odtworzenie modelu z checkpointu -- ta sama konstrukcja co w
+    # winner.train_full/fitness.py (net.GenomeNet(g, hw=None, quantize=False),
+    # potem set_quantize(True) przed load_state_dict, zgodnie z konwencja
+    # projektu w snn_hw_pipeline.py przy wczytywaniu ckpt).
+    import torch
+    import net
+    from winner import export_genome_config as winner_export_genome_config
+    from snn_hw_pipeline import CHANNELS
+
+    print(f"[EXPORT] Ładowanie checkpointu: {ckpt_path}")
+    ckpt = torch.load(ckpt_path, map_location=tracker.device)
+    g = Genome.from_dict(ckpt.get("topology", best_topology))
+    model = net.GenomeNet(g, hw=None, quantize=False).to(tracker.device)
+    model.set_quantize(True)
+    model.load_state_dict(ckpt["model"])
+    model.eval()
+
+    # 3. Lineage: encoder_hash + dataset hashes z freeze_manifest.json (M1
+    # punkt 1), zamiast trzymac osobna, mogaca sie rozjechac kopie.
+    lineage = _load_freeze_manifest()
+
     export_dir = os.path.join(tracker.get_run_dir(), "hardware_export")
     os.makedirs(export_dir, exist_ok=True)
     export_path = os.path.join(export_dir, "hw_config.json")
-    
+
     print(f"[EXPORT] Zrzucanie wag i topologii do {export_path}...")
     extra_meta = {
-        "best_clip_f1": metrics.get(f"val_{config.ga.fitness_metric}", 0.0),
+        "best_clip_f1": ckpt.get("metrics", {}).get(config.ga.fitness_metric, 0.0),
         "topology_manifest": best_topology,
+
+        # M2 punkt 3 (26.09.2026, Marcel): lineage do odtworzenia dokladnie
+        # tego artefaktu -- source_commit z tracker.get_git_sha() (ten sam,
+        # ktory trafia do manifest.json), seed, hashe datasetow/enkodera z
+        # freeze_manifest.json (M1 punkt 1), checkpoint_hash policzony PRZED
+        # eksportem (test niezmiennosci nizej sprawdza ze sie nie zmienil),
+        # decoder (prog k dekodera zdarzeniowego) i jednostki pol ponizej.
+        "source_commit": get_git_sha(),
+        "seed": config.seed,
+        "encoder_hash": lineage["encoder_hash"],
+        "dataset_manifest_hash": lineage["dataset_manifest_hash"],
+        "lineage_source": lineage["_source"],
+        "checkpoint_path": ckpt_path,
+        "checkpoint_hash": checkpoint_sha256_before,
+        "decoder": {"k": final_metrics.get("decoder_k", 2),
+                    "note": ">= k spikow neuronu D w oknie = alarm (winner.tune_k)"},
+        "units": {
+            "dt_s": "s", "v_th": "V", "tau_syn_ms": "ms", "tau_mem_ms": "ms",
+            "v_leak": "V", "led_bar_pct": "%", "pot_pct": "% zakresu trymera",
+            "pulses_to_fire_100Hz": "liczba impulsow @ 100Hz drive",
+        },
+
         # M1 punkt 1/3 (25.09.2026, Marcel): RAM/czas kompilacji dla Uno (ATmega328P)
         # są dziś zmierzone tylko przez `simavr` (symulator cyklowo-dokładny) --
         # Kacper nie ma obecnie możliwości uruchomienia tego na fizycznej płytce
@@ -400,14 +456,26 @@ def run_hardware_export_stage(config: Any, tracker: Any, best_topology: Dict[str
             }
         },
     }
-    export_genome_config(final_model, export_path, extra=extra_meta)
-    
-    # 4. Finalizacja i logowanie
+    winner_export_genome_config(model, export_path, channels=CHANNELS, extra=extra_meta)
+
+    # 4. Test niezmienności: eksport jest czysto do odczytu -- checkpoint na
+    # dysku (i wagi w modelu) nie mogły się zmienić w trakcie eksportu.
+    checkpoint_sha256_after = _sha256_of_file(ckpt_path)
+    if checkpoint_sha256_before != checkpoint_sha256_after:
+        raise RuntimeError(
+            "[EXPORT] Checkpoint zmienil sie w trakcie eksportu "
+            f"({checkpoint_sha256_before} -> {checkpoint_sha256_after}) -- "
+            "eksport NIE powinien modyfikowac ani trenowac modelu (M2 punkt 2/3)."
+        )
+
+    # 5. Finalizacja i logowanie
     tracker.log_stage_time("hardware_export", time.time() - start_time)
     tracker.log_metrics("hardware_export", {
-        "pytorch_score": metrics.get(f"val_{config.ga.fitness_metric}", 0.0),
-        "export_path": export_path
+        "pytorch_score": extra_meta["best_clip_f1"],
+        "export_path": export_path,
+        "checkpoint_hash": checkpoint_sha256_before,
+        "checkpoint_hash_verified_unchanged": True,
     })
-    
+
     print(f"[ETAP 4/4] Zakończono pomyślnie. Artefakt gotowy do wdrożenia na płycie LUI.")
     

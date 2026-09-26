@@ -140,8 +140,11 @@ function wireShell() {
 }
 
 function selectTab(tab) {
-  document.querySelectorAll(".nav-item").forEach((b) =>
-    b.classList.toggle("active", b.dataset.tab === tab));
+  document.querySelectorAll(".nav-item").forEach((b) => {
+    const on = b.dataset.tab === tab;
+    b.classList.toggle("active", on);
+    if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+  });
   document.querySelectorAll(".panel").forEach((p) =>
     (p.hidden = p.dataset.panel !== tab));
 

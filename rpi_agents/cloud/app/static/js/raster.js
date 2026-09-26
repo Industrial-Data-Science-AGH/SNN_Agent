@@ -55,7 +55,11 @@ export function mountRaster(container, runtime, onSeek) {
     }
     // spikes
     const idIndex = Object.fromEntries(ids.map((id, i) => [id, i]));
-    for (const f of frames) {
+    // bound the number of frames scanned so a long session stays cheap to draw
+    const MAX_FRAMES = 1500;
+    const step = frames.length > MAX_FRAMES ? Math.ceil(frames.length / MAX_FRAMES) : 1;
+    for (let fi = 0; fi < frames.length; fi += step) {
+      const f = frames[fi];
       for (const n of f.neurons || []) {
         if (!n.spiked) continue;
         const i = idIndex[n.neuron_id];

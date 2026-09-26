@@ -12,6 +12,7 @@
 // sent). Connection health is reported as connected | stale | reconnecting.
 
 const STALE_MS = 3000;
+const MAX_BUFFER = 2000; // bounded live buffer — old frames are dropped, memory stays flat
 
 class Emitter {
   constructor() { this._h = {}; }
@@ -150,6 +151,7 @@ class LiveRuntime extends Emitter {
     let frame;
     try { frame = JSON.parse(e.data); } catch { return; } // data only, no eval
     this.frames.push(frame);
+    if (this.frames.length > MAX_BUFFER) this.frames.splice(0, this.frames.length - MAX_BUFFER);
     this.index = this.frames.length - 1;
     if (this.meta && frame.neurons) this.meta.neuron_ids = frame.neurons.map((n) => n.neuron_id);
     this.emit("frame", frame, this.index);

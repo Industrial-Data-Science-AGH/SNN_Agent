@@ -87,12 +87,19 @@ export function mountInspector(container, runtime, editor) {
     drawVmem(chart);
   }
 
+  const MAX_POINTS = 400; // bounded number of plotted points, whatever the buffer size
+
   function drawVmem(chart) {
     const frames = runtime.framesUpTo();
-    const series = frames.map((f) => {
+    let series = frames.map((f) => {
       const n = f.neurons.find((x) => x.neuron_id === neuronId);
       return { t: f.t ?? 0, v: n ? n.v_mem : 0, spiked: n?.spiked };
     });
+    if (series.length > MAX_POINTS) {
+      // keep every k-th point, but never drop a spike
+      const k = Math.ceil(series.length / MAX_POINTS);
+      series = series.filter((p, i) => i % k === 0 || p.spiked);
+    }
     const meta = runtime.meta || {};
     const dur = meta.duration_s || (series.length ? series[series.length - 1].t : 1) || 1;
     const vth = meta.v_threshold ?? 1;

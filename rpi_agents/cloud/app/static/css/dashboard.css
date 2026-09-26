@@ -580,6 +580,17 @@ td { font-variant-numeric: tabular-nums; }
 
 .c4-energy-card .c4-energy-boundary { color: var(--text-muted); font-size: 0.82rem; margin: 0.35rem 0 0.5rem; }
 
+/*  narrow screens (C5)  */
+
+@media (max-width: 760px) {
+  .topbar { flex-wrap: wrap; }
+  .topbar-meta, .topbar-sep { display: none; }      /* keep the bar readable on a phone */
+  .toolbar { gap: 0.5rem 0.75rem; }
+  .toolbar-right { margin-left: 0; }
+  .runbar { gap: 0.5rem; }
+  .net-canvas-card .net-canvas-wrap { height: 44vh; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
 }

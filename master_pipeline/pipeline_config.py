@@ -9,7 +9,7 @@ class DataConfig:
     val: str = "architecture_14_neurons_patryk_09_07/spikes_v2/val"
     test: str = "architecture_14_neurons_patryk_09_07/spikes_v2/test"
     spikes_ext: str = "ga_neuron_search/spikes_ext"
-    continuous_eval: str = "" #DODAJ PO KONTAKCIE Z KACPREM
+    continuous_eval: str = "dataset/continuous/out" #DODAJ PO KONTAKCIE Z KACPREM
 
 @dataclass
 class GAConfig:
@@ -20,7 +20,7 @@ class GAConfig:
     elite: int = 3
     screen_mult: int = 1
     screen_budget: float = 0.34
-    fitness_metric: str = "recal_fa"
+    fitness_metric: str = "recall_fa"
     feature_penalty: float = 0.005
     parsimony_eps: float = 0.02
     

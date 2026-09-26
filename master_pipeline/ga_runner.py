@@ -302,6 +302,16 @@ def run_final_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[st
     ckpt_path = os.path.join(tracker.get_run_dir(), "winner_checkpoint.pt")
     metric_key = config.ga.fitness_metric
 
+    # M3 punkt 3 (26.09.2026, Marcel): winner.train_full() woła torch.save()
+    # bezposrednio na sciezke `ckpt`. Trening winner_epochs x winner_seeds
+    # trwa dlugo -- crash/OOM/kill w trakcie ostatniego torch.save() zostawialby
+    # obcięty winner_checkpoint.pt, ktory potem cicho psulby run_hardware_export_stage
+    # (i kazdy przyszly resume/champion selection czytajacy ten plik). Zamiast
+    # zmieniac winner.py, train_full pisze do pliku tymczasowego w TYM SAMYM
+    # katalogu (ten sam filesystem -> os.replace atomowy), a docelowa nazwa
+    # pojawia sie dopiero po udanym powrocie z train_full.
+    ckpt_tmp_path = ckpt_path + f".tmp.{os.getpid()}"
+
     best_model, median_m, final_m = train_full(
         rf_final, g,
         epochs=config.train.winner_epochs,
@@ -310,9 +320,18 @@ def run_final_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[st
         pos_weight=1.0,
         seeds=config.train.winner_seeds,
         select_metric=metric_key,
-        ckpt=ckpt_path,
+        ckpt=ckpt_tmp_path,
         log=print,
     )
+
+    if os.path.exists(ckpt_tmp_path):
+        os.replace(ckpt_tmp_path, ckpt_path)
+    elif not os.path.exists(ckpt_path):
+        raise RuntimeError(
+            f"[WINNER] train_full() zwrócił wynik, ale nie zapisał checkpointu "
+            f"({ckpt_tmp_path!r} nie istnieje) -- nie można kontynuować, bo "
+            f"run_hardware_export_stage i resume polegają na tym pliku."
+        )
 
     elapsed = time.time() - start_time
     tracker.log_stage_time("final_eval_stage", elapsed)
@@ -475,7 +494,17 @@ def run_hardware_export_stage(config: Any, tracker: Any, best_topology: Dict[str
         "export_path": export_path,
         "checkpoint_hash": checkpoint_sha256_before,
         "checkpoint_hash_verified_unchanged": True,
+        # M3 punkt 2 (26.09.2026, Marcel): duplikowane tu (a nie tylko w
+        # hw_config.json/extra_meta) specjalnie -- champion.py (ranking
+        # kandydatow miedzy PRZEBIEGAMI) musi sprawdzic zgodnosc protokolu
+        # (ten sam kod/encoder/dataset) czytajac WYLACZNIE manifest.json,
+        # bez otwierania hw_config.json kazdego runu z osobna.
+        "source_commit": extra_meta["source_commit"],
+        "encoder_hash": extra_meta["encoder_hash"],
+        "dataset_manifest_hash": extra_meta["dataset_manifest_hash"],
+        "lineage_source": extra_meta["lineage_source"],
+        "total_neurons": best_topology.get("total_neurons"),
+        "hidden_layers": best_topology.get("hidden_layers"),
     })
 
     print(f"[ETAP 4/4] Zakończono pomyślnie. Artefakt gotowy do wdrożenia na płycie LUI.")
-    

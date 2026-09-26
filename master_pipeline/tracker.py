@@ -15,6 +15,26 @@ def get_git_sha() -> str:
         print(f"[OSTRZEŻENIE] Nie udało się pobrać Git SHA: {e}")
         return "unknown"
 
+def _atomic_write_json(path: str, obj: Any) -> None:
+    """Zapisuje JSON atomowo: tmp w tym samym katalogu (ten sam filesystem,
+    wiec os.replace jest atomowa podmiana na POSIX) + fsync + replace.
+    Uzywane wszedzie tam, gdzie plik moze byc czytany jako 'jawny stan' do
+    resume (M3 punkt 3) -- polowiczny zapis nie moze go uszkodzic."""
+    tmp_path = path + f".tmp.{os.getpid()}"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(obj, f, indent=4, cls=SetEncoder)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+
 class SetEncoder(json.JSONEncoder):
     """Pozwala na serializację obiektów typu 'set' jako listy (posortowane, jeśli to możliwe)."""
     def default(self, obj):
@@ -29,14 +49,14 @@ class SetEncoder(json.JSONEncoder):
 @dataclass
 class RunTracker:
     """Odpowiada za tworzenie folderu eksperymentu i zarządzanie manifestem."""
-    
+
     # Zmienne przekazywane przy tworzeniu obiektu
     config: Any
     device: str
     workers: int
     hw_benchmark: Dict[int, float] = field(default_factory=dict)
     base_dir: str = "runs"
-    
+
     # Zmienne inicjalizowane automatycznie (nie podajemy ich w konstruktorze)
     start_time: float = field(init=False)
     timestamp: str = field(init=False)
@@ -54,11 +74,10 @@ class RunTracker:
     def _setup_dir(self):
         """Tworzy strukturę katalogów i dokonuje początkowego zrzutu konfiguracji."""
         os.makedirs(self.run_dir, exist_ok=True)
-        
+
         config_path = os.path.join(self.run_dir, "config.json")
-        with open(config_path, "w", encoding="utf-8") as f:
-            json.dump(asdict(self.config), f, indent=4, cls=SetEncoder)
-            
+        _atomic_write_json(config_path, asdict(self.config))
+
         self.update_manifest(status="RUNNING")
         print(f"[TRACKER] Rozpoczęto eksperyment. Katalog: {self.run_dir}")
 
@@ -86,13 +105,19 @@ class RunTracker:
             "execution_times_sec": self.stage_times,
             "metrics": self.metrics
         }
-        
+
         if status != "RUNNING":
             manifest["total_wall_time_sec"] = round(time.time() - self.start_time, 2)
 
-        with open(os.path.join(self.run_dir, "manifest.json"), "w", encoding="utf-8") as f:
-            json.dump(manifest, f, indent=4, cls=SetEncoder)
-            
+        # M3 punkt 3 (26.09.2026, Marcel): update_manifest() jest wolane po
+        # KAZDYM etapie (log_stage_time, log_metrics), wiec manifest.json jest
+        # jedynym jawnym stanem, z ktorego pipeline.py --resume odczytuje co
+        # juz zrobiono. Wczesniej ten zapis nie byl atomowy -- crash/kill -9
+        # w trakcie json.dump() zostawial obcięty/uszkodzony plik, co psulo
+        # WLASNIE mechanizm resume, ktory ma chronic.
+        manifest_path = os.path.join(self.run_dir, "manifest.json")
+        _atomic_write_json(manifest_path, manifest)
+
     def get_run_dir(self) -> str:
         return self.run_dir
     

@@ -72,12 +72,12 @@
       </div>
     </header>
 
-    <!-- toolbar (controls are wired in later tasks; disabled placeholders in C1) -->
+    <!-- toolbar: session/view controls, wired to the Network tab -->
     <div class="toolbar" aria-label="Session controls">
       <div class="toolbar-group" role="group" aria-label="Mode">
-        <button class="btn btn-primary btn-sm" type="button" disabled>Live</button>
-        <button class="btn btn-outline btn-sm" type="button" disabled>Replay</button>
-        <button class="btn btn-outline btn-sm" type="button" disabled>Edit</button>
+        <button id="top-live" class="btn btn-primary btn-sm" type="button" disabled>Live</button>
+        <button id="top-replay" class="btn btn-outline btn-sm" type="button" disabled>Replay</button>
+        <button id="top-edit" class="btn btn-outline btn-sm" type="button" disabled>Edit</button>
       </div>
       <div class="toolbar-group">
         <span class="toolbar-label">Board count</span>
@@ -85,8 +85,8 @@
         <span class="toolbar-hint">0 – 50</span>
       </div>
       <div class="toolbar-group toolbar-right">
-        <button class="btn btn-primary btn-sm" type="button" disabled>Start</button>
-        <button class="btn btn-outline btn-sm" type="button" disabled>Pause view</button>
+        <button id="top-start" class="btn btn-primary btn-sm" type="button" disabled>Start</button>
+        <button id="top-pause" class="btn btn-outline btn-sm" type="button" disabled>Pause view</button>
         <button id="top-fit" class="btn btn-outline btn-sm" type="button" disabled>Fit</button>
       </div>
     </div>

@@ -44,10 +44,13 @@ function wireTopToolbar(editor) {
 
 function updateTopToolbar(tab) {
   const on = tab === "network" && !!activeEditor;
+  const ids = ["#top-board-count", "#top-fit", "#top-live", "#top-replay", "#top-edit", "#top-start", "#top-pause"];
+  for (const sel of ids) {
+    const elm = document.querySelector(sel);
+    if (elm) elm.disabled = !on;
+  }
   const topCount = document.querySelector("#top-board-count");
-  const topFit = document.querySelector("#top-fit");
-  if (topCount) { topCount.disabled = !on; if (on) topCount.value = String(activeEditor.getCount()); }
-  if (topFit) topFit.disabled = !on;
+  if (on && topCount) topCount.value = String(activeEditor.getCount());
 }
 
 //  entry points
@@ -214,23 +217,62 @@ async function renderNetwork(panel) {
   });
   runtime.on("status", (st) => controls.setStatus(st));
 
-  //  control wiring 
+  //  control wiring — panel runbar AND the top toolbar drive the same runtime
+  const top = {
+    live: document.querySelector("#top-live"),
+    replay: document.querySelector("#top-replay"),
+    edit: document.querySelector("#top-edit"),
+    start: document.querySelector("#top-start"),
+    pause: document.querySelector("#top-pause"),
+  };
+  let currentMode = "live"; // live | replay | edit
   let viewPaused = false;
-  function switchMode(mode) {
-    controls.setActiveMode(mode);
-    controls.scrubber.disabled = mode !== "replay";
-    viewPaused = false;
-    controls.setPaused(false);
-    runtime.play({ mode });
+
+  function paintMode() {
+    const map = [
+      ["live", top.live, controls.liveBtn],
+      ["replay", top.replay, controls.replayBtn],
+      ["edit", top.edit, null],
+    ];
+    for (const [m, tb, pb] of map) {
+      const active = m === currentMode;
+      for (const btn of [tb, pb]) {
+        if (!btn) continue;
+        btn.classList.toggle("btn-primary", active);
+        btn.classList.toggle("btn-outline", !active);
+      }
+    }
   }
-  controls.liveBtn.addEventListener("click", () => switchMode("live"));
-  controls.replayBtn.addEventListener("click", () => switchMode("replay"));
-  controls.pauseBtn.addEventListener("click", () => {
-    viewPaused = !viewPaused;
+  function paintPaused() {
     controls.setPaused(viewPaused);
+    if (top.pause) top.pause.textContent = viewPaused ? "Resume" : "Pause view";
+  }
+
+  function switchMode(mode) {
+    currentMode = mode;
+    viewPaused = mode === "edit";               // Edit freezes the view for editing
+    controls.scrubber.disabled = mode !== "replay";
+    paintMode();
+    paintPaused();
+    if (mode === "edit") runtime.pause();        // pauses the view only — never Stop
+    else runtime.play({ mode });
+  }
+  function togglePause() {
+    viewPaused = !viewPaused;
+    paintPaused();
     // Pause view stops advancing the view only — it never stops the session.
     if (viewPaused) runtime.pause(); else runtime.resume();
+  }
+
+  top.live?.addEventListener("click", () => switchMode("live"));
+  top.replay?.addEventListener("click", () => switchMode("replay"));
+  top.edit?.addEventListener("click", () => switchMode("edit"));
+  top.pause?.addEventListener("click", togglePause);
+  top.start?.addEventListener("click", () => {          // Start: run from the beginning, live
+    runtime.seek(runtime.frames?.[0]?.t ?? 0);
+    switchMode("live");
   });
+
   controls.scrubber.max = String((runtime.meta?.frameCount || 1) - 1);
   controls.scrubber.addEventListener("input", () => {
     controls.scrubbing = true;
@@ -253,10 +295,10 @@ async function renderNetwork(panel) {
   switchMode("live");
 }
 
+// The panel run-bar holds only what the fixed top chrome can't: connection
+// status, the time readout, the replay scrubber and the demo loss toggle. The
+// Live/Replay/Edit/Pause/Start buttons live in the top toolbar.
 function buildRuntimeControls(isDemo) {
-  const liveBtn = el("button", { class: "btn btn-primary btn-sm", type: "button", text: "Live" });
-  const replayBtn = el("button", { class: "btn btn-outline btn-sm", type: "button", text: "Replay" });
-  const pauseBtn = el("button", { class: "btn btn-outline btn-sm", type: "button", text: "Pause view" });
   const statusBadge = el("span", { class: "conn-badge", text: "Connecting…" });
   const timeLabel = el("span", { class: "conn-time", text: "0 s" });
   const scrubber = el("input", { type: "range", min: "0", max: "100", value: "0", class: "net-scrub", "aria-label": "Replay position" });
@@ -266,7 +308,7 @@ function buildRuntimeControls(isDemo) {
     : null;
 
   const root = el("div", { class: "runbar" }, [
-    el("div", { class: "toolbar-group" }, [liveBtn, replayBtn, pauseBtn]),
+    el("span", { class: "toolbar-label", text: "Signal" }),
     statusBadge, timeLabel,
     el("span", { class: "net-spacer" }),
     scrubber,
@@ -274,14 +316,8 @@ function buildRuntimeControls(isDemo) {
   ]);
 
   return {
-    root, liveBtn, replayBtn, pauseBtn, scrubber, lossBtn, scrubbing: false,
-    setActiveMode(mode) {
-      liveBtn.classList.toggle("btn-primary", mode === "live");
-      liveBtn.classList.toggle("btn-outline", mode !== "live");
-      replayBtn.classList.toggle("btn-primary", mode === "replay");
-      replayBtn.classList.toggle("btn-outline", mode !== "replay");
-    },
-    setPaused(p) { pauseBtn.textContent = p ? "Resume" : "Pause view"; },
+    root, scrubber, lossBtn, scrubbing: false,
+    setPaused() { /* Pause label lives on the top toolbar */ },
     setTime(t, dur) { timeLabel.textContent = dur ? `${t.toFixed(1)} / ${dur} s` : `${t.toFixed(1)} s`; },
     setStatus(st) {
       const map = { connected: ["ok", "Live"], stale: ["alarm", "Stale data"], reconnecting: ["warn", "Reconnecting…"] };

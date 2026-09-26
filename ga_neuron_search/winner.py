@@ -31,7 +31,8 @@ from snn_hw_pipeline import (DT, V_TH, W_DEADZONE, W_MAX, CHANNELS,
 def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
                lr: float = 3e-3, pos_weight: float = 1.0, patience: int = 20,
                ckpt: Optional[str] = None, log=print, seeds: int = 5,
-               select_metric: str = "clip_f1"):
+               select_metric: str = "clip_f1", batch_size: int = 128,
+               num_samples: int = 12000):
     """Pełny cykl HAT->QAT dla zadanej topologii. rf = instancja RealFitness
     (dane + urządzenie + ocena zdarzeniowa)."""
     torch_, np = rf.torch, rf.np

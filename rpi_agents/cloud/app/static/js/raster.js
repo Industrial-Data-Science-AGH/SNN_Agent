@@ -1,5 +1,5 @@
 // Spike raster (task C3): one row per neuron, a tick at every spike, drawn from
-// the SAME runtime frames as the LEDs and the Vmem chart — so a tick and an LED
+// the SAME runtime frames as the LEDs and the Vmem chart - so a tick and an LED
 // flash always mark the same neuron at the same time. A cursor marks "now".
 
 const SVGNS = "http://www.w3.org/2000/svg";
@@ -10,7 +10,7 @@ const s = (tag, attrs = {}) => {
 };
 
 export function mountRaster(container, runtime, onSeek) {
-  const svg = s("svg", { class: "raster", viewBox: "0 0 640 240", preserveAspectRatio: "none" });
+  const svg = s("svg", { class: "raster", viewBox: "0 0 640 240" });
   container.replaceChildren(svg);
 
   // clicking/scrubbing the raster seeks replay to that time

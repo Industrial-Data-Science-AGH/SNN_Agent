@@ -6,7 +6,7 @@
 
 import { el, clear, kv, stateLoading, stateEmpty, stateError } from "./ui.js";
 
-const short = (h) => (typeof h === "string" && h.startsWith("sha256:") ? h.slice(7, 19) + "…" : h ?? "—");
+const short = (h) => (typeof h === "string" && h.startsWith("sha256:") ? h.slice(7, 19) + "…" : h ?? "-");
 const NA = () => el("span", { class: "na", text: "Not available" });
 
 function demoTag(isDemo) {
@@ -44,7 +44,7 @@ export async function mountEvents(panel, source) {
   events.forEach((ev) => {
     const row = el("button", { class: "c4-event-row", type: "button" }, [
       el("span", { class: "c4-event-id", text: ev.event_id }),
-      el("span", { class: `tag ${EVENT_STATUS[ev.status] || "muted"}`, text: (ev.status || "").replace(/_/g, " ") || "—" }),
+      el("span", { class: `tag ${EVENT_STATUS[ev.status] || "muted"}`, text: (ev.status || "").replace(/_/g, " ") || "-" }),
     ]);
     row.addEventListener("click", () => {
       rows.forEach((r) => r.classList.remove("active"));
@@ -106,9 +106,9 @@ function renderEventDetail(host, ev, source) {
   const tl = el("div", { class: "c4-section" }, [el("h4", { text: "Timeline" })]);
   tl.append(stage("SNN trigger", d.source_time_us != null ? `${(d.source_time_us / 1e6).toFixed(3)} s` : null,
     d.trigger ? "triggered" : "no trigger", d.trigger ? "alarm" : "muted"));
-  tl.append(stage("Capture", capture?.issued_at || null, capture ? "requested" : "—", capture ? "warn" : "muted"));
-  tl.append(stage("Vision", v?.status || null, v ? v.status : "—", v?.status === "ok" ? "ok" : v?.status === "error" ? "alarm" : "muted"));
-  tl.append(stage("Alarm", alarm?.issued_at || null, alarm ? "raised" : "—", alarm ? "alarm" : "muted"));
+  tl.append(stage("Capture", capture?.issued_at || null, capture ? "requested" : "-", capture ? "warn" : "muted"));
+  tl.append(stage("Vision", v?.status || null, v ? v.status : "-", v?.status === "ok" ? "ok" : v?.status === "error" ? "alarm" : "muted"));
+  tl.append(stage("Alarm", alarm?.issued_at || null, alarm ? "raised" : "-", alarm ? "alarm" : "muted"));
   host.append(tl);
 
   // detection (glass / person / authorization kept separate)
@@ -153,7 +153,7 @@ function renderEventDetail(host, ev, source) {
     for (const a of acks) {
       ack.append(el("div", { class: "insp-row" }, [
         el("span", { class: "insp-row-label", text: a.command_id }),
-        el("span", {}, el("span", { class: `tag ${a.status === "acknowledged" ? "ok" : "alarm"}`, text: a.error_code ? `${a.status} · ${a.error_code}` : a.status })),
+        el("span", {}, el("span", { class: `tag ${a.status === "acknowledged" ? "ok" : "alarm"}`, text: a.error_code ? `${a.status} | ${a.error_code}` : a.status })),
       ]));
     }
   }
@@ -164,7 +164,7 @@ function renderEventDetail(host, ev, source) {
 
 function metricLine(m) {
   if (!m || m.value == null) return NA();
-  const ci = (m.ci_low != null && m.ci_high != null) ? ` (95% CI ${m.ci_low}–${m.ci_high})` : "";
+  const ci = (m.ci_low != null && m.ci_high != null) ? ` (95% CI ${m.ci_low}-${m.ci_high})` : "";
   return el("span", { text: `${m.value}${ci}` });
 }
 
@@ -185,9 +185,9 @@ export async function mountExperiments(panel, source) {
     return;
   }
 
-  // filter — one run at a time; results are never mixed across models/datasets
+  // filter - one run at a time; results are never mixed across models/datasets
   const select = el("select", { class: "select", "aria-label": "Result filter" });
-  runs.forEach((r) => select.append(new Option(`${r.dataset} · ${r.split} · model ${short(r.model_hash)}`, r.run_id)));
+  runs.forEach((r) => select.append(new Option(`${r.dataset} | ${r.split} | model ${short(r.model_hash)}`, r.run_id)));
   const filterRow = el("div", { class: "c4-filter" }, [el("span", { class: "toolbar-label", text: "Result" }), select]);
   const body = el("div");
   card.append(filterRow, body);
@@ -203,7 +203,7 @@ export async function mountExperiments(panel, source) {
       metricsCard("SNN metrics", run.snn),
       metricsCard("Whole-system metrics", run.system),
     ]));
-    body.append(el("p", { class: "insp-note", text: "SNN and whole-system metrics are shown separately for one model/dataset — never combined." }));
+    body.append(el("p", { class: "insp-note", text: "SNN and whole-system metrics are shown separately for one model/dataset - never combined." }));
   };
   select.addEventListener("change", () => renderRun(runs.find((r) => r.run_id === select.value)));
   renderRun(runs[0]);
@@ -240,7 +240,7 @@ export async function mountEnergy(panel, source) {
   card.append(el("div", { class: "c4-list-head" }, [el("h3", { text: "Power & energy" }), demoTag(source.isDemo)]));
   const sources = doc?.sources || [];
   if (!sources.length) {
-    // No measurement — explicitly, never a zero.
+    // No measurement - explicitly, never a zero.
     card.append(stateEmpty("No measurement", "Energy figures are not available (A2 / Andrzej)."));
     return;
   }
@@ -257,12 +257,12 @@ export async function mountEnergy(panel, source) {
     ]);
     const dl = el("dl", { class: "kv" });
     dl.append(el("dt", { text: "Power" }), el("dd", {}, s.power_w == null ? NA() : el("span", { text: `${s.power_w} W` })));
-    dl.append(el("dt", { text: "Energy" }), el("dd", {}, s.energy_j == null ? NA() : el("span", { text: `${s.energy_j} J · ${s.energy_wh} Wh` })));
+    dl.append(el("dt", { text: "Energy" }), el("dd", {}, s.energy_j == null ? NA() : el("span", { text: `${s.energy_j} J | ${s.energy_wh} Wh` })));
     if (s.window_s) dl.append(el("dt", { text: "Window" }), el("dd", { text: `${s.window_s} s` }));
     c.append(dl);
     if (s.note) c.append(el("div", { class: "insp-note", text: s.note }));
     grid.append(c);
   }
   card.append(grid);
-  card.append(el("p", { class: "insp-note", text: "Measured and estimated sources, and different measurement boundaries, are shown separately — never summed together." }));
+  card.append(el("p", { class: "insp-note", text: "Measured and estimated sources, and different measurement boundaries, are shown separately - never summed together." }));
 }

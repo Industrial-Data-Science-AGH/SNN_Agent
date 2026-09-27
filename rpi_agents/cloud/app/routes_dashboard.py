@@ -3,19 +3,19 @@
 The dashboard is a *static shell* that is rendered entirely in the browser
 (``templates/index.html`` + ``static/js/*``). This module does two things:
 
-1. ``router`` — the routes that belong to the dashboard when it is mounted
+1. ``router`` - the routes that belong to the dashboard when it is mounted
    into the real backend app (Wiktor's ``rpi_agents.cloud.app.api``):
      * ``GET /``                       → the shell HTML
      * ``GET /dashboard/fixtures``     → the list of demo fixture names
      * ``GET /dashboard/fixtures/{n}`` → one contract fixture, tagged ``demo``
 
    The fixtures are read straight from ``contracts/fixtures`` via
-   ``contracts.validation.fixture`` — one source of truth, never a copy. This
+   ``contracts.validation.fixture`` - one source of truth, never a copy. This
    is the ``DemoSource`` the front-end talks to in demo mode; the real backend
    exposes the same *shape* of data under ``/v1/...`` so the UI does not need
    to be rewritten to go live.
 
-2. ``create_dashboard_app`` / ``__main__`` — a **development-only** harness so
+2. ``create_dashboard_app`` / ``__main__`` - a **development-only** harness so
    the UI can be run and clicked without the full cloud backend or any
    hardware::
 
@@ -38,7 +38,6 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from contracts.validation import ContractError, fixture
-from rpi_agents.cloud.app.demo_frames import ensure_neuron_frames
 
 _APP_DIR = Path(__file__).parent
 _TEMPLATES_DIR = _APP_DIR / "templates"
@@ -96,8 +95,7 @@ def create_dashboard_app() -> FastAPI:
     hardware or SNN inference. In production the dashboard ``router`` is mounted
     into Wiktor's backend, which supplies the real ``/auth`` and ``/v1`` routes.
     """
-    ensure_neuron_frames()  # generate the golden demo replay if it isn't on disk
-    app = FastAPI(title="SNN Lab dashboard — DEV harness", version="0.9.0")
+    app = FastAPI(title="SNN Lab dashboard - DEV harness", version="0.9.0")
 
     @app.exception_handler(ContractError)
     async def _contract_error(request: Request, exc: ContractError) -> JSONResponse:
@@ -105,6 +103,13 @@ def create_dashboard_app() -> FastAPI:
             {"schema_version": "1.0", "error": {"code": exc.code, "message": str(exc)}},
             status_code=exc.status,
         )
+
+    @app.middleware("http")
+    async def _no_cache(request: Request, call_next):
+        # Dev harness: never cache, so edits to css/js/img show on plain reload.
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
     app.include_router(router)
@@ -158,6 +163,6 @@ def create_dashboard_app() -> FastAPI:
 if __name__ == "__main__":
     import uvicorn
 
-    print("SNN Lab dashboard (DEV) — http://127.0.0.1:8080")
+    print("SNN Lab dashboard (DEV) - http://127.0.0.1:8080")
     print(f"Demo sign-in: username '{_DEMO_USERNAME}', password '{_DEMO_PASSWORD}' (or use 'Explore demo').")
     uvicorn.run(create_dashboard_app(), host="127.0.0.1", port=8080)

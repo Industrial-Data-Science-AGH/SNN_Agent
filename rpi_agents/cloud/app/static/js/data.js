@@ -1,5 +1,5 @@
 // Data layer. Rendering code depends ONLY on this interface, never on where
-// the data comes from — so replacing the demo fixtures with the real backend
+// the data comes from - so replacing the demo fixtures with the real backend
 // does not touch the UI.
 //
 // Two implementations behind one shape:

@@ -1,6 +1,6 @@
 // Runtime signal layer (task C3): supplies neuron frames to the LEDs, the
 // inspector chart and the spike raster from ONE source, so they always agree
-// on the same neuron/time. Nothing here is random — LEDs and spikes come from
+// on the same neuron/time. Nothing here is random - LEDs and spikes come from
 // the runtime fields (v_mem, spiked), never a decorative animation or tau alone.
 //
 // Two implementations behind one interface:
@@ -8,11 +8,11 @@
 //   LiveRuntime  → Server-Sent Events from Patryk's stream (P3), with reconnect
 //
 // Playback: play({mode})/pause()/resume()/seek(t)/stop(). "Pause view" calls
-// pause() — it stops advancing the view and NEVER stops the session (no Stop is
+// pause() - it stops advancing the view and NEVER stops the session (no Stop is
 // sent). Connection health is reported as connected | stale | reconnecting.
 
 const STALE_MS = 3000;
-const MAX_BUFFER = 2000; // bounded live buffer — old frames are dropped, memory stays flat
+const MAX_BUFFER = 2000; // bounded live buffer - old frames are dropped, memory stays flat
 const SCHEMA = "1.0";
 
 // A frame's time in seconds. The contract carries source_time_us; the demo
@@ -31,7 +31,35 @@ class Emitter {
   emit(evt, ...a) { (this._h[evt] || []).forEach((cb) => cb(...a)); }
 }
 
-//  demo (golden)
+//  demo (deterministic golden replay generated in JS)
+
+const DEMO = { duration: 50, dt: 0.5, threshold: 1, reset: 0, tau: 8 };
+
+// Deterministic LIF replay for `n` neurons (no RNG → identical every time). The
+// neuron set follows the board count, so the raster/LEDs/chart always match the
+// number of boards on the canvas.
+function genFrames(n, o = DEMO) {
+  const steps = Math.round(o.duration / o.dt) + 1;
+  const v = Array.from({ length: n }, (_, j) => 0.15 * (j + 1));
+  const frames = [];
+  for (let k = 0; k < steps; k++) {
+    const t = Math.round(k * o.dt * 1000) / 1000;
+    const neurons = [];
+    for (let j = 0; j < n; j++) {
+      const drive = 1.10 + 0.45 * Math.sin(0.25 * t + j * 0.8) + 0.10 * Math.cos(0.6 * t + j);
+      v[j] += (o.dt / o.tau) * (-(v[j]) + drive * o.tau * 0.5);
+      const spiked = v[j] >= o.threshold;
+      if (spiked) v[j] = o.reset;
+      neurons.push({
+        neuron_id: `n${j + 1}`,
+        v_mem: Math.round((spiked ? o.threshold : v[j]) * 1e4) / 1e4,
+        v_threshold: o.threshold, v_reset: o.reset, spiked,
+      });
+    }
+    frames.push({ frame_seq: k, t, source_time_us: Math.round(t * 1e6), status: "running", neurons });
+  }
+  return frames;
+}
 
 class DemoRuntime extends Emitter {
   constructor() {
@@ -40,27 +68,34 @@ class DemoRuntime extends Emitter {
     this.frames = [];
     this.meta = null;
     this.index = 0;
+    this._count = 8;          // neuron count (follows the board count)
     this._timer = null;
     this._lost = false;       // simulated connection loss
     this._staleTimer = null;
   }
 
-  async load() {
-    const res = await fetch("/static/demo/neuron-frames.json");
-    const doc = await res.json();
-    this.frames = doc.frames || [];
+  _build(n) {
+    this._count = Math.max(0, Math.min(50, Math.floor(n) || 0));
+    this.frames = this._count > 0 ? genFrames(this._count) : [];
+    this.index = 0;
     this.meta = {
-      duration_s: doc.duration_s,
-      dt_s: doc.dt_s,
-      potential_unit: doc.potential_unit || "a.u.",
-      v_threshold: doc.v_threshold ?? 1,
-      v_reset: doc.v_reset ?? 0,
-      neuron_ids: doc.neuron_ids || [],
-      calibration: doc.calibration || { status: "unverified", label: "Unverified" },
-      frameCount: this.frames.length,
-      demo: true,
+      duration_s: DEMO.duration, dt_s: DEMO.dt, potential_unit: "a.u.",
+      v_threshold: DEMO.threshold, v_reset: DEMO.reset,
+      neuron_ids: Array.from({ length: this._count }, (_, j) => `n${j + 1}`),
+      calibration: { status: "unverified", label: "Unverified" },
+      frameCount: this.frames.length, demo: true,
     };
+  }
+
+  async load() {
+    this._build(this._count);
     return this.meta;
+  }
+
+  // Rebuild the demo signal for a new neuron/board count (raster/LEDs follow it).
+  setNeuronCount(n) {
+    this._build(n);
+    this._deliver();
   }
 
   get currentFrame() { return this.frames[this.index] || null; }
@@ -68,7 +103,7 @@ class DemoRuntime extends Emitter {
   framesUpTo(index = this.index) { return this.frames.slice(0, index + 1); }
 
   _tick() {
-    if (this._lost) return;                 // no frames while "disconnected"
+    if (this._lost || !this.frames.length) return;   // nothing to advance
     this.index = (this.index + 1) % this.frames.length; // live loops for the demo
     this._deliver();
   }
@@ -133,7 +168,7 @@ class LiveRuntime extends Emitter {
     this._es = null;
     this._staleTimer = null;
     this._retry = null;
-    // binding + ordering guards — established from the first accepted frame
+    // binding + ordering guards - established from the first accepted frame
     this._boundSession = null;
     this._boundEpoch = null;
     this._lastSeq = -Infinity;
@@ -176,7 +211,7 @@ class LiveRuntime extends Emitter {
       this._boundSession = frame.session_id ?? null;
       this._boundEpoch = frame.epoch ?? null;
     } else if (frame.session_id !== this._boundSession || frame.epoch !== this._boundEpoch) {
-      return false; // frame from another session/epoch — do not splice it in
+      return false; // frame from another session/epoch - do not splice it in
     }
     if (typeof frame.frame_seq === "number") {
       if (frame.frame_seq <= this._lastSeq) return false; // stale / duplicate

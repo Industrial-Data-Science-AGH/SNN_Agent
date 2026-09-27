@@ -79,13 +79,13 @@ function enterApp(nextMode) {
 
   const isDemo = mode === "demo";
   demoBadge.hidden = !isDemo;
-  footerMode.textContent = isDemo ? "Demo mode · sample data" : "Live · connected";
+  footerMode.textContent = isDemo ? "Demo mode | sample data" : "Live | connected";
 
   rendered.clear();
   selectTab("network");
 }
 
-// --------------------------------------------------------------- sign-in form
+//  sign-in form
 
 function wireLogin() {
   const form = $("#login-form");
@@ -183,7 +183,7 @@ function comingSoon(task, what) {
   return stateEmpty(`${what}`, `Built in task ${task}.`);
 }
 
-//  Network (board editor C2 + runtime LEDs, inspector, raster, replay — C3)
+//  Network (board editor C2 + runtime LEDs, inspector, raster, replay - C3)
 async function renderNetwork(panel) {
   head(panel, "Network", "Lu.i board topology, live signals and neuron inspector.");
 
@@ -211,6 +211,16 @@ async function renderNetwork(panel) {
 
   editor.onSelect((id) => inspector.selectNeuron(id));
 
+  // In demo, the signal set follows the board count so the raster/LEDs/chart
+  // match the neurons on the canvas. (Live keeps the stream's own neuron set.)
+  editor.onCount((n) => {
+    runtime.setNeuronCount?.(n);
+    const ids = runtime.meta?.neuron_ids || [];
+    const sel = editor.getSelected();
+    if (!sel || !ids.includes(sel)) editor.select(ids[0] || null);
+    raster.update();
+  });
+
   runtime.on("frame", (frame, idx) => {
     editor.applyFrame(frame);
     inspector.update();
@@ -220,7 +230,7 @@ async function renderNetwork(panel) {
   });
   runtime.on("status", (st) => controls.setStatus(st));
 
-  //  control wiring — panel runbar AND the top toolbar drive the same runtime
+  //  control wiring - panel runbar AND the top toolbar drive the same runtime
   const top = {
     live: document.querySelector("#top-live"),
     replay: document.querySelector("#top-replay"),
@@ -257,13 +267,13 @@ async function renderNetwork(panel) {
     controls.scrubber.disabled = mode !== "replay";
     paintMode();
     paintPaused();
-    if (mode === "edit") runtime.pause();        // pauses the view only — never Stop
+    if (mode === "edit") runtime.pause();        // pauses the view only - never Stop
     else runtime.play({ mode });
   }
   function togglePause() {
     viewPaused = !viewPaused;
     paintPaused();
-    // Pause view stops advancing the view only — it never stops the session.
+    // Pause view stops advancing the view only - it never stops the session.
     if (viewPaused) runtime.pause(); else runtime.resume();
   }
 

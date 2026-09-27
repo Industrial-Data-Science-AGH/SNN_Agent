@@ -1,17 +1,17 @@
 // Network editor (task C2): a layered SVG canvas of Lu.i boards with
 // zoom / pan / Fit, dragging, neuron selection and excitatory/inhibitory
 // connections. Boards are cloned from static/img/neuron.svg (its own layers:
-// ports, potential LED, spike strip, selection halo) — never a plain circle.
+// ports, potential LED, spike strip, selection halo) - never a plain circle.
 //
 // State is split into three isolated tiers so edits never touch a champion:
 //   draft    editable topology (everything here mutates only this)
-//   loaded   a loaded model — read-only reference (set by later tasks)
-//   session  a running session — read-only (set in C3)
-// Import/Export moves the DRAFT only, as data (JSON.parse — no code execution),
+//   loaded   a loaded model - read-only reference (set by later tasks)
+//   session  a running session - read-only (set in C3)
+// Import/Export moves the DRAFT only, as data (JSON.parse - no code execution),
 // and can never overwrite `loaded`/`session`.
 
 const SVGNS = "http://www.w3.org/2000/svg";
-const BW = 210;          // board width  (native neuron.svg viewBox — no scaling)
+const BW = 210;          // board width  (native neuron.svg viewBox - no scaling)
 const BH = 120;          // board height
 const GAP_X = 60;        // grid gaps leave room for labels (no overlap)
 const GAP_Y = 60;
@@ -67,7 +67,7 @@ function validateTopology(obj) {
     if (!ids.has(c?.source) || !ids.has(c?.target)) throw new Error("Connection references an unknown board");
     if (c.kind !== KINDS.excitatory && c.kind !== KINDS.inhibitory) throw new Error("Connection has an invalid kind");
   }
-  // Return a clean copy — only known fields, nothing executable.
+  // Return a clean copy - only known fields, nothing executable.
   return {
     boards: obj.boards.map((b) => ({
       id: String(b.id),
@@ -89,8 +89,8 @@ function validateTopology(obj) {
 export async function mountNetworkEditor(container, { readonly = false } = {}) {
   const state = {
     draft: { boards: [], connections: [] },
-    loaded: null,   // read-only reference — never overwritten by import
-    session: null,  // read-only — set in C3
+    loaded: null,   // read-only reference - never overwritten by import
+    session: null,  // read-only - set in C3
     selectedId: null,
     view: { x: -40, y: -40, w: 900, h: 560 }, // viewBox
   };
@@ -157,8 +157,8 @@ export async function mountNetworkEditor(container, { readonly = false } = {}) {
       g.classList.toggle("selected", g.dataset.id === id));
     const board = state.draft.boards.find((b) => b.id === id);
     toolbar.readout.textContent = board
-      ? `Selected ${board.label} · ${state.draft.connections.filter((c) => c.source === id || c.target === id).length} connection(s)`
-      : `${state.draft.boards.length} board(s) · draft topology`;
+      ? `Selected ${board.label} | ${state.draft.connections.filter((c) => c.source === id || c.target === id).length} connection(s)`
+      : `${state.draft.boards.length} board(s) | draft topology`;
     selectListeners.forEach((cb) => cb(id, board || null));
   }
 
@@ -316,7 +316,7 @@ export async function mountNetworkEditor(container, { readonly = false } = {}) {
     toolbar.readout.classList.remove("is-error");
     try {
       const text = await file.text();
-      const parsed = JSON.parse(text);            // data only — never eval/Function
+      const parsed = JSON.parse(text);            // data only - never eval/Function
       const clean = validateTopology(parsed);      // draft only; loaded/session untouched
       state.draft = clean;
       select(null);
@@ -343,7 +343,7 @@ export async function mountNetworkEditor(container, { readonly = false } = {}) {
       if (!g) continue;
       const core = g.querySelector(".led-potential .led-core");
       const glow = g.querySelector(".led-potential .led-glow");
-      // v_mem: null means "no reading" (packet without physics / gap) — show a
+      // v_mem: null means "no reading" (packet without physics / gap) - show a
       // neutral LED, never a bright/zero value that would fake a measurement.
       if (n.v_mem == null) {
         if (core) { core.setAttribute("fill", "#3a2d5c"); core.style.fill = "#3a2d5c"; }
@@ -410,7 +410,7 @@ function buildToolbar() {
   const layoutBtn = elh("button", { class: "btn btn-outline btn-sm", type: "button" }, "Auto-layout");
   const fitBtn = elh("button", { class: "btn btn-outline btn-sm", type: "button" }, "Fit");
   const zoomInBtn = elh("button", { class: "btn btn-outline btn-sm", type: "button", "aria-label": "Zoom in" }, "+");
-  const zoomOutBtn = elh("button", { class: "btn btn-outline btn-sm", type: "button", "aria-label": "Zoom out" }, "−");
+  const zoomOutBtn = elh("button", { class: "btn btn-outline btn-sm", type: "button", "aria-label": "Zoom out" }, "-");
   const exportBtn = elh("button", { class: "btn btn-outline btn-sm", type: "button" }, "Export JSON");
   const importInput = elh("input", { type: "file", accept: "application/json,.json", id: "net-import", class: "net-file" });
   const importLabel = elh("label", { class: "btn btn-outline btn-sm", for: "net-import" }, "Import JSON");
@@ -419,7 +419,7 @@ function buildToolbar() {
   const root = elh("div", { class: "net-toolbar" }, [
     elh("span", { class: "toolbar-label" }, "Board count"),
     countInput,
-    elh("span", { class: "toolbar-hint" }, "0 – 50"),
+    elh("span", { class: "toolbar-hint" }, "0 - 50"),
     layoutBtn, fitBtn,
     elh("span", { class: "net-zoom" }, [zoomOutBtn, zoomInBtn]),
     elh("span", { class: "net-spacer" }),

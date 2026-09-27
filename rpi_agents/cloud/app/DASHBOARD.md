@@ -1,11 +1,11 @@
-# SNN Lab — Dashboard (T03)
+# SNN Lab - Dashboard (T03)
 
 Angielski dashboard operatora dla detektora stłuczenia szkła na analogowych
 neuronach **Lu.i**. Renderowany po stronie klienta (bez frameworka), serwowany
 przez FastAPI; integruje się z backendem Wiktora po HTTP/OpenAPI.
 
 - **Wersja UI:** `0.9.0` (widoczna w nagłówku)
-- **Baza SHA:** `d5c817be` — bieżące: `git rev-parse --short HEAD`
+- **Baza SHA:** `d5c817be` - bieżące: `git rev-parse --short HEAD`
 - **Dane wejściowe/wyjściowe i przekazania:** [DASHBOARD_DATA.md](DASHBOARD_DATA.md)
 
 ---
@@ -16,15 +16,15 @@ Pięć sekcji (wszystkie etykiety produktu po **angielsku**):
 
 | Sekcja | Zawartość |
 |---|---|
-| **Network** | edytor topologii płytek Lu.i (0–50), zoom/pan/Fit, drag, wybór neuronu; **na żywo**: LED potencjału (`v_mem`) i osobny błysk spike (`spiked`); inspektor neuronu (Signals/Parameters/Connections/Notes) z wykresem Vmem (próg, jednostki, kalibracja); raster impulsów; Live/Replay/Edit/Pause/Start |
+| **Network** | edytor topologii płytek Lu.i (0-50), zoom/pan/Fit, drag, wybór neuronu; **na żywo**: LED potencjału (`v_mem`) i osobny błysk spike (`spiked`); inspektor neuronu (Signals/Parameters/Connections/Notes) z wykresem Vmem (próg, jednostki, kalibracja); raster impulsów; Live/Replay/Edit/Pause/Start |
 | **Events** | lista + detale zdarzenia: zdjęcie, timeline SNN/capture/vision/alarm, osobno glass/person/authorization, decyzja SNN, ACK i error state; brak danych → `Not available` |
 | **Experiments** | metryki per run: split, godziny tła, seed, model_hash, encoder_hash, FA/h z 95% CI i recall; **osobno** metryki SNN i całego systemu; filtr pokazuje jeden run (nie miesza modeli/datasetów) |
 | **Energy** | źródła measured/estimated z granicą pomiaru, moc W i energia J/Wh; osobno, nigdy sumowane; brak pomiaru → `Not available` (nie zero) |
 | **Device** | heartbeat, stan, serial (frames/gaps/stalls/reconnects), kamera, bufor/outbox |
 
 Tryby danych:
-- **DEMO** (`Explore demo`) — działa bez sprzętu/backendu; dane z fixtures; oznaczone `DEMO · SAMPLE DATA`.
-- **LIVE** (po zalogowaniu) — dane z API Wiktora; brak endpointu → `Not available`.
+- **DEMO** (`Explore demo`) - działa bez sprzętu/backendu; dane z fixtures; oznaczone `DEMO · SAMPLE DATA`.
+- **LIVE** (po zalogowaniu) - dane z API Wiktora; brak endpointu → `Not available`.
 
 ---
 
@@ -41,7 +41,7 @@ py -3.13 -m venv .venv-w0                                        # jednorazowo
 ```
 
 → **http://127.0.0.1:8080**. Logowanie demo: `operator` / `demo`, albo „Explore demo".
-Harness ma stub `/auth/*` (mówi tym samym kontraktem co produkcja) i serwuje fixtures —
+Harness ma stub `/auth/*` (mówi tym samym kontraktem co produkcja) i serwuje fixtures -
 **nie jest to produkcja**.
 
 > Uwaga: maszyna deweloperska ma Python 3.13 (nie 3.12), lock instaluje się na 3.13 poprawnie.
@@ -52,7 +52,7 @@ Harness ma stub `/auth/*` (mówi tym samym kontraktem co produkcja) i serwuje fi
 ./.venv-w0/Scripts/python.exe -m rpi_agents.cloud.app.mock_api        # http://127.0.0.1:8000
 ```
 
-- **Swagger UI:** http://127.0.0.1:8000/docs — pełna specyfikacja endpointów `/v1/*` i fixtures.
+- **Swagger UI:** http://127.0.0.1:8000/docs - pełna specyfikacja endpointów `/v1/*` i fixtures.
 - Fixtures: `GET /demo/fixtures/{name}` (np. `neuron-frame`, `model-manifest`, `device-status`).
 
 ### 3. Produkcja (backend Wiktora)
@@ -82,9 +82,8 @@ rpi_agents/cloud/app/
       inspector.js           # inspektor neuronu + wykres Vmem
       raster.js              # raster impulsów
       c4.js                  # panele Events / Experiments / Energy
-    demo/                    # dane DEMO (do zastąpienia realnymi — patrz DASHBOARD_DATA.md)
-      neuron-frames.json     # golden replay (8 neuronów, 101 klatek, deterministyczny LIF)
-      events.json, experiments.json, energy.json
+    demo/                    # dane DEMO (do zastąpienia realnymi - patrz DASHBOARD_DATA.md)
+      events.json, experiments.json, energy.json   # (golden replay neuronów generowany w JS: runtime.js genFrames)
 tests/dashboard/test_dashboard.py   # testy (shell, fixtures, auth, warstwy, C4)
 ```
 
@@ -96,7 +95,7 @@ tests/dashboard/test_dashboard.py   # testy (shell, fixtures, auth, warstwy, C4)
 ./.venv-w0/Scripts/python.exe -m pytest tests/dashboard -q
 ```
 
-Uwaga o CI: `pr-gate` lintuje `rpi_agents` (ruff) i uruchamia `tests/w0` — `tests/dashboard`
+Uwaga o CI: `pr-gate` lintuje `rpi_agents` (ruff) i uruchamia `tests/w0` - `tests/dashboard`
 **nie jest** w bramce CI (odpalane lokalnie). Testy pokrywają: sekcje po angielsku, brak
 polskich etykiet, fixtures demo + 404, kontrakt logowania (invalid/session/logout),
 warstwy C2/C3 i dane C4 (rozdzielenie metryk, brak≠zero).
@@ -121,13 +120,13 @@ warstwy C2/C3 i dane C4 (rozdzielenie metryk, brak≠zero).
 - Hasło **nie** trafia do JS/localStorage; sesja to httponly cookie ustawiane przez serwer.
 - CSRF token trzymany tylko w pamięci; wysyłany w `X-CSRF-Token` przy logout.
 - **Dane blokowane po logout niezależnie od UI:** realny backend wymaga sesji operatora na
-  każdym `/v1/*` (401 bez cookie) — ukrycie UI to nie jedyna bariera.
+  każdym `/v1/*` (401 bez cookie) - ukrycie UI to nie jedyna bariera.
 - Import JSON topologii: `JSON.parse` + walidacja, **żadnego** wykonywania kodu; import
-  wpływa tylko na `draft` — **nie nadpisuje** załadowanego/uruchomionego modelu (championa).
+  wpływa tylko na `draft` - **nie nadpisuje** załadowanego/uruchomionego modelu (championa).
 
 ---
 
-## Odbiór C5 — scenariusze (checklist)
+## Odbiór C5 - scenariusze (checklist)
 
 - [x] login → logout → ponowne wejście
 - [x] jedna sesja live + replay (seek odtwarza spójny stan)

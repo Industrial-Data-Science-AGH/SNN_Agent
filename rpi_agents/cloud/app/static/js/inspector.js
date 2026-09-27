@@ -1,6 +1,6 @@
 // Neuron inspector (task C3): Signals / Parameters / Connections / Notes.
 // The Signals tab plots Vmem over time with the threshold, units and the
-// calibration status — from the same runtime frames that drive the LEDs and the
+// calibration status - from the same runtime frames that drive the LEDs and the
 // raster, so all three agree on neuron and time.
 
 const SVGNS = "http://www.w3.org/2000/svg";
@@ -73,7 +73,7 @@ export function mountInspector(container, runtime, editor) {
     const meta = runtime.meta || {};
     const wrap = e("div");
     wrap.append(e("div", { class: "insp-label", text: `Vmem [${meta.potential_unit || "a.u."}]` }));
-    const chart = s("svg", { class: "vmem-chart", viewBox: "0 0 320 180", preserveAspectRatio: "none" });
+    const chart = s("svg", { class: "vmem-chart", viewBox: "0 0 320 180" });
     wrap.append(chart);
     wrap.append(e("div", { class: "vmem-legend" }, [
       legend("vmem", "Vmem"), legend("thresh", "Threshold"), legend("spike", "Spikes"),
@@ -94,7 +94,7 @@ export function mountInspector(container, runtime, editor) {
     const tOf = (f) => (typeof f.t === "number" ? f.t : (f.source_time_us ?? 0) / 1e6);
     let series = frames.map((f) => {
       const n = f.neurons.find((x) => x.neuron_id === neuronId);
-      // null v_mem = no reading (gap / packet without physics) — kept as null,
+      // null v_mem = no reading (gap / packet without physics) - kept as null,
       // never coerced to 0, and drawn as a break in the line.
       return { t: tOf(f), v: n && n.v_mem != null ? n.v_mem : null, spiked: n?.spiked };
     });
@@ -104,7 +104,7 @@ export function mountInspector(container, runtime, editor) {
       series = series.filter((p, i) => i % k === 0 || p.spiked);
     }
     const meta = runtime.meta || {};
-    // threshold/reset are PER NEURON — read the selected neuron's own values.
+    // threshold/reset are PER NEURON - read the selected neuron's own values.
     const cur = runtime.currentFrame?.neurons?.find((x) => x.neuron_id === neuronId);
     const vth = cur?.v_threshold ?? meta.v_threshold ?? 1;
     const dur = meta.duration_s || (series.length ? series[series.length - 1].t : 1) || 1;
@@ -136,7 +136,7 @@ export function mountInspector(container, runtime, editor) {
     }
     // threshold
     chart.append(s("line", { x1: PL, y1: Y(vth), x2: PL + xw, y2: Y(vth), class: "vmem-thresh" }));
-    // vmem line — breaks at null (no reading), so gaps are visible, not faked
+    // vmem line - breaks at null (no reading), so gaps are visible, not faked
     let d = "";
     let pen = false;
     for (const p of series) {

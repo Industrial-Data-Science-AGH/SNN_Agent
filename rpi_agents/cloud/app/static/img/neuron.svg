@@ -5,8 +5,8 @@
          .board-sel        selection halo (shown when the board is selected)
          .board-body       the neuron silhouette + soma knob + silk
          .board-ports      the three dendrite input pads (left)
-         .led-potential     membrane-potential (Vmem) LED in the soma  — driven in C3
-         .led-spike         spike LED strip along the axon             — driven in C3
+         .led-potential     membrane-potential (Vmem) LED in the soma  - driven in C3
+         .led-spike         spike LED strip along the axon             - driven in C3
        Cloned by the canvas with <use href="#lui-board">. -->
   <symbol id="lui-board" viewBox="0 0 210 120">
     <!-- selection halo: the same silhouette, slightly larger, behind the body -->

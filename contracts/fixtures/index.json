@@ -1,5 +1,6 @@
 {
   "encoder-profile": "EncoderProfile",
+  "encoder-profile-base": "EncoderProfile",
   "model-manifest": "ModelManifest",
   "session-create": "SessionCreate",
   "silence": "SpikeBatch",

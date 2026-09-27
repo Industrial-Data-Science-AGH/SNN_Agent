@@ -8,5 +8,6 @@
 !rpi_agents/runtime/
 !rpi_agents/agent/__init__.py
 !rpi_agents/agent/api.py
+!snn_runtime/
 **/__pycache__
 **/*.pyc

@@ -39,8 +39,8 @@ def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
     dev = rf.device
     torch_.manual_seed(0); np.random.seed(0)
 
-    dl_tr = rf.DataLoader(rf.tr_ds, batch_size=128,
-                          sampler=rf.make_sampler(rf.tr_lab, 12000))
+    dl_tr = rf.DataLoader(rf.tr_ds, batch_size=batch_size,
+                        sampler=rf.make_sampler(rf.tr_lab, num_samples))
 
     hat_epochs = int(round(hat_frac * epochs))
     freeze_ep = int(0.8 * epochs)

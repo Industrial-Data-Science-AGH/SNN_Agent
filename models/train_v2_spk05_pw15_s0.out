@@ -1,0 +1,122 @@
+[data] cache: 83458 okien, pozytywnych 7962 (9.5%)
+[data] cache: 18261 okien, pozytywnych 2973 (16.3%)
+[split] train 83458 okien / val 18261 okien (katalogi manifestu, val pos 16.3%)
+[select] checkpoint po score(recall @ 6 FA/h) — surogat gdy budżet nieosiągalny (val 1866 klipów, QAT)
+[plan] HAT (pełna precyzja + szum sprzętowy): epoki 0..47, QAT (kwantyzacja 20 działek): 48..119, znaki zamrożone od 96, patience 20
+ep   0 [HAT] loss 3.5906  rec 0.000 prec 0.000 f1 0.000  47s *
+ep   1 [HAT] loss 1.9985  rec 0.797 prec 0.535 f1 0.641  45s *
+ep   2 [HAT] loss 1.6115  rec 0.868 prec 0.522 f1 0.652  46s *
+ep   3 [HAT] loss 1.5347  rec 0.877 prec 0.503 f1 0.639  47s
+ep   4 [HAT] loss 1.4903  rec 0.915 prec 0.479 f1 0.629  60s
+ep   5 [HAT] loss 1.4543  rec 0.914 prec 0.488 f1 0.636  51s
+ep   6 [HAT] loss 1.4410  rec 0.920 prec 0.478 f1 0.629  54s
+ep   7 [HAT] loss 1.4723  rec 0.920 prec 0.484 f1 0.634  54s
+ep   8 [HAT] loss 1.5291  rec 0.918 prec 0.485 f1 0.635  62s
+ep   9 [HAT] loss 1.5228  rec 0.918 prec 0.487 f1 0.637  85s
+ep  10 [HAT] loss 1.5221  rec 0.940 prec 0.485 f1 0.640  64s
+ep  11 [HAT] loss 1.4785  rec 0.937 prec 0.492 f1 0.645  43s
+ep  12 [HAT] loss 1.4750  rec 0.945 prec 0.487 f1 0.643  43s
+ep  13 [HAT] loss 1.5184  rec 0.948 prec 0.484 f1 0.640  45s
+ep  14 [HAT] loss 1.5253  rec 0.951 prec 0.479 f1 0.637  43s
+ep  15 [HAT] loss 1.5051  rec 0.956 prec 0.479 f1 0.638  45s
+ep  16 [HAT] loss 1.4981  rec 0.954 prec 0.484 f1 0.642  46s
+ep  17 [HAT] loss 1.5253  rec 0.958 prec 0.482 f1 0.641  50s
+ep  18 [HAT] loss 1.5080  rec 0.958 prec 0.486 f1 0.645  60s
+ep  19 [HAT] loss 1.5453  rec 0.958 prec 0.479 f1 0.639  61s
+ep  20 [HAT] loss 1.5617  rec 0.951 prec 0.490 f1 0.647  49s
+ep  21 [HAT] loss 1.5468  rec 0.943 prec 0.531 f1 0.680  45s *
+ep  22 [HAT] loss 1.5399  rec 0.950 prec 0.528 f1 0.679  45s
+ep  23 [HAT] loss 1.4947  rec 0.953 prec 0.529 f1 0.680  45s *
+ep  24 [HAT] loss 1.4792  rec 0.929 prec 0.557 f1 0.697  48s *
+ep  25 [HAT] loss 1.4978  rec 0.943 prec 0.539 f1 0.686  46s
+ep  26 [HAT] loss 1.5116  rec 0.951 prec 0.532 f1 0.682  69s
+ep  27 [HAT] loss 1.4579  rec 0.945 prec 0.536 f1 0.684  52s
+ep  28 [HAT] loss 1.4676  rec 0.943 prec 0.540 f1 0.686  57s
+ep  29 [HAT] loss 1.5450  rec 0.940 prec 0.539 f1 0.685  47s
+ep  30 [HAT] loss 1.5783  rec 0.931 prec 0.552 f1 0.693  43s
+ep  31 [HAT] loss 1.4809  rec 0.958 prec 0.522 f1 0.676  43s
+ep  32 [HAT] loss 1.5088  rec 0.945 prec 0.539 f1 0.687  43s
+ep  33 [HAT] loss 1.5032  rec 0.939 prec 0.549 f1 0.693  43s
+ep  34 [HAT] loss 1.5140  rec 0.948 prec 0.535 f1 0.684  44s
+ep  35 [HAT] loss 1.5444  rec 0.945 prec 0.538 f1 0.686  43s
+ep  36 [HAT] loss 1.4670  rec 0.945 prec 0.540 f1 0.687  45s
+ep  37 [HAT] loss 1.4915  rec 0.962 prec 0.518 f1 0.674  42s
+ep  38 [HAT] loss 1.4859  rec 0.961 prec 0.516 f1 0.672  38s
+ep  39 [HAT] loss 1.5238  rec 0.956 prec 0.531 f1 0.683  37s
+ep  40 [HAT] loss 1.5130  rec 0.943 prec 0.544 f1 0.690  37s
+ep  41 [HAT] loss 1.5840  rec 0.954 prec 0.532 f1 0.683  37s
+ep  42 [HAT] loss 1.4859  rec 0.942 prec 0.542 f1 0.688  37s
+ep  43 [HAT] loss 1.5257  rec 0.936 prec 0.547 f1 0.691  36s
+ep  44 [HAT] loss 1.5788  rec 0.954 prec 0.539 f1 0.689  37s
+[ep 44] HAT bez poprawy od 20 epok — przechodzę do QAT
+[ep 45] start QAT: kwantyzacja włączona, reset best
+ep  45 [QAT] loss 1.6733  rec 0.907 prec 0.583 f1 0.710 score@6FA/h -0.979 (recall 0.000)  56s *
+ep  46 [QAT] loss 1.7111  rec 0.918 prec 0.564 f1 0.699 score@6FA/h -0.982 (recall 0.000)  57s
+ep  47 [QAT] loss 1.6969  rec 0.920 prec 0.565 f1 0.700 score@6FA/h -0.982 (recall 0.000)  56s
+ep  48 [QAT] loss 1.6882  rec 0.918 prec 0.560 f1 0.696 score@6FA/h -0.982 (recall 0.000)  55s
+ep  49 [QAT] loss 1.7283  rec 0.910 prec 0.576 f1 0.705 score@6FA/h -0.981 (recall 0.000)  56s
+ep  50 [QAT] loss 1.6682  rec 0.918 prec 0.560 f1 0.696 score@6FA/h -0.982 (recall 0.000)  56s
+ep  51 [QAT] loss 1.7207  rec 0.915 prec 0.564 f1 0.698 score@6FA/h -0.982 (recall 0.000)  57s
+ep  52 [QAT] loss 1.6290  rec 0.921 prec 0.562 f1 0.698 score@6FA/h -0.983 (recall 0.000)  57s
+ep  53 [QAT] loss 1.6582  rec 0.929 prec 0.560 f1 0.699 score@6FA/h -0.984 (recall 0.000)  56s
+ep  54 [QAT] loss 1.6346  rec 0.928 prec 0.560 f1 0.698 score@6FA/h -0.984 (recall 0.000)  56s
+ep  55 [QAT] loss 1.6854  rec 0.932 prec 0.556 f1 0.697 score@6FA/h -0.984 (recall 0.000)  56s
+ep  56 [QAT] loss 1.5646  rec 0.932 prec 0.556 f1 0.696 score@6FA/h -0.984 (recall 0.000)  56s
+ep  57 [QAT] loss 1.6029  rec 0.925 prec 0.570 f1 0.705 score@6FA/h -0.983 (recall 0.000)  57s
+ep  58 [QAT] loss 1.6257  rec 0.934 prec 0.556 f1 0.697 score@6FA/h -0.985 (recall 0.000)  58s
+ep  59 [QAT] loss 1.5511  rec 0.931 prec 0.556 f1 0.696 score@6FA/h -0.984 (recall 0.000)  65s
+ep  60 [QAT] loss 1.6030  rec 0.929 prec 0.557 f1 0.697 score@6FA/h -0.984 (recall 0.000)  62s
+ep  61 [QAT] loss 1.6341  rec 0.921 prec 0.571 f1 0.705 score@6FA/h -0.983 (recall 0.000)  55s
+ep  62 [QAT] loss 1.6567  rec 0.942 prec 0.548 f1 0.693 score@6FA/h -0.985 (recall 0.000)  52s
+ep  63 [QAT] loss 1.6027  rec 0.932 prec 0.555 f1 0.696 score@6FA/h -0.984 (recall 0.000)  56s
+ep  64 [QAT] loss 1.6526  rec 0.929 prec 0.558 f1 0.697 score@6FA/h -0.983 (recall 0.000)  57s
+ep  65 [QAT] loss 1.6407  rec 0.931 prec 0.567 f1 0.705 score@6FA/h -0.983 (recall 0.000)  55s
+[ep 65] QAT bez poprawy od 20 epok — stop
+
+[best] epoka 45 (QAT), pełna walidacja: rec 0.908 prec 0.598 f1 0.721
+[odporność] F1 pod rozrzutem sprzętowym (±½ działki trymera, ±10% τ, ±2% V_leak): mean 0.724, min 0.714
+[odporność+ensemble] potrójny D, głos 2-z-3: mean 0.723, min 0.717
+[zdarzenia] walidacja (poziom klipów):
+[zdarzenia] k=1: wykryte 77.8% klipów glass, fałszywy alarm w 22.5% klipów tła (863 glass / 1003 tła)
+[zdarzenia] k=2: wykryte 76.7% klipów glass, fałszywy alarm w 20.6% klipów tła (863 glass / 1003 tła)
+[zdarzenia] k=3: wykryte 75.3% klipów glass, fałszywy alarm w 20.0% klipów tła (863 glass / 1003 tła)
+[data] cache: 19588 okien, pozytywnych 2566 (13.1%)
+[test] rec 0.808 prec 0.538 f1 0.646
+[zdarzenia] test (poziom klipów):
+[zdarzenia] k=1: wykryte 62.7% klipów glass, fałszywy alarm w 23.6% klipów tła (884 glass / 983 tła)
+[zdarzenia] k=2: wykryte 61.2% klipów glass, fałszywy alarm w 22.9% klipów tła (884 glass / 983 tła)
+[zdarzenia] k=3: wykryte 60.2% klipów glass, fałszywy alarm w 22.0% klipów tła (884 glass / 983 tła)
+[recall @ FA/h — val (per kind, CI po group_id)]
+  @ 1 FA/h: recall 0.000 CI[0.000,0.000]  [k=4 w=250]  FA/h_total 102.63  (budzet nieosiagalny; najblizej 102.6 FA/h, surogat -0.997)
+        animal       FA/h 77.31
+        loud_event   FA/h 79.74
+        speech       FA/h 289.27
+        stationary   FA/h 92.01
+  @ 6 FA/h: recall 0.000 CI[0.000,0.000]  [k=4 w=250]  FA/h_total 102.63  (budzet nieosiagalny; najblizej 102.6 FA/h, surogat -0.979)
+        animal       FA/h 77.31
+        loud_event   FA/h 79.74
+        speech       FA/h 289.27
+        stationary   FA/h 92.01
+[recall @ FA/h — test (per kind, CI po group_id)]
+  @ 1 FA/h: recall 0.000 CI[0.000,0.000]  [k=4 w=250]  FA/h_total 101.80  (budzet nieosiagalny; najblizej 101.8 FA/h, surogat -0.997)
+        animal       FA/h 130.00
+        loud_event   FA/h 62.29
+        speech       FA/h 298.38
+        stationary   FA/h 103.69
+  @ 6 FA/h: recall 0.000 CI[0.000,0.000]  [k=4 w=250]  FA/h_total 101.80  (budzet nieosiagalny; najblizej 101.8 FA/h, surogat -0.980)
+        animal       FA/h 130.00
+        loud_event   FA/h 62.29
+        speech       FA/h 298.38
+        stationary   FA/h 103.69
+[i] G0.J1 (H0): pot 5.0% — poniżej rozdzielczości trymera, zostaw W na zerze (synapsa nieaktywna)
+
+[export] ../models/hw_v2_spk05_pw15_s0.json
+płytka    τ_syn     τ_mem  pasek LED  synapsy
+H0        61.0ms    237.9ms      10.0%  J1=peak-82%(n*=1)  J2=peak_cnt-45%(n*=2)  J3=hf_lo+8%(n*=4)
+H1       168.8ms     53.3ms      43.2%  J1=cv+47%(n*=1)  J2=zcr+100%(n*=1)  J3=hf_hi+20%(n*=1)
+H2       199.2ms   1181.2ms      10.0%  J1=peak-44%(n*=2)  J2=flux-48%(n*=2)  J3=hf_lo+80%(n*=1)
+H3       163.5ms    306.4ms      44.7%  J1=peak_cnt+15%(n*=1)  J2=flux+45%(n*=1)  J3=hf_hi-100%(n*=1)
+G0       181.0ms    303.4ms      44.3%  J1=H0+5%(n*=2)  J2=H1+25%(n*=1)  J3=H2-100%(n*=1)
+G1        29.8ms    281.9ms      10.0%  J1=H1+24%(n*=2)  J2=H2-8%(n*=4)  J3=H3-24%(n*=2)
+G2       198.3ms    536.4ms      43.8%  J1=H0-10%(n*=1)  J2=H2-100%(n*=1)  J3=H3+45%(n*=1)
+D         30.7ms     57.6ms      10.0%  J1=G0-82%(n*=1)  J2=G1+8%(n*=4)  J3=G2-33%(n*=2)

@@ -675,10 +675,12 @@ def train(args):
             if _pipe not in sys.path:
                 sys.path.insert(0, _pipe)
             import stream_eval_torch as stream_mod
-            from stream_eval import primary_recall as _primary_recall
+            from stream_eval import primary_score as _primary_score, \
+                primary_recall as _primary_recall
             stream_clips = stream_mod.load_clip_spikes(args.val_data, CH_IN)
-            print(f"[select] checkpoint po recall @ {args.stream_budget:g} FA/h "
-                  f"(val {len(stream_clips)} klipów, QAT)", flush=True)
+            print(f"[select] checkpoint po score(recall @ {args.stream_budget:g} FA/h) "
+                  f"— surogat gdy budżet nieosiągalny (val {len(stream_clips)} klipów, QAT)",
+                  flush=True)
         except Exception as e:
             print(f"[select] recall_fa niedostępne ({e}) -> selekcja po F1", flush=True)
             stream_mod = None
@@ -736,9 +738,11 @@ def train(args):
             rep = stream_mod.evaluate_stream(model, args.val_data, CH_IN, dev,
                                              budgets=(args.stream_budget,), n_boot=0,
                                              clips=stream_clips)
-            sel = _primary_recall(rep, args.stream_budget)
-            m["recall_fa"] = sel
-            sel_extra = f" recall@{args.stream_budget:g}FA/h {sel:.3f}"
+            sel = _primary_score(rep, args.stream_budget)          # surogat: selekcja
+            m["recall_fa"] = _primary_recall(rep, args.stream_budget)  # prawdziwy recall: raport
+            m["recall_fa_score"] = sel
+            sel_extra = (f" score@{args.stream_budget:g}FA/h {sel:+.3f} "
+                         f"(recall {m['recall_fa']:.3f})")
         else:
             sel = m["f1"]
         if sel > best:

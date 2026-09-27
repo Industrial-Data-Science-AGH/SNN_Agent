@@ -1,0 +1,416 @@
+{
+  "dt_s": 0.01,
+  "v_th": 1.0,
+  "channels": [
+    "peak",
+    "peak_cnt",
+    "cv",
+    "zcr",
+    "flux",
+    "hf_lo",
+    "hf_hi"
+  ],
+  "boards": {
+    "H0": {
+      "tau_syn_ms": 56.1,
+      "tau_mem_ms": 315.1,
+      "v_leak": 0.487,
+      "led_bar_pct": 24.3,
+      "scale_k": 1.111,
+      "synapses": [
+        {
+          "port": "J1",
+          "from": "peak",
+          "sign": "-",
+          "pot_pct": 83.3,
+          "w_sim": -1.2,
+          "pulses_to_fire_100Hz": 1
+        },
+        {
+          "port": "J2",
+          "from": "peak_cnt",
+          "sign": "-",
+          "pot_pct": 100.0,
+          "w_sim": -1.44,
+          "pulses_to_fire_100Hz": 1
+        },
+        {
+          "port": "J3",
+          "from": "hf_lo",
+          "sign": "+",
+          "pot_pct": 11.1,
+          "w_sim": 0.16,
+          "pulses_to_fire_100Hz": 3
+        }
+      ]
+    },
+    "H1": {
+      "tau_syn_ms": 20.9,
+      "tau_mem_ms": 64.5,
+      "v_leak": 0.2,
+      "led_bar_pct": 10.0,
+      "scale_k": 0.862,
+      "synapses": [
+        {
+          "port": "J1",
+          "from": "cv",
+          "sign": "-",
+          "pot_pct": 4.3,
+          "w_sim": -0.08,
+          "pulses_to_fire_100Hz": 9
+        },
+        {
+          "port": "J2",
+          "from": "zcr",
+          "sign": "+",
+          "pot_pct": 8.6,
+          "w_sim": 0.16,
+          "pulses_to_fire_100Hz": 5
+        },
+        {
+          "port": "J3",
+          "from": "hf_hi",
+          "sign": "+",
+          "pot_pct": 25.9,
+          "w_sim": 0.48,
+          "pulses_to_fire_100Hz": 2
+        }
+      ]
+    },
+    "H2": {
+      "tau_syn_ms": 21.4,
+      "tau_mem_ms": 64.7,
+      "v_leak": 0.2,
+      "led_bar_pct": 10.0,
+      "scale_k": 0.929,
+      "synapses": [
+        {
+          "port": "J1",
+          "from": "peak",
+          "sign": "-",
+          "pot_pct": 9.3,
+          "w_sim": -0.16,
+          "pulses_to_fire_100Hz": 4
+        },
+        {
+          "port": "J2",
+          "from": "flux",
+          "sign": "-",
+          "pot_pct": 18.6,
+          "w_sim": -0.32,
+          "pulses_to_fire_100Hz": 3
+        },
+        {
+          "port": "J3",
+          "from": "hf_lo",
+          "sign": "+",
+          "pot_pct": 13.9,
+          "w_sim": 0.24,
+          "pulses_to_fire_100Hz": 3
+        }
+      ]
+    },
+    "H3": {
+      "tau_syn_ms": 83.8,
+      "tau_mem_ms": 363.9,
+      "v_leak": 0.624,
+      "led_bar_pct": 31.2,
+      "scale_k": 1.0,
+      "synapses": [
+        {
+          "port": "J1",
+          "from": "peak_cnt",
+          "sign": "-",
+          "pot_pct": 100.0,
+          "w_sim": -1.6,
+          "pulses_to_fire_100Hz": 1
+        },
+        {
+          "port": "J2",
+          "from": "flux",
+          "sign": "+",
+          "pot_pct": 10.0,
+          "w_sim": 0.16,
+          "pulses_to_fire_100Hz": 2
+        },
+        {
+          "port": "J3",
+          "from": "hf_hi",
+          "sign": "+",
+          "pot_pct": 15.0,
+          "w_sim": 0.24,
+          "pulses_to_fire_100Hz": 2
+        }
+      ]
+    },
+    "G0": {
+      "tau_syn_ms": 27.3,
+      "tau_mem_ms": 202.9,
+      "v_leak": 0.2,
+      "led_bar_pct": 10.0,
+      "scale_k": 1.086,
+      "synapses": [
+        {
+          "port": "J1",
+          "from": "H0",
+          "sign": "+",
+          "pot_pct": 16.3,
+          "w_sim": 0.24,
+          "pulses_to_fire_100Hz": 3
+        },
+        {
+          "port": "J2",
+          "from": "H1",
+          "sign": "-",
+          "pot_pct": 27.2,
+          "w_sim": -0.4,
+          "pulses_to_fire_100Hz": 2
+        },
+        {
+          "port": "J3",
+          "from": "H2",
+          "sign": "+",
+          "pot_pct": 0.0,
+          "w_sim": 0.0,
+          "pulses_to_fire_100Hz": null
+        }
+      ]
+    },
+    "G1": {
+      "tau_syn_ms": 38.3,
+      "tau_mem_ms": 149.9,
+      "v_leak": 0.2,
+      "led_bar_pct": 10.0,
+      "scale_k": 2.129,
+      "synapses": [
+        {
+          "port": "J1",
+          "from": "H1",
+          "sign": "+",
+          "pot_pct": 42.6,
+          "w_sim": 0.32,
+          "pulses_to_fire_100Hz": 2
+        },
+        {
+          "port": "J2",
+          "from": "H2",
+          "sign": "+",
+          "pot_pct": 21.3,
+          "w_sim": 0.16,
+          "pulses_to_fire_100Hz": 2
+        },
+        {
+          "port": "J3",
+          "from": "H3",
+          "sign": "-",
+          "pot_pct": 31.9,
+          "w_sim": -0.24,
+          "pulses_to_fire_100Hz": 2
+        }
+      ]
+    },
+    "G2": {
+      "tau_syn_ms": 48.5,
+      "tau_mem_ms": 297.7,
+      "v_leak": 0.2,
+      "led_bar_pct": 10.0,
+      "scale_k": 1.038,
+      "synapses": [
+        {
+          "port": "J1",
+          "from": "H0",
+          "sign": "-",
+          "pot_pct": 5.2,
+          "w_sim": -0.08,
+          "pulses_to_fire_100Hz": 5
+        },
+        {
+          "port": "J2",
+          "from": "H2",
+          "sign": "-",
+          "pot_pct": 20.8,
+          "w_sim": -0.32,
+          "pulses_to_fire_100Hz": 2
+        },
+        {
+          "port": "J3",
+          "from": "H3",
+          "sign": "+",
+          "pot_pct": 15.6,
+          "w_sim": 0.24,
+          "pulses_to_fire_100Hz": 3
+        }
+      ]
+    },
+    "D": {
+      "tau_syn_ms": 43.3,
+      "tau_mem_ms": 45.0,
+      "v_leak": 0.2,
+      "led_bar_pct": 10.0,
+      "scale_k": 2.381,
+      "synapses": [
+        {
+          "port": "J1",
+          "from": "G0",
+          "sign": "-",
+          "pot_pct": 23.8,
+          "w_sim": -0.16,
+          "pulses_to_fire_100Hz": 2
+        },
+        {
+          "port": "J2",
+          "from": "G1",
+          "sign": "+",
+          "pot_pct": 35.7,
+          "w_sim": 0.24,
+          "pulses_to_fire_100Hz": 2
+        },
+        {
+          "port": "J3",
+          "from": "G2",
+          "sign": "-",
+          "pot_pct": 11.9,
+          "w_sim": -0.08,
+          "pulses_to_fire_100Hz": 3
+        }
+      ]
+    }
+  },
+  "model_provenance": {
+    "seed": 0,
+    "pos_weight": 1.0,
+    "hat_frac": 0.4,
+    "epochs": 120,
+    "quantized": true,
+    "checkpoint": "../models/v2_recallfa_s0.pt",
+    "train_data": {
+      "dataset_version": "v2.0.0",
+      "manifest_path": "dataset/versions/v2.0.0/manifest.csv",
+      "manifest_sha256": "b3dcc1101a6522ec567ff210e5a943f7aa606d4dc5b01e3e67de73ed70227cd3",
+      "encoder_file": "encoder_twin.py",
+      "encoder_sha256": "1be666b59b91cdc8141f033111eb9b24369dd202c93244df815d9993aae79763",
+      "warmup_seconds": 30.0,
+      "stream_order": "pozytywy przeplatane z negatywami, stan enkodera ci¹g³y",
+      "built_utc": "2026-09-08T10:42:54+00:00",
+      "artifact_dir": "spikes_v2/train"
+    },
+    "val_data": "spikes_v2/val",
+    "test_data": "spikes_v2/test",
+    "git_commit": "aaed1647",
+    "trained_utc": "2026-09-08T11:40:23+00:00"
+  },
+  "val_metrics": {
+    "recall": 0.9428,
+    "precision": 0.525,
+    "f1": 0.6744
+  },
+  "val_events": {
+    "k1": {
+      "clip_recall": 0.9131,
+      "clip_fa_rate": 0.3769
+    },
+    "k2": {
+      "clip_recall": 0.8517,
+      "clip_fa_rate": 0.2712
+    },
+    "k3": {
+      "clip_recall": 0.8169,
+      "clip_fa_rate": 0.2373
+    }
+  },
+  "robustness": {
+    "f1_mean": 0.651532835846073,
+    "f1_min": 0.6463344458510761,
+    "f1_passes": [
+      0.6463,
+      0.6565,
+      0.6477,
+      0.6559,
+      0.6513
+    ]
+  },
+  "robustness_ensemble": {
+    "f1_mean": 0.6546157912540348,
+    "f1_min": 0.6425287356321839,
+    "vote": "2-z-3",
+    "f1_passes": [
+      0.6448,
+      0.6588,
+      0.6511,
+      0.6558,
+      0.6679,
+      0.667,
+      0.649,
+      0.6425
+    ]
+  },
+  "best_epoch": 24,
+  "wide": false,
+  "test_metrics": {
+    "recall": 0.8897,
+    "precision": 0.4559,
+    "f1": 0.6029
+  },
+  "test_events": {
+    "k1": {
+      "clip_recall": 0.8654,
+      "clip_fa_rate": 0.4201
+    },
+    "k2": {
+      "clip_recall": 0.7557,
+      "clip_fa_rate": 0.3174
+    },
+    "k3": {
+      "clip_recall": 0.6923,
+      "clip_fa_rate": 0.2767
+    }
+  },
+  "val_stream": {
+    "1_fa_h": {
+      "recall": 0.0,
+      "recall_ci": [
+        0.0,
+        0.0
+      ],
+      "rule_k_w": null,
+      "fa_h_total": 0.0,
+      "fa_h_by_kind": {},
+      "feasible": false
+    },
+    "6_fa_h": {
+      "recall": 0.0,
+      "recall_ci": [
+        0.0,
+        0.0
+      ],
+      "rule_k_w": null,
+      "fa_h_total": 0.0,
+      "fa_h_by_kind": {},
+      "feasible": false
+    }
+  },
+  "test_stream": {
+    "1_fa_h": {
+      "recall": 0.0,
+      "recall_ci": [
+        0.0,
+        0.0
+      ],
+      "rule_k_w": null,
+      "fa_h_total": 0.0,
+      "fa_h_by_kind": {},
+      "feasible": false
+    },
+    "6_fa_h": {
+      "recall": 0.0,
+      "recall_ci": [
+        0.0,
+        0.0
+      ],
+      "rule_k_w": null,
+      "fa_h_total": 0.0,
+      "fa_h_by_kind": {},
+      "feasible": false
+    }
+  }
+}

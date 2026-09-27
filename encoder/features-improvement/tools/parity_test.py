@@ -24,10 +24,10 @@ KIT = os.path.abspath(os.path.join(HERE, ".."))
 sys.path.insert(0, HERE)
 
 VARIANTS = {
-    "baseline":  dict(flags=[], twin="baseline"),
-    "dcfix":     dict(flags=["-DENC_DC_FIX=1"], twin="baseline"),                       # tylko poprawka DC
-    "parity":    dict(flags=["-DENC_PARITY=1"], twin="baseline"),                       # DC + HF round + EPS_FLOOR
-    "swap":      dict(flags=["-DENC_SET_SWAP=1"], twin="swap"),                         # tylko wymiana kanałów
+    "baseline":  dict(flags=["-DENC_SET_SWAP=0", "-DENC_PARITY=0"], twin="baseline"),
+    "dcfix":     dict(flags=["-DENC_SET_SWAP=0", "-DENC_PARITY=0", "-DENC_DC_FIX=1"], twin="baseline"),
+    "parity":    dict(flags=["-DENC_SET_SWAP=0", "-DENC_PARITY=1"], twin="baseline"),
+    "swap":      dict(flags=["-DENC_SET_SWAP=1", "-DENC_PARITY=0", "-DENC_ACC32=0"], twin="swap"),
     "swap_full": dict(flags=["-DENC_SET_SWAP=1", "-DENC_PARITY=1", "-DENC_ACC32=1"], twin="swap"),
 }
 PRIME = 52    # ramki 0..51 to priming (firmware nic nie wypisuje) — jak w twinie

@@ -442,7 +442,11 @@ void setup() {
   PORTB &= ~PINB_MASK;
   setupADC();
   sei();
+#if ENC_SET_SWAP
+  Serial.println(F("# encoder_v2 dt=10ms pulse=6ms ch=peak,hjorth_mobility,autocorr_lag1,zcr,flux,hf_lo,hf_hi"));
+#else
   Serial.println(F("# encoder_v2 dt=10ms pulse=6ms ch=peak,peak_cnt,cv,zcr,flux,hf_lo,hf_hi"));
+#endif
   Serial.println(F("frame,s0,s1,s2,s3,s4,s5,s6"));
 }
 

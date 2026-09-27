@@ -76,20 +76,58 @@ jawnie zapisanej reguly, bo taka reguła nigdzie nie istnieje):
    manifestu ani nigdzie indziej). Ten skrypt przyjmuje domyslnie
    `tolerancja = 0.0` (scisle okno zdarzenia, bez naciagania) jako jawna,
    bezpieczna decyzje -- parametryzowane przez `--recall-tolerance-s`, do
-   potwierdzenia/nadpisania przez Marcela.
+   potwierdzenia/nadpisania przez Marcela. Dopasowanie alarm<->zdarzenie jest
+   ONE-TO-ONE: alarm juz przypisany do zdarzenia (w kolejnosci chronologicznej)
+   nie moze zostac ponownie przypisany do kolejnego zdarzenia, nawet gdy
+   `tolerancja`>0 sprawia, ze dwa sasiednie okna zdarzen by sie nakladaly.
 
-Uzycie (samodzielne, poza run-all -- patrz TODO integracji nizej):
+5. MANIFEST "KACPRA" (rozstrzygniete 27.09.2026, potwierdzone przez Marcela):
+   sposob budowania (schemat manifestu, stream_builder.py, annotations.py)
+   pochodzi z brancha Kacpra, ale SAM DATASET (audio + `*.manifest.json` w
+   `dataset/continuous/out`) zbudowal Marcel samodzielnie. Wiec wejscie
+   czytane przez ten skrypt (`dataset/continuous/out/*.manifest.json`,
+   schemat z `dataset/continuous/eval/manifest.py`) JEST tym, o czym mowi
+   zadanie M4 -- nie ma osobnego, innego manifestu od Kacpra do podmiany.
+
+6. CI DLA FA/H I POROWNANIE DO METRYKI KLIPOWEJ (kryterium odbioru M4, punkt
+   3: "Raportowac przedzial ufnosci FA/h i roznice do historycznej metryki na
+   klipach"; "Przy zerowym FA wynik ma dodatnia gorna granice niepewnosci").
+   FA/h to zliczenie zdarzen Poissona na skonczonej ekspozycji (godziny tla)
+   -- CI liczone dokladna metoda Poissona (Garwood, przez `chi2.ppf`), NIE
+   przyblizeniem normalnym (ktore przy FA=0 dalby CI=[0,0], czyli fałszywa
+   "obietnice braku alarmow" -- dokladnie to, czego kryterium odbioru
+   zabrania). Przy FA=0 gorna granica wychodzi > 0 (tzw. "rule of three" jest
+   szczegolnym przypadkiem tej samej formuly). Liczone i per-strumien (w
+   `per_seed[i]["fa_per_hour_ci"]`), i zbiorczo po wszystkich streamach
+   (`fa_per_hour_ci_pooled`, sumujac zdarzenia i godziny ekspozycji -- NIE
+   usredniajac CI, bo usrednianie przedzialow ufnosci jest statystycznie
+   niepoprawne).
+   Historyczna metryka klipowa: liczona SWIEZO na tym samym championie przez
+   `RealFitness.eval_events(model, split="test")` (dokladnie ta funkcja, ktora
+   liczyla `clip_recall`/`clip_fa_rate` dotychczas), z `k` = pierwszy element
+   odtworzonej reguly operacyjnej (punkt 1) -- dla najuczciwszego porownania
+   wspolnym mianownikiem. UWAGA JEDNOSTEK: `clip_fa_rate` to alarmy/klip, nie
+   alarmy/h -- ten skrypt NIE odejmuje ich bezposrednio od `fa_per_hour`
+   (rozne jednostki), tylko raportuje oba obok siebie plus deltę recall
+   (`recall_mean - clip_recall`, ta sama jednostka, sensowna roznica).
+
+7. KAZDY FA NA OSI CZASU (kryterium odbioru M4). Pelna lista znacznikow
+   czasowych kazdego alarmu sklasyfikowanego jako FA jest w
+   `per_seed[i]["fa_times_s"]` (sekundy od poczatku strumienia) -- oraz w
+   `false_alarms.csv` przy zapisie CSV (patrz CLI/`--out-csv-dir`).
+
+Uzycie (samodzielne, lub jako Etap 5 w pipeline.py):
     python3 continuous_eval.py --config config.json \
         --checkpoint runs/run_XXXX/winner_checkpoint.pt \
         --continuous-dir ../dataset/continuous/out \
-        --dataset-manifest-csv ../dataset/versions/v2.0.0/manifest.csv
+        --dataset-manifest-csv ../dataset/versions/v2.0.0/manifest.csv \
+        --out-csv-dir runs/run_XXXX/continuous_eval_csv
 
-TODO INTEGRACJA (otwarte, do decyzji Marcela): `pipeline.py` ma juz
-podkomende `evaluate`, ale dzis woła `run_final_evaluation_stage` (zwykly
-test, nie continuous) -- to prawdopodobnie docelowe miejsce podpiecia tego
-modulu (nowy Etap 5 w `run-all` po `hardware_export`, albo przekierowanie
-`evaluate`). Nie zmieniam `pipeline.py`/`ga_runner.py` w tym pliku, zeby nie
-przesadzac tej decyzji za Marcela.
+Przekazanie (M4, "Karolina dostaje CSV/JSON metryk; Andrzej identyczny zestaw
+do hardware"): `--out`/`log_metrics` daje JSON, `--out-csv-dir` daje DWA CSV
+(`events.csv` per-zdarzeniowy, `false_alarms.csv` per-alarm) -- ten SAM
+komplet plikow idzie do obu odbiorcow, zeby nie bylo dwoch, moglych sie
+rozjechac, wersji tej samej liczby.
 """
 from __future__ import annotations
 
@@ -106,6 +144,30 @@ import numpy as np
 
 def _project_root() -> str:
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+# ============================================================ statystyka FA/h
+
+def _poisson_rate_ci(n_events: int, exposure_hours: float,
+                     alpha: float = 0.05) -> Tuple[float, float]:
+    """Dokladny, DWUSTRONNY (Garwood) przedzial ufnosci dla stopy procesu
+    Poissona -- NIE przyblizenie normalne, ktore przy n_events=0 dalby [0,0]
+    (falszywa 'obietnica braku alarmow', zakazana przez kryterium odbioru
+    M4). Dla n_events=0 gorna granica tego dwustronnego CI wychodzi ~3.69/T
+    (alpha/2=0.025 w gornym ogonie) -- pokrewna, ale NIE identyczna z
+    popularna jednostronna 'rule of three' (~3.0/T, ktora uzywa alpha=0.05
+    wprost, nie alpha/2); obie sa dodatnie i obie spelniaja kryterium odbioru
+    ('gorna granica > 0'), wybieram dwustronna bo to standardowe znaczenie
+    'przedzialu ufnosci' (ma tez sensowna dolna granice, nie tylko gorna).
+    Wymaga scipy (juz uzywane w tym repo, np. przez encoder_twin.py:
+    scipy.signal.lfilter)."""
+    from scipy.stats import chi2
+
+    if exposure_hours <= 0:
+        return (0.0, float("inf"))
+    lower = 0.0 if n_events == 0 else 0.5 * chi2.ppf(alpha / 2, 2 * n_events) / exposure_hours
+    upper = 0.5 * chi2.ppf(1 - alpha / 2, 2 * (n_events + 1)) / exposure_hours
+    return (float(lower), float(upper))
 
 
 # ============================================================ gain
@@ -216,37 +278,52 @@ def _count_alarms_with_times(train_d: np.ndarray, k: int, w: int, refrac: int) -
 def _score_manifest(manifest: dict, alarm_frames: List[int], frame_dt: float,
                     tolerance_s: float) -> Dict[str, Any]:
     """Recall/latency per zdarzenie + FA/h na tle, wg definicji w
-    dataset/continuous/eval/manifest.py (sekcja "Jak Marcel liczy metryki")."""
-    alarm_times_s = [a * frame_dt for a in alarm_frames]
+    dataset/continuous/eval/manifest.py (sekcja "Jak Marcel liczy metryki").
+
+    Dopasowanie alarm<->zdarzenie jest ONE-TO-ONE (M4 punkt 2): zdarzenia są
+    przetwarzane chronologicznie, a alarm raz przypisany do zdarzenia jest
+    wyjęty z puli i nie może posłużyć do wykrycia kolejnego -- inaczej przy
+    `tolerance_s`>0 i blisko siebie leżących zdarzeniach jeden alarm mógłby
+    fałszywie "wykryć" dwa zdarzenia naraz."""
+    alarm_times_s = sorted(a * frame_dt for a in alarm_frames)
     warmup_s = manifest["config"]["warmup_s"]
     duration_s = manifest["audio"]["duration_s"]
-    events = manifest["events"]
+    events = sorted(manifest["events"], key=lambda e: e["start_s"])
 
+    used = [False] * len(alarm_times_s)
     per_event = []
     for ev in events:
         lo, hi = ev["start_s"], ev["end_s"] + tolerance_s
-        hits = [t for t in alarm_times_s if lo <= t <= hi]
-        detected = len(hits) > 0
-        latency_s = (min(hits) - ev["start_s"]) if detected else None
+        hit_idx = next((i for i, t in enumerate(alarm_times_s)
+                        if not used[i] and lo <= t <= hi), None)
+        detected = hit_idx is not None
+        latency_s = None
+        if detected:
+            used[hit_idx] = True
+            latency_s = alarm_times_s[hit_idx] - ev["start_s"]
         per_event.append({
             "index": ev["index"], "start_s": ev["start_s"], "end_s": ev["end_s"],
             "detected": detected, "latency_s": latency_s,
             "is_contaminated": ev.get("is_contaminated", False),
         })
 
-    # FA/h: alarmy poza WSZYSTKIMI oknami zdarzeń (niezależnie, czy trafionymi),
-    # na [warmup_s, duration_s] -- warmup wyłączony z FA (floor jeszcze się
+    # FA/h: alarmy poza WSZYSTKIMI oknami zdarzeń (niezależnie, czy zużytymi
+    # do dopasowania one-to-one powyżej -- okno zdarzenia wyklucza z FA
+    # KAŻDY alarm w nim leżący, nie tylko ten jeden dopasowany), na
+    # [warmup_s, duration_s] -- warmup wyłączony z FA (floor jeszcze się
     # stabilizuje w tym okresie, patrz punkt 2 docstringu modułu).
     event_windows = [(ev["start_s"], ev["end_s"] + tolerance_s) for ev in events]
-    fa_count = 0
+    fa_times_s = []
     for t in alarm_times_s:
         if t < warmup_s or t > duration_s:
             continue
         if any(lo <= t <= hi for lo, hi in event_windows):
             continue
-        fa_count += 1
-    fa_hours = (duration_s - warmup_s) / 3600.0
-    fa_per_hour = fa_count / max(fa_hours, 1e-9)
+        fa_times_s.append(t)
+    fa_count = len(fa_times_s)
+    background_hours = (duration_s - warmup_s) / 3600.0
+    fa_per_hour = fa_count / max(background_hours, 1e-9)
+    fa_per_hour_ci = _poisson_rate_ci(fa_count, background_hours)
 
     n_detected = sum(1 for e in per_event if e["detected"])
     recall = n_detected / max(len(per_event), 1)
@@ -259,7 +336,11 @@ def _score_manifest(manifest: dict, alarm_frames: List[int], frame_dt: float,
         "recall": recall,
         "mean_latency_s": float(np.mean(latencies)) if latencies else None,
         "fa_count": fa_count,
+        "background_hours": background_hours,
         "fa_per_hour": fa_per_hour,
+        "fa_per_hour_ci": {"lower": fa_per_hour_ci[0], "upper": fa_per_hour_ci[1],
+                          "method": "poisson_exact_garwood", "alpha": 0.05},
+        "fa_times_s": fa_times_s,
         "per_event": per_event,
     }
 
@@ -283,14 +364,13 @@ def _load_champion_model(checkpoint_path: str, device: str):
     return model, g
 
 
-def _recover_operating_rule(config: Any, device: str, project_root: str,
-                            model, g) -> Tuple[Tuple[int, int], int, float]:
-    """Odtwarza (k,w) operacyjne dokładnie tak, jak zdecydowało o championie
-    `RealFitness.stream_recall` przy `fitness_metric="recall_fa"` (patrz punkt
-    1 docstringu modułu) -- NIE czyta żadnego zapisanego pola, bo takiego pola
-    nigdzie nie ma. Zwraca ((k, w), refrac_frames, budget_fa_h)."""
+def _build_real_fitness(config: Any, device: str, project_root: str):
+    """Buduje `RealFitness` z DOKŁADNIE tymi samymi argumentami co
+    `run_ga_stage`/`run_final_evaluation_stage` (ga_runner.py) -- ta sama
+    instancja jest reużywana zarówno do odtworzenia reguły operacyjnej
+    (`_recover_operating_rule`) jak i do świeżych metryk klipowych
+    (`_historical_clip_metrics`), żeby nie ładować danych dwa razy."""
     from ga_neuron_search.fitness import RealFitness
-    from stream_eval import DEFAULT_REFRAC
 
     train_abs = os.path.join(project_root, config.data.train)
     val_abs = os.path.join(project_root, config.data.val)
@@ -298,14 +378,23 @@ def _recover_operating_rule(config: Any, device: str, project_root: str,
     arch_dir = os.path.dirname(os.path.dirname(train_abs))
     stream_budget = 6.0  # identyczne we wszystkich etapach (ga_runner.py, hardware.py)
 
-    rf = RealFitness(
+    return RealFitness(
         arch_dir=arch_dir, data=train_abs, val_data=val_abs, test_data=test_abs,
         limit=None, epochs=config.train.proxy_epochs, num_samples=config.train.num_samples,
         k=2, metric=config.ga.fitness_metric, fitness_seeds=config.train.fitness_seeds,
         pos_weight=1.0, feature_penalty=config.ga.feature_penalty, channels_head=None,
         stream_budget=stream_budget, stream_boot=0, verbose=False, seed=config.seed,
         device=device,
-    )
+    ), stream_budget
+
+
+def _recover_operating_rule(rf, model, g, stream_budget: float) -> Tuple[Tuple[int, int], int]:
+    """Odtwarza (k,w) operacyjne dokładnie tak, jak zdecydowało o championie
+    `RealFitness.stream_recall` przy `fitness_metric="recall_fa"` (patrz punkt
+    1 docstringu modułu) -- NIE czyta żadnego zapisanego pola, bo takiego pola
+    nigdzie nie ma. Zwraca ((k, w), refrac_frames)."""
+    from stream_eval import DEFAULT_REFRAC
+
     recall, report = rf.stream_recall(model, g)
     op = report.get(stream_budget)
     if op is None or op.rule is None:
@@ -320,7 +409,27 @@ def _recover_operating_rule(config: Any, device: str, project_root: str,
     print(f"[DECODER] Odtworzona reguła operacyjna: k={op.rule[0]}, w={op.rule[1]} "
           f"(recall@val={recall:.3f} przy budżecie {stream_budget} FA/h, "
           f"refrac={DEFAULT_REFRAC} ramek)")
-    return op.rule, DEFAULT_REFRAC, stream_budget
+    return op.rule, DEFAULT_REFRAC
+
+
+def _historical_clip_metrics(rf, model, k: int) -> Optional[Dict[str, Any]]:
+    """M4 punkt 3: 'różnica do historycznej metryki na klipach'. Liczy
+    ŚWIEŻO `clip_recall`/`clip_fa_rate`/`clip_f1` na tym samym championie
+    przez `RealFitness.eval_events(model, split="test")` -- ta sama funkcja,
+    która dotychczas raportowała metryki klipowe -- używając `k` z odtworzonej
+    reguły operacyjnej (punkt 1 docstringu modułu), żeby porównanie miało
+    wspólny mianownik zamiast dwóch niezależnie dobranych progów.
+
+    Zwraca None (zamiast zgadywać) gdy RealFitness nie ma testowego splitu
+    (brak `test_data` przy konstrukcji) -- lepiej jawnie brak porównania niż
+    ciche 0.0."""
+    try:
+        return rf.eval_events(model, k=k, split="test")
+    except (ValueError, FileNotFoundError) as e:
+        print(f"[HISTORYCZNA METRYKA] Nie udało się policzyć clip-metrics "
+              f"referencyjnych ({e}) -- porównanie do historycznej metryki "
+              f"pominięte, nie zgaduję wartości.")
+        return None
 
 
 # ============================================================ etap glowny
@@ -329,13 +438,17 @@ def run_continuous_eval_stage(config: Any, tracker: Any, checkpoint_path: str,
                               continuous_dir: str,
                               dataset_manifest_csv: Optional[str] = None,
                               gain_file: Optional[str] = None,
-                              recall_tolerance_s: float = 0.0) -> Dict[str, Any]:
+                              recall_tolerance_s: float = 0.0,
+                              csv_dir: Optional[str] = None) -> Dict[str, Any]:
     """Etap ciągłej ewaluacji: uruchamia championa (`checkpoint_path`) na
     każdym strumieniu 600s z `continuous_dir` (`*.manifest.json`), agreguje
-    recall/latency/FA-h po seedach, loguje do trackera jako
+    recall/latency/FA-h (z CI Poissona) po seedach, porównuje do świeżo
+    policzonej historycznej metryki klipowej, loguje do trackera jako
     `"continuous_eval"` (obok istniejących `"continuous_test"` z
     `run_final_evaluation_stage` -- inna nazwa specjalnie, żeby nie nadpisać
-    metryk klipowych test-splitu tą ciągłą oceną)."""
+    metryk klipowych test-splitu tą ciągłą oceną). Gdy `csv_dir` podany,
+    zapisuje tam `events.csv` i `false_alarms.csv` (M4: "Karolina dostaje
+    CSV/JSON metryk; Andrzej identyczny zestaw do hardware")."""
     print(f"\n>>> [CONTINUOUS EVAL] Ładowanie championa: {checkpoint_path}")
     project_root = _project_root()
     arch_dir = os.path.join(project_root, "architecture_14_neurons_patryk_09_07")
@@ -346,8 +459,10 @@ def run_continuous_eval_stage(config: Any, tracker: Any, checkpoint_path: str,
     device = tracker.device
     model, g = _load_champion_model(checkpoint_path, device)
 
-    rule, refrac, budget = _recover_operating_rule(config, device, project_root, model, g)
+    rf, stream_budget = _build_real_fitness(config, device, project_root)
+    rule, refrac = _recover_operating_rule(rf, model, g, stream_budget)
     k, w = rule
+    historical = _historical_clip_metrics(rf, model, k)
 
     train_abs = os.path.join(project_root, config.data.train)
     train_wav_paths = _load_train_wav_paths(dataset_manifest_csv, root=project_root)
@@ -398,10 +513,21 @@ def run_continuous_eval_stage(config: Any, tracker: Any, checkpoint_path: str,
     fa_rates = [r["fa_per_hour"] for r in per_seed_results]
     all_latencies = [e["latency_s"] for r in per_seed_results for e in r["per_event"] if e["detected"]]
 
+    # CI zbiorczy: PULOWANY po zdarzeniach/godzinach (nie średnia z CI per-seed
+    # -- uśrednianie przedziałów ufności jest statystycznie niepoprawne;
+    # patrz punkt 6 docstringu modułu).
+    total_fa = sum(r["fa_count"] for r in per_seed_results)
+    total_hours = sum(r["background_hours"] for r in per_seed_results)
+    pooled_ci = _poisson_rate_ci(total_fa, total_hours)
+
+    recall_delta_vs_historical = None
+    if historical is not None and recalls:
+        recall_delta_vs_historical = float(np.mean(recalls)) - historical["clip_recall"]
+
     summary = {
         "checkpoint_path": checkpoint_path,
         "decoder_rule": {
-            "k": k, "w": w, "refrac_frames": refrac, "budget_fa_h": budget,
+            "k": k, "w": w, "refrac_frames": refrac, "budget_fa_h": stream_budget,
             "note": ("Reguła odtworzona ponownym wywołaniem "
                      "RealFitness.stream_recall na val (fitness_metric="
                      f"{config.ga.fitness_metric!r}) -- NIE zapisana nigdzie w "
@@ -418,14 +544,74 @@ def run_continuous_eval_stage(config: Any, tracker: Any, checkpoint_path: str,
         "recall_min": float(np.min(recalls)) if recalls else None,
         "fa_per_hour_mean": float(np.mean(fa_rates)) if fa_rates else None,
         "fa_per_hour_max": float(np.max(fa_rates)) if fa_rates else None,
+        "fa_per_hour_ci_pooled": {
+            "lower": pooled_ci[0], "upper": pooled_ci[1],
+            "method": "poisson_exact_garwood", "alpha": 0.05,
+            "total_fa_count": total_fa, "total_background_hours": total_hours,
+            "note": ("Pulowane po wszystkich strumieniach (suma zdarzen/godzin), "
+                     "NIE srednia z CI per-seed -- usrednianie przedzialow "
+                     "ufnosci jest statystycznie niepoprawne. Przy total_fa=0 "
+                     "'upper' > 0: gorna granica niepewnosci, nie zero."),
+        },
+        "background_hours_total": total_hours,
         "mean_latency_s": float(np.mean(all_latencies)) if all_latencies else None,
+        "historical_clip_metrics": historical,
+        "recall_delta_vs_historical_clip": recall_delta_vs_historical,
+        "historical_comparison_note": (
+            "clip_fa_rate (historyczna) to alarmy/KLIP, fa_per_hour (ciagly) to "
+            "alarmy/GODZINE -- rozne jednostki, NIE odejmowac bezposrednio. "
+            "recall_delta_vs_historical_clip to jedyna bezposrednio porownywalna "
+            "roznica (ta sama jednostka: ulamek wykrytych pozytywow)."
+            if historical is not None else
+            "Brak porownania -- RealFitness nie mial testowego splitu albo "
+            "eval_events sie nie powiodlo (patrz log powyzej)."
+        ),
         "per_seed": per_seed_results,
     }
 
     tracker.log_metrics("continuous_eval", summary)
     print(f"[CONTINUOUS EVAL] Zakończono: recall_mean={summary['recall_mean']}, "
-          f"fa_per_hour_mean={summary['fa_per_hour_mean']}")
+          f"fa_per_hour_mean={summary['fa_per_hour_mean']}, "
+          f"fa_per_hour_ci_pooled=[{pooled_ci[0]:.3f},{pooled_ci[1]:.3f}]")
+
+    if csv_dir:
+        _write_csv_outputs(csv_dir, per_seed_results)
+
     return summary
+
+
+# ============================================================ eksport CSV (M4 punkt "przekazanie")
+
+def _write_csv_outputs(csv_dir: str, per_seed_results: List[Dict[str, Any]]) -> None:
+    """Zapisuje `events.csv` (jeden wiersz na zdarzenie) i `false_alarms.csv`
+    (jeden wiersz na kazdy FA, z jego znacznikiem czasowym -- M4: 'kazdy FA da
+    się wskazac na osi czasu'). Ten sam komplet plikow ma isc i do Karoliny, i
+    do Andrzeja (M4, "identyczny zestaw"), zeby nie bylo dwoch wersji tej samej
+    liczby."""
+    import csv as _csv
+
+    os.makedirs(csv_dir, exist_ok=True)
+
+    events_path = os.path.join(csv_dir, "events.csv")
+    with open(events_path, "w", newline="", encoding="utf-8") as fh:
+        w = _csv.writer(fh)
+        w.writerow(["seed", "event_index", "start_s", "end_s", "detected",
+                   "latency_s", "is_contaminated"])
+        for r in per_seed_results:
+            for e in r["per_event"]:
+                w.writerow([r["seed"], e["index"], e["start_s"], e["end_s"],
+                           int(e["detected"]), e["latency_s"] if e["latency_s"] is not None else "",
+                           int(e["is_contaminated"])])
+
+    fa_path = os.path.join(csv_dir, "false_alarms.csv")
+    with open(fa_path, "w", newline="", encoding="utf-8") as fh:
+        w = _csv.writer(fh)
+        w.writerow(["seed", "alarm_time_s"])
+        for r in per_seed_results:
+            for t in r["fa_times_s"]:
+                w.writerow([r["seed"], round(t, 4)])
+
+    print(f"[CONTINUOUS EVAL] Zapisano CSV: {events_path}, {fa_path}")
 
 
 # ============================================================ CLI samodzielne
@@ -461,6 +647,9 @@ def main() -> None:
                          "tolerancja' -- niedookreślone w źródle, domyślnie 0.0)")
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--out", default=None, help="zapisz podsumowanie JSON do pliku")
+    ap.add_argument("--out-csv-dir", default=None,
+                    help="zapisz events.csv + false_alarms.csv do tego katalogu "
+                         "(M4: komplet do przekazania Karolinie/Andrzejowi)")
     args = ap.parse_args()
 
     sys.path.insert(0, os.getcwd())
@@ -477,6 +666,7 @@ def main() -> None:
         dataset_manifest_csv=args.dataset_manifest_csv,
         gain_file=args.gain_file,
         recall_tolerance_s=args.recall_tolerance_s,
+        csv_dir=args.out_csv_dir,
     )
 
     summary = tracker.metrics["continuous_eval"]

@@ -35,6 +35,10 @@ def parse_args():
                         help="tolerancja okna recall w ciągłej ewaluacji (manifest.py: "
                              "'end_s + tolerancja' -- niedookreślone w źródle, "
                              "domyślnie 0.0; patrz continuous_eval.py punkt 4)")
+    parser.add_argument("--out-csv-dir", type=str, default=None,
+                        help="katalog na events.csv/false_alarms.csv z ciągłej "
+                             "ewaluacji (M4: przekazanie do Karoliny/Andrzeja). "
+                             "Domyślnie: <run_dir>/continuous_eval_csv")
 
     # Subkomendy do odpalania poszczególnych etapów lub całości
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -87,6 +91,14 @@ def _run_continuous_eval_if_available(config, tracker, args, stage_label: str = 
               f"--continuous-dir {continuous_dir} --dataset-manifest-csv <...>")
         return
 
+    # M4 (27.09.2026, Marcel): domyslny katalog CSV to <run_dir>/continuous_eval_csv
+    # -- tracker.get_run_dir() istnieje na prawdziwym RunTrackerze; nasz
+    # _StandaloneTracker (uzywany tylko w testach) go nie ma, wiec wtedy po
+    # prostu nie zapisujemy CSV automatycznie (trzeba --out-csv-dir jawnie).
+    csv_dir = args.out_csv_dir
+    if csv_dir is None and hasattr(tracker, "get_run_dir"):
+        csv_dir = os.path.join(tracker.get_run_dir(), "continuous_eval_csv")
+
     print(f"\n>>> [{stage_label}] Ciągła ewaluacja 600s (checkpoint: {ckpt_path})...")
     run_continuous_eval_stage(
         config, tracker,
@@ -95,6 +107,7 @@ def _run_continuous_eval_if_available(config, tracker, args, stage_label: str = 
         dataset_manifest_csv=args.dataset_manifest_csv,
         gain_file=args.gain_file,
         recall_tolerance_s=args.recall_tolerance_s,
+        csv_dir=csv_dir,
     )
 
 

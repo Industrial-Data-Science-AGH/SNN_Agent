@@ -388,6 +388,25 @@ def _build_real_fitness(config: Any, device: str, project_root: str):
     ), stream_budget
 
 
+class OperatingRuleInfeasible(RuntimeError):
+    """Żadna (k,w) nie mieści budżetu FA/h na val dla tego championa.
+
+    Osobna klasa (zamiast gołego RuntimeError) specjalnie po to, żeby wywołujący
+    (`run_continuous_eval_stage`, `package_champion._get_decoder_rule`) mogli
+    złapać DOKŁADNIE ten przypadek i zapisać czysty raport status='infeasible'
+    (konwencja z champion.py, patrz jego docstring o recall_fa==0 jako legalnej
+    podłodze) zamiast dać nieobsłużonemu wyjątkowi wylecieć jako traceback.
+    Każdy inny błąd (brakujący plik, zły manifest, ...) to nadal zwykły wyjątek."""
+
+    def __init__(self, message: str, *, best_recall_at_budget: Optional[float] = None):
+        super().__init__(message)
+        # M3 odbiór: "przy zerowym FA wynik ma dodatnią górną granicę
+        # niepewności, a nie obietnicę braku alarmów" -- tu analogicznie: gdy
+        # rf.stream_recall w ogóle nie zwróciło wpisu dla stream_budget, nie ma
+        # nawet tej liczby, więc jawnie None zamiast udawanego 0.0.
+        self.best_recall_at_budget = best_recall_at_budget
+
+
 def _recover_operating_rule(rf, model, g, stream_budget: float) -> Tuple[Tuple[int, int], int]:
     """Odtwarza (k,w) operacyjne dokładnie tak, jak zdecydowało o championie
     `RealFitness.stream_recall` przy `fitness_metric="recall_fa"` (patrz punkt
@@ -398,13 +417,14 @@ def _recover_operating_rule(rf, model, g, stream_budget: float) -> Tuple[Tuple[i
     recall, report = rf.stream_recall(model, g)
     op = report.get(stream_budget)
     if op is None or op.rule is None:
-        raise RuntimeError(
+        raise OperatingRuleInfeasible(
             f"[DECODER] stream_recall nie znalazł żadnej reguły (k,w) mieszczącej "
             f"się w budżecie {stream_budget} FA/h na val dla tego championa -- "
             f"budżet INFEASIBLE (analogicznie do champion.py status='infeasible', "
             f"patrz jego docstring o recall_fa==0 jako legalnej podłodze). "
             f"continuous_eval nie może policzyć sensownego FA/h/recall bez reguły "
-            f"operacyjnej -- nie zgaduję zastępczej."
+            f"operacyjnej -- nie zgaduję zastępczej.",
+            best_recall_at_budget=recall if op is not None else None,
         )
     print(f"[DECODER] Odtworzona reguła operacyjna: k={op.rule[0]}, w={op.rule[1]} "
           f"(recall@val={recall:.3f} przy budżecie {stream_budget} FA/h, "
@@ -460,7 +480,24 @@ def run_continuous_eval_stage(config: Any, tracker: Any, checkpoint_path: str,
     model, g = _load_champion_model(checkpoint_path, device)
 
     rf, stream_budget = _build_real_fitness(config, device, project_root)
-    rule, refrac = _recover_operating_rule(rf, model, g, stream_budget)
+    try:
+        rule, refrac = _recover_operating_rule(rf, model, g, stream_budget)
+    except OperatingRuleInfeasible as e:
+        # M3 odbior: "jesli budzet jest nieosiagalny, raport mowi infeasible"
+        # -- to samo status='infeasible' + kod wyjscia 2 co champion.py, zamiast
+        # nieobslugiwanego wyjatku. Zadnej ze strumieni continuous_dir nie
+        # dotykamy: bez reguly operacyjnej nie ma czego liczyc na nich.
+        summary = {
+            "status": "infeasible",
+            "checkpoint_path": checkpoint_path,
+            "budget_fa_h": stream_budget,
+            "best_recall_at_budget": e.best_recall_at_budget,
+            "reason": str(e),
+        }
+        tracker.log_metrics("continuous_eval", summary)
+        print(f"[CONTINUOUS EVAL] INFEASIBLE: zaden (k,w) nie miesci budzetu "
+              f"{stream_budget} FA/h na val dla tego championa.")
+        return summary
     k, w = rule
     historical = _historical_clip_metrics(rf, model, k)
 
@@ -675,6 +712,12 @@ def main() -> None:
         with open(args.out, "w", encoding="utf-8") as fh:
             json.dump(summary, fh, indent=2, ensure_ascii=False, default=str)
         print(f"[CONTINUOUS EVAL] Zapisano: {args.out}")
+
+    if summary.get("status") == "infeasible":
+        # Sam kod wyjscia co champion.py (2, nie 0/1) -- CI/skrypty wolajace
+        # to narzedzie moga odroznic "infeasible" (raport jest, budzet po
+        # prostu nieosiagalny) od zwyklego bledu (traceback, kod 1).
+        sys.exit(2)
 
 
 if __name__ == "__main__":

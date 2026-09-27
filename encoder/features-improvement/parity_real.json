@@ -1,0 +1,151 @@
+{
+  "swap_full": {
+    "frames_twin": 497,
+    "frames_fw": 497,
+    "event_rms": 20.0,
+    "n_event_frames": 188,
+    "features": {
+      "peak": {
+        "event": {
+          "n": 188,
+          "max_abs": 0.821831452779918,
+          "median_rel": 0.0017922565117422676,
+          "p99_rel": 0.011084517951723123
+        },
+        "background": {
+          "n": 309,
+          "max_abs": 0.8888696223299917,
+          "median_rel": 0.036501227359619276,
+          "p99_rel": 0.9986992623031582
+        }
+      },
+      "mobility": {
+        "event": {
+          "n": 188,
+          "max_abs": 0.01082825433992518,
+          "median_rel": 0.0004627839411479592,
+          "p99_rel": 0.0034045648348145674
+        },
+        "background": {
+          "n": 309,
+          "max_abs": 81.15812432888568,
+          "median_rel": 0.015068314501162252,
+          "p99_rel": 0.999943605102053
+        }
+      },
+      "autocorr": {
+        "event": {
+          "n": 188,
+          "max_abs": 0.002473473079587424,
+          "median_rel": 0.0016176282960001622,
+          "p99_rel": 0.03430321040777278
+        },
+        "background": {
+          "n": 309,
+          "max_abs": 1.001956905729048,
+          "median_rel": 0.025617501285255848,
+          "p99_rel": 5.5109829172579845
+        }
+      },
+      "zcr": {
+        "event": {
+          "n": 188,
+          "max_abs": 0.07291333333333339,
+          "median_rel": 5.808044141173522e-06,
+          "p99_rel": 0.051028541364510904
+        },
+        "background": {
+          "n": 309,
+          "max_abs": 0.484375,
+          "median_rel": 0.025913566172660312,
+          "p99_rel": 0.9969469047117356
+        }
+      },
+      "flux": {
+        "event": {
+          "n": 188,
+          "max_abs": 0.2762165292376504,
+          "median_rel": 0.0,
+          "p99_rel": 0.08092478988777607
+        },
+        "background": {
+          "n": 309,
+          "max_abs": 0.16092349801692374,
+          "median_rel": 0.0,
+          "p99_rel": 0.933893077578328
+        }
+      },
+      "hf_ratio": {
+        "event": {
+          "n": 188,
+          "max_abs": 0.0023133606553327746,
+          "median_rel": 0.0005394228568266525,
+          "p99_rel": 0.004710958995066559
+        },
+        "background": {
+          "n": 309,
+          "max_abs": 191999999.98557508,
+          "median_rel": 0.04187808022671465,
+          "p99_rel": 54.70565054856125
+        }
+      }
+    },
+    "channels": {
+      "0": {
+        "mismatch": 0,
+        "mismatch_event": 0,
+        "fw_spikes": 11,
+        "twin_spikes": 11
+      },
+      "1": {
+        "mismatch": 3,
+        "mismatch_event": 2,
+        "fw_spikes": 72,
+        "twin_spikes": 73
+      },
+      "2": {
+        "mismatch": 0,
+        "mismatch_event": 0,
+        "fw_spikes": 33,
+        "twin_spikes": 33
+      },
+      "3": {
+        "mismatch": 17,
+        "mismatch_event": 12,
+        "fw_spikes": 4,
+        "twin_spikes": 17
+      },
+      "4": {
+        "mismatch": 1,
+        "mismatch_event": 0,
+        "fw_spikes": 19,
+        "twin_spikes": 18
+      },
+      "5": {
+        "mismatch": 3,
+        "mismatch_event": 0,
+        "fw_spikes": 120,
+        "twin_spikes": 119
+      },
+      "6": {
+        "mismatch": 0,
+        "mismatch_event": 0,
+        "fw_spikes": 105,
+        "twin_spikes": 105
+      }
+    },
+    "any_mismatch_frames": 24,
+    "agree_pct": 95.17102615694165,
+    "agree_pct_event": 92.5531914893617,
+    "names": [
+      "peak",
+      "mobility",
+      "autocorr",
+      "zcr",
+      "flux",
+      "hf_ratio",
+      "hf_ratio"
+    ],
+    "isr_sim": "ISR: n=105593 min=490 mean=504.5 max=524 cykli (od wektora, z wej\u015bciem)"
+  }
+}

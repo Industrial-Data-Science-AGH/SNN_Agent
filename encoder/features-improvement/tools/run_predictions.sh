@@ -6,14 +6,14 @@ set -euo pipefail
 ORIG="${1:?podaj ścieżkę do oryginalnego encoder_v2.ino}"; B="${2:-build}"
 HERE="$(cd "$(dirname "$0")" && pwd)"; KIT="$(dirname "$HERE")"
 mkdir -p "$B"
-python3 "$HERE/make_swap_ino.py" "$ORIG" "$KIT/firmware/encoder_v2_swap.ino"
+python3 "$HERE/make_swap_ino.py" "$ORIG" "$KIT/encoder_v2_swap.ino"
 "$HERE/build_fw.sh" "$ORIG" "$B/orig" >/dev/null
-"$HERE/build_fw.sh" "$KIT/firmware/encoder_v2_swap.ino" "$B/p0" >/dev/null
+"$HERE/build_fw.sh" "$KIT/encoder_v2_swap.ino" "$B/p0" >/dev/null
 cmp "$B/orig/fw.hex" "$B/p0/fw.hex" && echo ">>> flagi=0: firmware IDENTYCZNY z oryginałem (łatka nic nie zmienia w baseline)"
 declare -A V=( [baseline]="" [acc32]="-DENC_ACC32=1" [dcfix]="-DENC_DC_FIX=1" [parity]="-DENC_PARITY=1"
                [swap]="-DENC_SET_SWAP=1" [swap_acc32]="-DENC_SET_SWAP=1 -DENC_ACC32=1" [swap_full]="-DENC_SET_SWAP=1 -DENC_PARITY=1 -DENC_ACC32=1" )
 for n in "${!V[@]}"; do
-  "$HERE/build_fw.sh" "$KIT/firmware/encoder_v2_swap.ino" "$B/$n" ${V[$n]} >/dev/null
+  "$HERE/build_fw.sh" "$KIT/encoder_v2_swap.ino" "$B/$n" ${V[$n]} >/dev/null
   python3 "$HERE/isr_cycles.py" "$B/$n/fw.asm" --label "$n" --json "$B/$n/isr.json" >/dev/null
 done
 python3 - "$B" << 'PY'

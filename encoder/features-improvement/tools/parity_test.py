@@ -62,6 +62,8 @@ def run_sim(elf, codes_u16, wait=150000):
     r = subprocess.run([os.path.join(KIT, "tools", "simharness"), elf, cp, "--hop", "192", "--wait", str(wait)],
                        capture_output=True, text=True, timeout=1800)
     os.unlink(cp)
+    if r.returncode != 0:
+        raise SystemExit(f"simharness zakończył się kodem {r.returncode}:\n{r.stdout}\n{r.stderr}")
     isr = [l for l in r.stderr.splitlines() if l.startswith("ISR:")]
     rows = {}
     for line in r.stdout.replace("\x1b[32m", "").replace("\x1b[0m", "").splitlines():
@@ -71,6 +73,8 @@ def run_sim(elf, codes_u16, wait=150000):
                 rows[int(p[0])] = ([float(v) for v in p[1:8]], [int(v) for v in p[8:15]])
             except ValueError:
                 pass
+    if len(rows) < codes_u16.size // 192 - PRIME - 5:  # tolerancja na priming/ostatnią niepełną ramkę
+        raise SystemExit(f"symulator dał podejrzanie mało ramek: {len(rows)}")
     return rows, (isr[0] if isr else "")
 
 

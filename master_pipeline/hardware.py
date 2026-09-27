@@ -6,6 +6,65 @@ import sys
 import time
 import concurrent.futures
 import torch
+import glob
+import json
+
+
+def _detect_machine_identity() -> dict:
+    """Identyfikacja maszyny do dopasowania profilu (profiles/*.json).
+    Ponownie uzywa hardware_section() z m0_env_report.py (ten sam sysctl,
+    ta sama metoda liczenia ram_gib) zamiast duplikowac wykrywanie sprzetu
+    w drugim miejscu z ryzykiem rozjazdu wynikow."""
+    try:
+        from m0_env_report import hardware_section
+    except ImportError:
+        return {"model_identifier": None, "ram_gib": None}
+    hw = hardware_section()
+    return {"model_identifier": hw.get("model_identifier"), "ram_gib": hw.get("ram_gib")}
+
+
+def load_hardware_profile(profiles_dir: str = None) -> dict | None:
+    """M3 punkt 1: wykrywa biezaca maszyne i laduje pasujacy plik z
+    profiles/*.json (katalog obok master_pipeline/, patrz zadania.json).
+    Dopasowanie: model_identifier identyczny + ram_gib w granicach
+    ram_gib_tolerance z profilu (domyslnie +-2 GiB -- macOS potrafi
+    zaokraglac hw.memsize niejednoznacznie). Brak pliku/dopasowania -> None:
+    NIGDY nie zgaduje "najblizszego" profilu, bo cichy blad tutaj oznacza
+    uzycie ustawien innej maszyny."""
+    if profiles_dir is None:
+        profiles_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "profiles")
+    profiles_dir = os.path.normpath(profiles_dir)
+    if not os.path.isdir(profiles_dir):
+        return None
+
+    identity = _detect_machine_identity()
+    if not identity.get("model_identifier"):
+        return None
+
+    for path in sorted(glob.glob(os.path.join(profiles_dir, "*.json"))):
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                profile = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        match = profile.get("match", {})
+        if match.get("model_identifier") != identity["model_identifier"]:
+            continue
+
+        expected_ram = match.get("ram_gib")
+        if expected_ram is not None and identity.get("ram_gib") is not None:
+            tol = match.get("ram_gib_tolerance", 2.0)
+            if abs(identity["ram_gib"] - expected_ram) > tol:
+                continue
+
+        print(f"[HARDWARE] Wykryto profil sprzetowy: {profile.get('profile_id')} (plik: {path})")
+        return profile
+
+    print(f"[HARDWARE] Brak dopasowanego profilu dla model_identifier="
+          f"{identity.get('model_identifier')!r}, ram_gib={identity.get('ram_gib')!r} "
+          f"w {profiles_dir!r} -- uzywam pelnego benchmarku/domyslnych wartosci.")
+    return None
 
 
 def get_device(device_arg: str = "auto") -> str:
@@ -409,8 +468,27 @@ def resolve_workers(
     dostępne rdzenie (_default_worker_counts) zamiast hardkodowanej listy.
     `config`/`device`, jeśli podane, włączają tryb real (RealFitness zamiast
     syntetycznego zadania) -- patrz benchmark_workers.
+
+    M3 punkt 1 (27.09.2026, Marcel): 'auto' najpierw probuje uzyc profilu
+    sprzetowego (profiles/*.json dla wykrytej maszyny) zamiast zawsze
+    odpalac pelny sweep (u Wiktora na M5 Pro to ~40 minut samego pomiaru).
+    Swiezy pomiar mimo istniejacego profilu: '--workers benchmark'.
     """
+    if str(workers_arg).lower() == "benchmark":
+        return benchmark_workers(default_auto_options, config=config, device=device)
+
     if str(workers_arg).lower() == "auto":
+        return benchmark_workers(default_auto_options, config=config, device=device)
+
+    if str(workers_arg).lower() == "auto":
+        profile = load_hardware_profile()
+        if profile is not None:
+            recommended = profile.get("recommended", {}).get("ga_workers")
+            if isinstance(recommended, int) and recommended > 0:
+                print(f"[HARDWARE] Uzywam ga_workers={recommended} z profilu "
+                      f"'{profile.get('profile_id')}' (pomijam pelny benchmark_workers).")
+                return recommended, {"source": "profile", "profile_id": profile.get("profile_id"),
+                                     "ga_workers": recommended}
         return benchmark_workers(default_auto_options, config=config, device=device)
 
     try:

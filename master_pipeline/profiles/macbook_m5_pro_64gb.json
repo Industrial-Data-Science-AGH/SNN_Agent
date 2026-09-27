@@ -1,0 +1,58 @@
+{
+  "profile_id": "macbook_m5_pro_64gb",
+  "match": {
+    "model_identifier": "Mac17,8",
+    "ram_gib": 64,
+    "ram_gib_tolerance": 2.0
+  },
+  "recommended": {
+    "ga_workers": 16,
+    "winner": {
+      "device": "mps",
+      "batch_size": 512
+    },
+    "memory_budget_gb": 50
+  },
+  "measured": {
+    "cpu_ga_benchmark": {
+      "note": "KROK 3a, pop_size=30, generations=1, 3 powtorzenia + warmup, config.json pelne parametry",
+      "workers": {
+        "1":  {"median_s": 1410.9, "candidates_per_min": 1.3},
+        "2":  {"median_s": 537.0,  "candidates_per_min": 3.4},
+        "4":  {"median_s": 294.2,  "candidates_per_min": 6.1},
+        "8":  {"median_s": 183.7,  "candidates_per_min": 9.8},
+        "12": {"median_s": 150.4,  "candidates_per_min": 12.0},
+        "16": {"median_s": 122.5,  "candidates_per_min": 14.7}
+      },
+      "chosen": 16,
+      "chosen_reason": "najlepszy candidates/min; zysk powyzej 8 workerow mały (maszyna ma tylko 6 rdzeni P)"
+    },
+    "mps_winner_batch_benchmark": {
+      "note": "KROK 3b, winner.train_full, epochs=2, seeds=1, num_samples=12000 -- PO poprawce hardcode batch_size/num_samples w winner.py",
+      "batch_size": {
+        "128": {"median_s": 17.7, "per_epoch_s": 8.9},
+        "256": {"median_s": 10.7, "per_epoch_s": 5.4},
+        "512": {"median_s": 6.7,  "per_epoch_s": 3.4}
+      },
+      "chosen": 512,
+      "chosen_reason": "najszybszy; clip_f1 z tego benchmarku nieistotny jakosciowo (tylko 2 epoki)"
+    },
+    "memory": {
+      "swap_during_benchmark": "0 (stale)",
+      "system_free_pct_min": 92,
+      "mps_recommended_max_bytes": 55662788608,
+      "rss_ga_max_mb": 508.0,
+      "rss_winner_mps_max_mb": 672
+    }
+  },
+  "source": {
+    "measured_by": "Wiktor",
+    "date": "2026-09-26",
+    "branch": "feat/master-pipeline @ 55e12637",
+    "patches_applied": ["winner_batchsize_fix (batch_size/num_samples hardcode -> parametry)"],
+    "known_caveats": [
+      "Pierwsze pomiary (przed odbudowa cache spikes_v2/train, 77 -> 83458 okien) byly niewazne i NIE sa w tym pliku.",
+      "memory_budget_gb=50 to PROPOZYCJA (margines ponizej mps_recommended_max_bytes ~55.7GB), nie zmierzony fizyczny limit -- do potwierdzenia."
+    ]
+  }
+}

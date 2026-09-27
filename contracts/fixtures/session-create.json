@@ -5,6 +5,6 @@
   "boot_id": "demo-boot",
   "mode": "demo",
   "model_hash": "sha256:8780dfeca1acfd3a292d90f614b12b25abff4c2e77e83ba7f8926a4d8bf9d445",
-  "encoder_hash": "sha256:1fbcb1946a4d73e96a7c22e2f7ec9e68e9ee052f05928e1a741451ad0176a8f8",
+  "encoder_hash": "sha256:33595d710274ab9e3da4d32333344c80f87d482ef8ea2db5827fbd18665503ed",
   "source_start_us": 0
 }

@@ -91,7 +91,7 @@ def responses(name, code=200):
 
 def create_app():
     app = FastAPI(
-        title="SNN Agent W0 — Demo API",
+        title="SNN Agent W0 - Demo API",
         version="1.0",
         description="Local scripted fixtures. No SNN inference, authentication, hardware, storage, email or cloud calls. Never deploy this mock.",
     )

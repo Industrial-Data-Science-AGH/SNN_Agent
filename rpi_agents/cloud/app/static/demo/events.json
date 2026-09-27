@@ -1,0 +1,269 @@
+{
+  "schema_version": "1.0",
+  "demo": true,
+  "items": [
+    {
+      "schema_version": "1.0",
+      "device_id": "demo-pi",
+      "session_id": "demo-session",
+      "epoch": 1,
+      "event_id": "evt-001",
+      "status": "alarm_confirmed",
+      "decision": {
+        "schema_version": "1.0",
+        "device_id": "demo-pi",
+        "session_id": "demo-session",
+        "epoch": 1,
+        "source_time_us": 12341000,
+        "model_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "decision_id": "dec-x",
+        "event_id": null,
+        "batch_seq": 1,
+        "encoder_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "trigger": true,
+        "status": "valid",
+        "score": 7,
+        "score_kind": "spike_count",
+        "provenance": "demo"
+      },
+      "vision": {
+        "schema_version": "1.0",
+        "device_id": "demo-pi",
+        "session_id": "demo-session",
+        "epoch": 1,
+        "event_id": "evt",
+        "image_id": "img-1",
+        "status": "ok",
+        "glass_visible": true,
+        "person_visible": false,
+        "authorization": "unknown",
+        "image_quality": "good",
+        "observation": "Glass-break pattern near the window.",
+        "model_deployment": "gpt-vision-demo",
+        "prompt_version": "v1",
+        "error_code": null,
+        "provenance": "demo"
+      },
+      "commands": [
+        {
+          "schema_version": "1.0",
+          "device_id": "demo-pi",
+          "session_id": "demo-session",
+          "epoch": 1,
+          "command_id": "cmd-cap-1",
+          "event_id": "evt",
+          "issued_at": "2026-09-24T00:00:12Z",
+          "expires_at": "2026-09-24T00:00:42Z",
+          "mode": "demo",
+          "type": "capture",
+          "parameters": {
+            "frames": 1,
+            "max_bytes": 300000
+          }
+        },
+        {
+          "schema_version": "1.0",
+          "device_id": "demo-pi",
+          "session_id": "demo-session",
+          "epoch": 1,
+          "command_id": "cmd-alarm-1",
+          "event_id": "evt",
+          "issued_at": "2026-09-24T00:00:13Z",
+          "expires_at": "2026-09-24T00:00:43Z",
+          "mode": "demo",
+          "type": "alarm",
+          "policy_version": "p1",
+          "parameters": {
+            "duration_ms": 3000,
+            "led": true,
+            "buzzer": true
+          }
+        }
+      ],
+      "demo": true,
+      "_acks": [
+        {
+          "command_id": "cmd-cap-1",
+          "status": "acknowledged",
+          "error_code": null
+        },
+        {
+          "command_id": "cmd-alarm-1",
+          "status": "acknowledged",
+          "error_code": null
+        }
+      ],
+      "_captured_at": "2026-09-24T00:00:12Z"
+    },
+    {
+      "schema_version": "1.0",
+      "device_id": "demo-pi",
+      "session_id": "demo-session",
+      "epoch": 1,
+      "event_id": "evt-002",
+      "status": "review_required",
+      "decision": {
+        "schema_version": "1.0",
+        "device_id": "demo-pi",
+        "session_id": "demo-session",
+        "epoch": 1,
+        "source_time_us": 12341000,
+        "model_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "decision_id": "dec-x",
+        "event_id": null,
+        "batch_seq": 1,
+        "encoder_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "trigger": true,
+        "status": "valid",
+        "score": null,
+        "score_kind": "unavailable",
+        "provenance": "demo"
+      },
+      "vision": {
+        "schema_version": "1.0",
+        "device_id": "demo-pi",
+        "session_id": "demo-session",
+        "epoch": 1,
+        "event_id": "evt",
+        "image_id": null,
+        "status": "error",
+        "glass_visible": "unknown",
+        "person_visible": "unknown",
+        "authorization": "unknown",
+        "image_quality": "unknown",
+        "observation": "Vision model timed out.",
+        "model_deployment": "gpt-vision-demo",
+        "prompt_version": "v1",
+        "error_code": "VISION_TIMEOUT",
+        "provenance": "demo"
+      },
+      "commands": [
+        {
+          "schema_version": "1.0",
+          "device_id": "demo-pi",
+          "session_id": "demo-session",
+          "epoch": 1,
+          "command_id": "cmd-cap-2",
+          "event_id": "evt",
+          "issued_at": "2026-09-24T00:00:12Z",
+          "expires_at": "2026-09-24T00:00:42Z",
+          "mode": "demo",
+          "type": "capture",
+          "parameters": {
+            "frames": 1,
+            "max_bytes": 300000
+          }
+        }
+      ],
+      "demo": true,
+      "_acks": [
+        {
+          "command_id": "cmd-cap-2",
+          "status": "failed",
+          "error_code": "CAPTURE_TIMEOUT"
+        }
+      ],
+      "_captured_at": null
+    },
+    {
+      "schema_version": "1.0",
+      "device_id": "demo-pi",
+      "session_id": "demo-session",
+      "epoch": 1,
+      "event_id": "evt-003",
+      "status": "no_alarm",
+      "decision": {
+        "schema_version": "1.0",
+        "device_id": "demo-pi",
+        "session_id": "demo-session",
+        "epoch": 1,
+        "source_time_us": 12341000,
+        "model_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "decision_id": "dec-x",
+        "event_id": null,
+        "batch_seq": 1,
+        "encoder_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "trigger": true,
+        "status": "valid",
+        "score": 3,
+        "score_kind": "spike_count",
+        "provenance": "demo"
+      },
+      "vision": {
+        "schema_version": "1.0",
+        "device_id": "demo-pi",
+        "session_id": "demo-session",
+        "epoch": 1,
+        "event_id": "evt",
+        "image_id": "img-1",
+        "status": "ok",
+        "glass_visible": false,
+        "person_visible": true,
+        "authorization": "unknown",
+        "image_quality": "good",
+        "observation": "Person present, no broken glass.",
+        "model_deployment": "gpt-vision-demo",
+        "prompt_version": "v1",
+        "error_code": null,
+        "provenance": "demo"
+      },
+      "commands": [
+        {
+          "schema_version": "1.0",
+          "device_id": "demo-pi",
+          "session_id": "demo-session",
+          "epoch": 1,
+          "command_id": "cmd-cap-3",
+          "event_id": "evt",
+          "issued_at": "2026-09-24T00:00:12Z",
+          "expires_at": "2026-09-24T00:00:42Z",
+          "mode": "demo",
+          "type": "capture",
+          "parameters": {
+            "frames": 1,
+            "max_bytes": 300000
+          }
+        }
+      ],
+      "demo": true,
+      "_acks": [
+        {
+          "command_id": "cmd-cap-3",
+          "status": "acknowledged",
+          "error_code": null
+        }
+      ],
+      "_captured_at": "2026-09-24T01:10:05Z"
+    },
+    {
+      "schema_version": "1.0",
+      "device_id": "demo-pi",
+      "session_id": "demo-session",
+      "epoch": 1,
+      "event_id": "evt-004",
+      "status": "failed",
+      "decision": {
+        "schema_version": "1.0",
+        "device_id": "demo-pi",
+        "session_id": "demo-session",
+        "epoch": 1,
+        "source_time_us": 12341000,
+        "model_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "decision_id": "dec-x",
+        "event_id": null,
+        "batch_seq": 1,
+        "encoder_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "trigger": false,
+        "status": "invalid",
+        "score": null,
+        "score_kind": "unavailable",
+        "provenance": "demo"
+      },
+      "vision": null,
+      "commands": [],
+      "demo": true,
+      "_acks": [],
+      "_captured_at": null
+    }
+  ]
+}

@@ -10,7 +10,7 @@
        Cloned by the canvas with <use href="#lui-board">. -->
   <symbol id="lui-board" viewBox="0 0 210 120">
     <!-- selection halo: the same silhouette, slightly larger, behind the body -->
-    <g class="board-sel" fill="#9a80ff" stroke="#9a80ff" stroke-linecap="round" stroke-linejoin="round">
+    <g class="board-sel" fill="#e0bd63" stroke="#e0bd63" stroke-linecap="round" stroke-linejoin="round">
       <path d="M96 60 L34 22" stroke-width="28" fill="none"/>
       <path d="M96 60 L14 60" stroke-width="28" fill="none"/>
       <path d="M96 60 L36 100" stroke-width="28" fill="none"/>

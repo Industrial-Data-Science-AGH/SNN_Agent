@@ -2,33 +2,36 @@
    Visual reference: UI v2 (dark) / v3 (English). Purple accent on near-black. */
 
 :root {
-  --bg-base: #0c0c10;
-  --bg-panel: #16161d;
-  --bg-panel-2: #1c1c25;
-  --bg-elevated: #22222d;
+  /* Premium dark palette: graphite black + gold accent, with maroon/emerald
+     drawn from the IDS logo (oxblood #a61931, emerald #075633, graphite
+     #1f1f1d, silver #d6d3d2, grey #7a7574). */
+  --bg-base: #100f0d;
+  --bg-panel: #1a1a17;
+  --bg-panel-2: #1f1f1d;
+  --bg-elevated: #26251f;
 
-  --accent: #7c5cff;
-  --accent-bright: #9a80ff;
-  --accent-dim: rgba(124, 92, 255, 0.16);
+  --accent: #c9a24a;
+  --accent-bright: #e0bd63;
+  --accent-dim: rgba(201, 162, 74, 0.16);
 
-  --text-primary: #ecebf1;
-  --text-secondary: #b6b4c4;
-  --text-muted: #7f7d90;
+  --text-primary: #e9e6e2;
+  --text-secondary: #b7b2ad;
+  --text-muted: #7a7574;
 
-  --border-subtle: #262635;
-  --border-strong: #34344a;
+  --border-subtle: #2c2b27;
+  --border-strong: #3a3934;
 
-  --ok-fg: #5fd39a;
-  --ok-bg: rgba(95, 211, 154, 0.14);
-  --warn-fg: #e6b35a;
-  --warn-bg: rgba(230, 179, 90, 0.14);
-  --alarm-fg: #f2809b;
-  --alarm-bg: rgba(242, 128, 155, 0.16);
-  --demo-fg: #d9c98a;
-  --demo-bg: rgba(180, 160, 70, 0.18);
-  --demo-border: rgba(180, 160, 70, 0.5);
+  --ok-fg: #57b97e;
+  --ok-bg: rgba(47, 160, 96, 0.16);
+  --warn-fg: #d99a3d;
+  --warn-bg: rgba(217, 154, 61, 0.16);
+  --alarm-fg: #d55568;
+  --alarm-bg: rgba(166, 25, 49, 0.22);
+  --demo-fg: #e0bd63;
+  --demo-bg: rgba(201, 162, 74, 0.16);
+  --demo-border: rgba(201, 162, 74, 0.5);
 
-  --focus-ring: #9a80ff;
+  --focus-ring: #e0bd63;
 
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, Helvetica, Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
@@ -55,8 +58,8 @@ body {
   color: var(--text-primary);
   background-color: var(--bg-base);
   background-image:
-    radial-gradient(900px 520px at 6% -10%, rgba(124, 92, 255, 0.10) 0%, transparent 55%),
-    radial-gradient(900px 560px at 100% 110%, rgba(124, 92, 255, 0.06) 0%, transparent 55%);
+    radial-gradient(900px 520px at 6% -10%, rgba(201, 162, 74, 0.10) 0%, transparent 55%),
+    radial-gradient(900px 560px at 100% 110%, rgba(166, 25, 49, 0.08) 0%, transparent 55%);
   background-attachment: fixed;
 }
 
@@ -101,7 +104,7 @@ code { font-family: var(--font-mono); font-size: 0.9em; color: var(--text-second
 .btn:hover:not(:disabled) { border-color: var(--accent); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #0d0a1f; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #1a1408; }
 .btn-primary:hover:not(:disabled) { background: var(--accent-bright); border-color: var(--accent-bright); }
 
 .btn-outline { background: transparent; }
@@ -182,7 +185,7 @@ code { font-family: var(--font-mono); font-size: 0.9em; color: var(--text-second
   gap: 1rem;
   padding: 0.7rem 1.25rem;
   border-bottom: 1px solid var(--border-strong);
-  background: linear-gradient(180deg, #1b1b25 0%, #14141b 100%);
+  background: linear-gradient(180deg, #22211c 0%, #17150f 100%);
 }
 .brand { display: flex; align-items: center; gap: 0.6rem; }
 
@@ -382,7 +385,7 @@ td { font-variant-numeric: tabular-nums; }
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   background:
-    radial-gradient(circle at 1px 1px, rgba(124, 92, 255, 0.10) 1px, transparent 0) 0 0 / 26px 26px,
+    radial-gradient(circle at 1px 1px, rgba(201, 162, 74, 0.10) 1px, transparent 0) 0 0 / 26px 26px,
     var(--bg-base);
   overflow: hidden;
 }
@@ -419,15 +422,15 @@ td { font-variant-numeric: tabular-nums; }
 
 /* edges */
 .edge { fill: none; stroke-width: 2.5; opacity: 0.85; }
-.edge-excitatory { stroke: #35c4c4; }
-.edge-inhibitory { stroke: #e0559b; }
+.edge-excitatory { stroke: #1f8f5a; }
+.edge-inhibitory { stroke: #b52a41; }
 
 /* legend */
 .net-legend { display: flex; gap: 1.25rem; flex-wrap: wrap; color: var(--text-secondary); font-size: 0.85rem; }
 .net-legend-item { display: inline-flex; align-items: center; gap: 0.4rem; }
 .net-swatch { width: 20px; height: 3px; border-radius: 2px; display: inline-block; }
-.net-swatch.edge-excitatory { background: #35c4c4; }
-.net-swatch.edge-inhibitory { background: #e0559b; }
+.net-swatch.edge-excitatory { background: #1f8f5a; }
+.net-swatch.edge-inhibitory { background: #b52a41; }
 
 .net-readout { color: var(--text-muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
 .net-readout.is-error { color: var(--alarm-fg); }

@@ -3,7 +3,7 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
-from contracts.validation import fixture, validate
+from contracts.validation import content_hash, fixture, validate
 from rpi_agents.agent.batching import BatchAssembler, request_id, to_spike_batch
 from rpi_agents.agent.serial_protocol import BootEvent, FrameEvent, RejectedEvent, StreamTracker, crc8
 from rpi_agents.cloud.app.mock_api import create_app
@@ -145,7 +145,12 @@ def post(client, path, body):
 
 
 def open_session(client, asm):
-    body = fixture("session-create") | {"source_start_us": asm.stream_start_us}
+    manifest = client.app.state.demo_store.manifest
+    body = fixture("session-create") | {
+        "source_start_us": asm.stream_start_us,
+        "model_hash": content_hash(manifest),
+        "encoder_hash": manifest["encoder_hash"],
+    }
     r = post(client, "/v1/sessions?scenario=silence", body)
     assert r.status_code == 201, r.text
     return r.json()

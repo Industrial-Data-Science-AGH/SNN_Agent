@@ -109,7 +109,11 @@ class Env:
         self.events = EventReader(self.ctx)
 
     def create_body(self, **changes):
-        return fixture("session-create") | {"device_id": "demo-pi", "model_hash": content_hash(self.manifest)} | changes
+        return fixture("session-create") | {
+            "device_id": "demo-pi",
+            "model_hash": content_hash(self.manifest),
+            "encoder_hash": self.manifest["encoder_hash"],
+        } | changes
 
     def open_session(self, **changes):
         return self.sessions.create("demo-pi", self.create_body(**changes))

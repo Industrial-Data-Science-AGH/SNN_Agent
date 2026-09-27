@@ -1,0 +1,1 @@
+SNN W0 demo only; no trained weights or physical calibration.

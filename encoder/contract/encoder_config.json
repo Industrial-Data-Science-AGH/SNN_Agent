@@ -1,0 +1,146 @@
+{
+  "config_schema_version": "1.0",
+  "encoder_variant": "encoder_v2_swap.ino",
+  "firmware_switches": {
+    "ENC_SET_SWAP": 1,
+    "ENC_PARITY": 1,
+    "ENC_DC_FIX": 1,
+    "ENC_HF_ROUND": 1,
+    "ENC_EPS_FLOOR": 1,
+    "ENC_ACC32": 1,
+    "ENC_ADC_PRESCALER": 64,
+    "ENC_BENCH": 0,
+    "ENC_DEBUG_FEAT": 0,
+    "ENC_ISR_PIN": 0,
+    "_note_ENC_ACC32": "szerokosc akumulatora (32 vs 64-bit), nie zmienia wyniku poza ochrona przed przepelnieniem",
+    "_note_ENC_BENCH_ENC_DEBUG_FEAT_ENC_ISR_PIN": "wplywaja tylko na diagnostyke/wypisywanie, nie na logike spike'ow"
+  },
+
+  "sampling": {
+    "sample_rate_hz": 19231,
+    "frame_hop_samples": 192,
+    "frame_hop_ms_nominal": 9.985,
+    "pulse_width_us": 6000,
+    "clock": "source_monotonic_us"
+  },
+
+  "channel_map": [
+    { "index": 0, "channel": "ch1", "feature": "peak",            "output_pin": "D2 (PORTD bit2)" },
+    { "index": 1, "channel": "ch2", "feature": "hjorth_mobility", "output_pin": "D3 (PORTD bit3)" },
+    { "index": 2, "channel": "ch3", "feature": "autocorr_lag1",   "output_pin": "D4 (PORTD bit4)" },
+    { "index": 3, "channel": "ch4", "feature": "zcr",             "output_pin": "D5 (PORTD bit5)" },
+    { "index": 4, "channel": "ch5", "feature": "flux",            "output_pin": "D6 (PORTD bit6)" },
+    { "index": 5, "channel": "ch6", "feature": "hf_lo",           "output_pin": "D7 (PORTD bit7)" },
+    { "index": 6, "channel": "ch7", "feature": "hf_hi",           "output_pin": "D8 (PORTB bit0)" }
+  ],
+
+  "trigger_logic": {
+    "_note": "THR_Z (z-score) i ABS_THR (prog bezwzgledny) sie wzajemnie wykluczaja per kanal. null = nie dotyczy.",
+    "THR_Z": [4.0, null, null, 2.5, 3.5, null, null],
+    "ABS_THR": {
+      "hjorth_mobility": { "value": 2.497324, "fire_below": false },
+      "autocorr_lag1":   { "value": -0.233599, "fire_below": true },
+      "hf_lo":           { "value": 0.28,     "fire_below": false },
+      "hf_hi":           { "value": 0.35,     "fire_below": false }
+    },
+    "hf_gate_mult": 1.5,
+    "hf_gate_rule": "hf_gated = peak > HF_GATE_MULT * (floor_peak + eps); hjorth_mobility, autocorr_lag1, hf_lo, hf_hi strzelaja tylko gdy hf_gated",
+    "SPIKE_THR_INIT": 40.0,
+    "SPIKE_THR_MIN": 8.0,
+    "SPIKE_THR_MAX": 1023.0,
+    "_note_SPIKE_THR": "w firmware (.ino) to pole nie istnieje w wariancie ENC_SET_SWAP=1 (kod pod #if !ENC_SET_SWAP). W twinie (encoder_twin_swap.py) stan spike_thr/peak_cnt JEST liczony co ramke nawet dla CHANNEL_SET=swap, ale peak_cnt nie wchodzi do feat[] w tym wariancie (patrz encode_file, linia ~369) - wiec te wartosci sa obliczane, ale nie wplywaja na zaden spike w wariancie swap. Podane 1:1 z twina (SPIKE_THR_INIT=40.0, MIN=8.0, MAX=ADC_FULL_SCALE=1023.0) dla pelnosci, nie sa aktywne w tym profilu.",
+    "EPS": 0.000001,
+    "EPS_FLOOR": {
+      "peak": 1.0,
+      "zcr": 0.005208333333333333,
+      "flux": 0.06731103067592525,
+      "hjorth_mobility": null,
+      "autocorr_lag1": null,
+      "hf_lo": null,
+      "hf_hi": null
+    },
+    "_note_EPS_FLOOR": "dotyczy tylko kanalow liczonych przez updateFloor() z z-score (peak, zcr, flux). hjorth_mobility/autocorr_lag1/hf_lo/hf_hi uzywaja progu bezwzglednego i nie wywoluja updateFloor() w tym wariancie",
+    "REFRAC_FRAMES": 1,
+    "PRIME_FRAMES_threshold_const": 50,
+    "prime_frames_actual_count": 52,
+    "first_output_frame_index": 52,
+    "_note_PRIME_FRAMES": "stala w kodzie to prog porownania 'frame_idx>50' (lub n_seen>50 w twinie), ale ramka na ktorej warunek staje sie prawdziwy (frame_idx=51) SAMA rowniez konczy sie return/continue bez wypisania - realnie priming trwa 52 ramki (indeksy 0..51, ~0.52s), pierwsza wypisana/uzyta ramka to frame_idx=52. Potwierdzone niezaleznie przez stala PRIME=52 w parity_test.py ('ramki 0..51 to priming - jak w twinie')."
+  },
+
+  "adaptation": {
+    "_note": "dotyczy tylko kanalow z z-score: peak, zcr, flux (patrz EPS_FLOOR wyzej)",
+    "A_UP": 0.0015,
+    "A_DN": 0.03,
+    "A_MAD": 0.01,
+    "freeze_during_event": "gdy above=true, floor_v[c] -= A_UP*(feat[c]-floor_v[c]) (asymetryczne domiecie w gore, floor nie 'uczy sie' zdarzenia)",
+    "state_init": {
+      "floor_v": "0.0 dla wszystkich kanalow, nadpisywane w pierwszej ramce priming (floor_v[c]=feat[c])",
+      "mad_v": "0.1*|feat[c]| + EPS w pierwszej ramce priming, potem update online"
+    }
+  },
+
+  "filtering": {
+    "dc_removal": {
+      "method": "EMA k=1/512 (Q9 fixed-point, ENC_DC_FIX=1)",
+      "dc_ema_shift": 9,
+      "state_init": "dc_q9 = 512 << 9 (zalozenie startowe: polowa zakresu ADC)"
+    },
+    "hf_split": {
+      "method": "1-pole lowpass, hf = x - lp",
+      "HF_HP_SHIFT": 1,
+      "cutoff_hz_approx": 2200,
+      "state_init": "hf_lp = 0"
+    }
+  },
+
+  "input_normalization": {
+    "adc_full_scale_firmware": 1023,
+    "adc_resolution_bits": 10,
+    "adc_reference": "AVcc (ADMUX=REFS0)",
+    "adc_bias_firmware_init": 512,
+    "_note_adc_bias_firmware": "to jest tylko punkt startowy DC EMA w ISR firmware (dc_q9=512<<9), adaptuje sie online w ~27ms (patrz filtering.dc_removal). NIE jest kalibracyjna stala.",
+    "gain": 1.2956473697469115,
+    "gain_percentile": 99.9,
+    "gain_method": "all-files",
+    "gain_source": "phase0_analysis.py bez --gain: compute_global_gain() na 300 losowo wybranych plikow train (random_state=seed), percentile/method to wartosci domyslne z encoder_twin_swap.py (GAIN_PERCENTILE=99.9, GAIN_METHOD='all-files')",
+    "_note_gain": "to jest gain z PROBY 300 plikow w Phase 0 (eksploracja), NIE z ewentualnego pelnego global_gain.json zamrozonego przez 'encoder_twin_swap.py build-manifest' na calym train. Jesli taki plik istnieje i byl uzyty do faktycznego treningu/testu, to ON jest wiazacy, nie ta wartosc z Phase 0 - do potwierdzenia, czy sa identyczne."
+  },
+
+  "twin": {
+    "resampling": "librosa.load(path, sr=FS_HZ=19231) - kazdy plik audio resamplowany do 19231 Hz niezaleznie od oryginalnego fs nagrania, aby HOP_SAMPLES=192 odpowiadalo dokladnie ~10ms bez przeliczen stalych firmware",
+    "quantization": {
+      "method": "codes = ADC_BIAS + y*gain*(ADC_FULL_SCALE/2), clip do [0, ADC_FULL_SCALE]",
+      "ADC_BIAS": 511.5,
+      "ADC_FULL_SCALE": 1023.0,
+      "_note_bias": "ADC_BIAS=511.5 w twinie symuluje fizyczna polaryzacje mikrofonu (Vcc/2) przy generowaniu syntetycznych kodow ADC z audio - to NIE jest to samo pole co adc_bias_firmware_init (512) powyzej, ktore jest stanem startowym DC-trackera w ISR. Bliskie, ale koncepcyjnie rozne.",
+      "_note_rounding": "domyslnie wav_to_adc_codes() w encoder_twin_swap.py NIE zaokragla kodow do liczb calkowitych (float w przestrzeni kodow ADC), inaczej niz realny sprzet (int16_t raw=ADC). parity_test.py to jawnie koryguje: 'twin nie zaokragla kodow, wiec zaokraglamy je jawnie (np.round + clip 0..1023) i podajemy IDENTYCZNE calkowite kody do obu stron' - potwierdzone w docstringu parity_test.py"
+    },
+    "warmup_onboot_priming": "identyczne z firmware: pierwsze 52 ramki tylko primuja floor/mad (patrz trigger_logic.prime_frames_actual_count), brak resetu per plik gdy state jawnie przekazywany",
+    "warmup_used_in_parity_validation": "POTWIERDZONE (parity_test.py linia 100): et.encode_file('dummy', gain=1.0) wywolane BEZ state= -> domyslnie swiezy EncoderState() od zera, dokladnie jak power-on-reset plytki. Test zgodnosci (parity_real.json) NIE uzywal 30s-warmupu z build-manifest.",
+    "warmup_dataset_build_30s": {
+      "_note": "dotyczy WYLACZNIE budowy pelnego datasetu (encoder_twin_swap.py build-manifest / build-dataset), NIE jest czescia logiki samego enkodera/firmware i NIE byl uzyty w walidacji parity_real.json (patrz pole wyzej).",
+      "warmup_seconds_default": 30.0,
+      "source_files": "negatywy kind=stationary ze splitu train (fallback: dowolne negatywy train, jesli brak stationary)",
+      "state_handling": "jeden wspolny stan rozgrzewany do >=30s PO floors_primed, potem deepcopy niezaleznie per split (train/val/test); w obrebie splitu stan ciagly (bez resetu per plik), klasy przeplatane (nie sortowane), aby stan nie korelowal z etykieta"
+    }
+  },
+
+  "validation": {
+    "_note": "Status faktycznie wykonanych testow zgodnosci firmware<->twin dla tego wariantu (swap_full), zeby nie mylic tego, co JUZ zweryfikowano, z parametrami produkcyjnymi powyzej.",
+    "method": "cyklowo-dokladny symulator simavr (tools/simharness), firmware zbudowany avr-gcc z flag -DENC_SET_SWAP=1 -DENC_PARITY=1 -DENC_ACC32=1 -DENC_DEBUG_FEAT=1 -DENC_BAUD=2000000 (ostatnie dwie flagi TYLKO do testu, nie w buildzie produkcyjnym)",
+    "source_audio": "prawdziwy plik WAV (Glass breaking-019.wav, PT_DATASET_250314), nie audio syntetyczne",
+    "gain_used_in_this_validation": 1.0,
+    "_note_gain_mismatch": "WAZNE: ten test uzyl gain=1.0 (domyslne parity_test.py, --gain nie podano w komendzie), NIE zamrozonego gain produkcyjnego (input_normalization.gain=1.2956473697469115). Zgodnosc DSP/progowania jest wiec potwierdzona NIEZALEZNIE od gain, ale KOMBINACJA z realnym gain produkcyjnym nie zostala jeszcze tak przetestowana na realnym audio.",
+    "mob_thr_ac_thr_used": "2.497324 / -0.233599 (zaokraglone, identyczne z domyslnymi #define w firmware)",
+    "state": "swiezy (patrz warmup_used_in_parity_validation)",
+    "result_source_file": "parity_real.json",
+    "result_summary": "497/497 ramek po primingu; zgodnosc spike'ow 95.17% (wszystkie ramki), 92.55% (ramki zdarzeniowe rms>=20 LSB, n=188)"
+  },
+
+  "source": {
+    "file": "encoder_v2_swap.ino",
+    "implementation_sha": "73fd8df2645460eee95539f745ea1fc920e02ab1",
+    "twin_file": "twin/encoder_twin_swap.py",
+    "validation_tool": "tools/parity_test.py"
+  }
+}

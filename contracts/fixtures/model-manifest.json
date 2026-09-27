@@ -1,0 +1,110 @@
+{
+  "schema_version": "1.0",
+  "model_id": "demo-network-v1",
+  "status": "demo",
+  "encoder_hash": "sha256:cf0a898563e7f8d928454f91faaf5a92dc29d41afd3be7feabf58d267ff0e78c",
+  "encoder_profile": {
+    "schema_version": "1.0",
+    "profile_id": "demo-base-v1",
+    "provenance": "demo",
+    "implementation_sha": "c9ff2346abac54b07468d28e52e908788255569d",
+    "config_sha256": "sha256:46c0f23bb3f2166baac9dccc76fcbc67b3cbad901db0e9ca01992fbd742d2425",
+    "sample_rate_hz": 19231,
+    "hop_samples": 192,
+    "pulse_width_us": 500,
+    "clock": "source_monotonic_us",
+    "channel_map": [
+      {
+        "index": 0,
+        "channel": "peak",
+        "feature": "peak"
+      },
+      {
+        "index": 1,
+        "channel": "peak_cnt",
+        "feature": "peak_cnt"
+      },
+      {
+        "index": 2,
+        "channel": "cv",
+        "feature": "cv"
+      },
+      {
+        "index": 3,
+        "channel": "zcr",
+        "feature": "zcr"
+      },
+      {
+        "index": 4,
+        "channel": "flux",
+        "feature": "flux"
+      },
+      {
+        "index": 5,
+        "channel": "hf_lo",
+        "feature": "hf_lo"
+      },
+      {
+        "index": 6,
+        "channel": "hf_hi",
+        "feature": "hf_hi"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "demo-model.txt",
+      "sha256": "sha256:48a738e1bb22a4ad04f590a69a259e45c195e99f0b21b9cd2c9a5c219d7afb96"
+    }
+  ],
+  "runtime": {
+    "implementation": "w0-scripted-demo",
+    "version": "1.0",
+    "integrator": "none",
+    "dt_us": 1000,
+    "potential_unit": "a.u."
+  },
+  "decoder": {
+    "implementation": "scripted-fixture",
+    "version": "1.0",
+    "window_us": 250000,
+    "threshold": 1,
+    "cooldown_us": 1000000
+  },
+  "topology": {
+    "topology_version": "demo-topology-1",
+    "mode": "hardware_compatible",
+    "neurons": [
+      {
+        "neuron_id": "n0",
+        "tau_mem_us": 20000,
+        "tau_syn_us": 10000,
+        "v_leak": 0,
+        "v_threshold": 1,
+        "v_reset": 0,
+        "refractory_us": 1000,
+        "potential_unit": "a.u."
+      }
+    ],
+    "connections": [
+      {
+        "source_kind": "channel",
+        "source_id": "zcr",
+        "target_id": "n0",
+        "target_port": 1,
+        "sign": "excitatory",
+        "weight": 1,
+        "weight_unit": "a.u.",
+        "delay_us": 0
+      }
+    ]
+  },
+  "provenance": {
+    "training_run_id": null,
+    "dataset_manifest_hash": null,
+    "checkpoint_hash": "sha256:48a738e1bb22a4ad04f590a69a259e45c195e99f0b21b9cd2c9a5c219d7afb96",
+    "evaluation_hash": null,
+    "seed": null,
+    "calibration_id": null
+  }
+}

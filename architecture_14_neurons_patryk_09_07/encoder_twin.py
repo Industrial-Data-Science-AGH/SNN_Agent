@@ -735,9 +735,7 @@ def _cmd_preview(args) -> None:
               f"— podgląd BEZ wzmocnienia (gain=1.0). To NIE jest to, co enkoder "
               f"zrobi z tym plikiem w zbiorze (tam gain jest zamrożone z train) — "
               f"podaj --gain-file, żeby zobaczyć realny wynik.")
-    gain = compute_global_gain(
-        [args.wav]
-    )  # podgląd pojedynczego pliku — brak train do kalibracji
+        gain = 1.0
     spikes = encode_file(args.wav, gain=gain)
     print(f"plik: {args.wav}")
     print(f"ramek po primingu: {spikes.shape[0]}")

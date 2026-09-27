@@ -1,0 +1,10 @@
+digraph G { graph [bgcolor="white", fontname="Arial", fontsize=15, pad="0.22", nodesep="0.3", ranksep="0.42"]; node [shape=box, style="rounded,filled", fillcolor="#f1edf8", color="#73508e", fontname="Arial", fontsize=14, margin="0.16,0.10"]; edge [fontname="Arial", fontsize=11, color="#506073", arrowsize=0.7];rankdir=TB;browser[label="Dashboard
+przeglądarka operatora"];pi[label="Pi · urządzenie"];api[label="Container App API
+SNN + dashboard
+0–1 replika",fillcolor="#e5f1f5"];queue[label="Queue Storage
+zadania obrazu / powiadomień"];worker[label="Container App worker
+0–1 replika
+skalowanie z kolejki",fillcolor="#e5f1f5"];foundry[label="Foundry
+wybrany model vision"];table[label="Table Storage
+zdarzenia · komendy · joby"];blob[label="Blob Storage
+zdjęcia · modele · przebiegi"];kv[label="Key Vault / managed identity"];browser->api;pi->api;api->table;api->blob;api->queue;queue->worker;worker->foundry;worker->table;worker->blob;kv->api[style=dashed];kv->worker[style=dashed]; }

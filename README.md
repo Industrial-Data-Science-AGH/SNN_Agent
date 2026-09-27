@@ -1,3 +1,7 @@
+> **Aktualne założenia:** [zakres i protokół badania](docs/project/CURRENT_ASSUMPTIONS.md) · [W0 — start zespołu](docs/project/W0_START_HERE.md) · [praca z Raspberry Pi](docs/project/RASPBERRY_PI_DEVELOPMENT.md) · [pełna dokumentacja](docs/project/README.md)
+
+> Opis warstw poniżej jest historycznym szkicem koncepcji. Obowiązująca implementacja POC używa Arduino Uno, Raspberry Pi 5 i symulacji Lu.i w Azure. Zakres badawczy oraz granice porównania określa dokument aktualnych założeń.
+
 # Wake-Up AI: Hybrid Neuromorphic Edge System
 
 This project implements a hybrid architecture for ultra-low power "Always-On" Edge AI, combining analog neuromorphic circuits (Layer 1) with digital software agents (Layer 3).

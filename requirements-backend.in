@@ -1,0 +1,11 @@
+# Runtime dependencies of the backend image (API and worker). Test and lint tools are NOT here.
+# Regenerate the lock after any change:
+#   uv pip compile requirements-backend.in --universal --python-version 3.12 --generate-hashes --output-file requirements-backend.lock
+fastapi
+uvicorn
+jsonschema
+rfc8785
+azure-data-tables
+azure-storage-blob
+azure-storage-queue
+azure-identity

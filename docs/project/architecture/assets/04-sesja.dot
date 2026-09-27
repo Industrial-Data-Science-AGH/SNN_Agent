@@ -1,0 +1,7 @@
+digraph G { graph [bgcolor="white", fontname="Arial", fontsize=15, pad="0.22", nodesep="0.3", ranksep="0.42"]; node [shape=box, style="rounded,filled", fillcolor="#f1edf8", color="#73508e", fontname="Arial", fontsize=14, margin="0.16,0.10"]; edge [fontname="Arial", fontsize=11, color="#506073", arrowsize=0.7];rankdir=TB; stop[label="STOPPED
+brak akwizycji"];ready[label="PREFLIGHT
+model + urządzenie + chmura"];warm[label="WARMUP
+stan enkodera i SNN"];run[label="MONITORING
+ciągły stan SNN"];deg[label="DEGRADED
+luka lub brak łączności",fillcolor="#fff4da"];drain[label="DRAINING
+dokończenie zadań i zapis"];stop->ready[label="Start"];ready->warm[label="kontrole OK"];warm->run[label="warmup zakończony"];run->deg[label="błąd / brak danych"];deg->warm[label="nowa epoka, jeśli utracono stan"];run->drain[label="Stop monitorowania"];drain->stop; }

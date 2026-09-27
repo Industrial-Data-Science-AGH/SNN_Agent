@@ -1,0 +1,8 @@
+#!/bin/sh
+# SNN Agent: local guard. GitHub ruleset is the authoritative protection.
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null) || exit 0
+if [ "$branch" = "master" ]; then
+    echo "Blocked: commits and local merges on master are forbidden. Use a task branch and a GitHub PR." >&2
+    exit 1
+fi
+exit 0

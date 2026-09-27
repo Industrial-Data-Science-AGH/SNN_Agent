@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0",
+  "request_id": "create-1",
+  "device_id": "demo-pi",
+  "boot_id": "demo-boot",
+  "mode": "demo",
+  "model_hash": "sha256:8780dfeca1acfd3a292d90f614b12b25abff4c2e77e83ba7f8926a4d8bf9d445",
+  "encoder_hash": "sha256:33595d710274ab9e3da4d32333344c80f87d482ef8ea2db5827fbd18665503ed",
+  "source_start_us": 0
+}

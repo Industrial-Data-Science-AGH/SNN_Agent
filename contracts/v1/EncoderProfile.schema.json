@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EncoderProfile",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "profile_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+    },
+    "provenance": {
+      "enum": [
+        "demo",
+        "measured",
+        "reference"
+      ]
+    },
+    "implementation_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "config_sha256": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sample_rate_hz": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 192000
+    },
+    "hop_samples": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 192000
+    },
+    "pulse_width_us": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000
+    },
+    "clock": {
+      "const": "source_monotonic_us"
+    },
+    "channel_map": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "channel": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+          },
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 63
+          },
+          "feature": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+          }
+        },
+        "required": [
+          "channel",
+          "index",
+          "feature"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 64,
+      "minItems": 1
+    }
+  },
+  "required": [
+    "schema_version",
+    "profile_id",
+    "provenance",
+    "implementation_sha",
+    "config_sha256",
+    "sample_rate_hz",
+    "hop_samples",
+    "pulse_width_us",
+    "clock",
+    "channel_map"
+  ],
+  "additionalProperties": false
+}

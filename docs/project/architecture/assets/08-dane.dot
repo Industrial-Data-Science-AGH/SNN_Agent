@@ -1,0 +1,8 @@
+digraph G { graph [bgcolor="white", fontname="Arial", fontsize=15, pad="0.22", nodesep="0.3", ranksep="0.42"]; node [shape=box, style="rounded,filled", fillcolor="#f1edf8", color="#73508e", fontname="Arial", fontsize=14, margin="0.16,0.10"]; edge [fontname="Arial", fontsize=11, color="#506073", arrowsize=0.7];rankdir=TB;src[label="Źródłowe nagrania
+pochodzenie + licencja + hash"];group[label="Grupowanie przed cięciem
+wspólny oryginał w jednym zbiorze"];tr[label="TRAIN
+uczenie"];v[label="VALIDATION
+progi i wybór"];te[label="TEST
+jednorazowa ocena"];mixv[label="Strumienie walidacyjne
+manifest mieszanek"];mixt[label="Strumienie testowe
+rozłączne grupy tła i szkła"];src->group;group->tr;group->v;group->te;v->mixv;te->mixt;tr->mixv[style=invis]; }

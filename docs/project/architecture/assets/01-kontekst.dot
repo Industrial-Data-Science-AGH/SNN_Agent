@@ -1,0 +1,6 @@
+digraph G { graph [bgcolor="white", fontname="Arial", fontsize=15, pad="0.22", nodesep="0.3", ranksep="0.42"]; node [shape=box, style="rounded,filled", fillcolor="#f1edf8", color="#73508e", fontname="Arial", fontsize=14, margin="0.16,0.10"]; edge [fontname="Arial", fontsize=11, color="#506073", arrowsize=0.7];rankdir=TB; a[label="Otoczenie
+Dźwięk i obraz"]; subgraph cluster_local { label="URZĄDZENIE W LABORATORIUM"; color="#aaa"; m[label="MAX4466"]; u[label="Arduino Uno
+ADC i enkoder"]; p[label="Raspberry Pi 5
+Serwis edge"]; c[label="Kamera"]; l[label="LED i buzzer"]; m->u[label="analog"];u->p[label="USB · impulsy"];c->p[label="JPEG"];p->l[label="polecenia"]; } s[label="Azure
+SNN i pipeline obrazu",fillcolor="#e5f1f5"];d[label="Przeglądarka
+Dashboard"];e[label="Odbiorca e-mail"];a->m;a->c;p->s[label="HTTPS"];s->p[label="zdjęcie / alarm"];s->d[label="telemetria i historia"];s->e[label="powiadomienie"]; }

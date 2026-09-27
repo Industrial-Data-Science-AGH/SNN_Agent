@@ -1,0 +1,3 @@
+[submodule "lu.i-neuron-pcb"]
+	path = lu.i-neuron-pcb
+	url = https://github.com/giant-axon/lu.i-neuron-pcb.git

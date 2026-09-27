@@ -1,0 +1,7 @@
+digraph G { graph [bgcolor="white", fontname="Arial", fontsize=15, pad="0.22", nodesep="0.3", ranksep="0.42"]; node [shape=box, style="rounded,filled", fillcolor="#f1edf8", color="#73508e", fontname="Arial", fontsize=14, margin="0.16,0.10"]; edge [fontname="Arial", fontsize=11, color="#506073", arrowsize=0.7];rankdir=TB; data[label="Manifest źródeł i podział grupowy"];tr[label="TRAIN
+cechy i trening GA"];val[label="VALIDATION
+wybór progu i modelu"];freeze[label="Zamrożony pakiet champion
+model + encoder + reguła + hash"];test[label="CONTINUOUS TEST
+bez strojenia i retreningu"];exp[label="Eksport Lu.i
+walidacja ograniczeń"];cal[label="Kalibracja fizycznych płytek"];deploy[label="Azure runtime
+ten sam pakiet champion"];data->tr;data->val;tr->val->freeze;freeze->test;freeze->exp->cal;freeze->deploy;test->deploy[label="raport dopuszczenia"]; }

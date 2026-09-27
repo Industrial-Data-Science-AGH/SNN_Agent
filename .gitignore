@@ -64,3 +64,12 @@ dataset/continuous/out/*.wav
 # zipy itp
 *.zip
 *.7z
+
+# Isolated W0 integration environment
+.venv-w0/
+.pytest_cache/
+.ruff_cache/
+
+# Lokalna kopia artefaktow spikowych (spikes_v2, spikes_ext) do uruchamiania GA/benchmarkow.
+/spikes_data/
+

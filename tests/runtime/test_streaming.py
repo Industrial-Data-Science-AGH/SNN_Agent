@@ -61,7 +61,7 @@ def test_batch_size_does_not_change_the_answer(lui8, stream, make_batch):
             assert frame in window, f"batch size {size} moved an alarm out of its frame"
 
 
-def test_state_really_crosses_the_boundary(lui8, stream, make_batch):
+def test_state_really_crosses_the_boundary(lui8, stream, make_batch, grid):
     """A runtime restarted between batches must give a different answer.
 
     Without this, the test above would also pass on a stateless runtime, and
@@ -70,7 +70,7 @@ def test_state_really_crosses_the_boundary(lui8, stream, make_batch):
     continuous = sum(d["score"] for d in drive(lui8, stream, make_batch, 25))
     restarted = 0
     for i, first in enumerate(range(0, 400, 25)):
-        runtime = session(lui8, origin_us=first * lui8["runtime"]["dt_us"])
+        runtime = session(lui8, origin_us=grid(first))
         restarted += runtime.step(make_batch(stream, first, 25, seq=i))["score"]
     assert restarted != continuous, "resetting between batches changed nothing, so nothing is being carried"
 
@@ -98,7 +98,7 @@ def test_the_runtime_comes_back_out_of_warmup(lui8, stream, make_batch):
     assert "warmup" in statuses and statuses[-1] == "valid"
 
 
-def test_a_long_gap_restarts_from_rest(lui8, stream, make_batch):
+def test_a_long_gap_restarts_from_rest(lui8, stream, make_batch, grid):
     """Past a few membrane time constants there is nothing left to carry.
 
     A 200 frame hole is longer than the settle time, so the state that survives
@@ -106,8 +106,7 @@ def test_a_long_gap_restarts_from_rest(lui8, stream, make_batch):
     hole must not be, or the runtime is throwing away real state on every
     hiccup. Both halves are asserted, because only the pair pins the boundary.
     """
-    dt = lui8["runtime"]["dt_us"]
-    at_rest = session(lui8, origin_us=300 * dt)
+    at_rest = session(lui8, origin_us=grid(300))
     expected = at_rest.step(make_batch(stream, 300, 100, seq=0))["score"]
 
     long_gap = session(lui8)
@@ -119,13 +118,12 @@ def test_a_long_gap_restarts_from_rest(lui8, stream, make_batch):
     assert short_gap.step(make_batch(stream, 300, 100, seq=1))["score"] != expected
 
 
-def test_time_advances_only_by_what_was_consumed(lui8, stream, make_batch):
-    dt = lui8["runtime"]["dt_us"]
+def test_time_advances_only_by_what_was_consumed(lui8, stream, make_batch, grid):
     runtime = session(lui8)
     runtime.step(make_batch(stream, 0, 30, seq=0))
-    assert runtime.source_time_us == 30 * dt
+    assert runtime.source_time_us == grid(30)
     runtime.step(make_batch(stream, 60, 10, seq=1))
-    assert runtime.source_time_us == 70 * dt
+    assert runtime.source_time_us == grid(70)
 
 
 # ------------------------------------------------------------------- refusals
@@ -174,12 +172,26 @@ def test_calls_before_a_session_are_refused(lui8):
     assert excinfo.value.code == "NOT_STARTED"
 
 
-def test_a_scripted_package_refuses_to_pretend(lui8, stream, make_batch):
+def test_a_scripted_package_refuses_to_pretend():
     """The W0 demo fixture declares integrator "none": it has no physics."""
+    demo = fixture("model-manifest")
+    profile = demo["encoder_profile"]
+    fs, hop = profile["sample_rate_hz"], profile["hop_samples"]
+    end = (10 * hop * 1_000_000 + fs // 2) // fs  # ten hops on the device grid
+
     runtime = LuiRuntime(allow_unverified_artifacts=True)
-    runtime.load(fixture("model-manifest"))
+    runtime.load(demo)
     runtime.reset(epoch=1, source_time_us=0)
-    decision = runtime.step(make_batch(stream, 0, 10))
+    decision = runtime.step(
+        {
+            "schema_version": "1.0", "request_id": "r0", "device_id": "dev1", "session_id": "sess1",
+            "epoch": 1, "boot_id": "boot1", "batch_seq": 0, "encoder_hash": demo["encoder_hash"],
+            "source_start_us": 0, "source_end_us": end,
+            "spikes": [{"dt_us": 0, "channel": profile["channel_map"][0]["channel"]}],
+            "quality": {"dropped_events": 0, "adc_clipped": False},
+        }  # fmt: skip
+    )
+    assert runtime.source_time_us == end, "a scripted package still consumes the timeline"
     assert decision == {
         "trigger": False,
         "status": "invalid",
@@ -210,3 +222,63 @@ def test_an_uncalibrated_model_never_claims_a_measurement(lui8, stream, make_bat
     decision = runtime.step(make_batch(stream, 0, 10))
     assert decision["provenance"] == "simulated"
     assert decision["score_kind"] == "uncalibrated"
+
+
+# --------------------------------------------------- session state, guarded
+
+
+def test_stepping_a_stopped_session_is_refused(lui8, stream, make_batch):
+    """stop() says the state is frozen, so it has to actually be frozen."""
+    runtime = session(lui8)
+    runtime.step(make_batch(stream, 0, 10, seq=0))
+    frozen = runtime.source_time_us
+    runtime.stop()
+    with pytest.raises(RuntimeStateError) as excinfo:
+        runtime.step(make_batch(stream, 10, 10, seq=1))
+    assert excinfo.value.code == "SESSION_STOPPED"
+    assert runtime.source_time_us == frozen
+
+
+def test_a_refused_batch_does_not_claim_the_stream(lui8, stream, make_batch):
+    """Identity is bound only once the batch has survived every check.
+
+    A rejected batch that had already written its device and session would make
+    the next good batch fail as a SESSION_MISMATCH against an identity nobody
+    ever agreed to.
+    """
+    runtime = session(lui8)
+    off_grid = make_batch(stream, 0, 10) | {"device_id": "intruder", "session_id": "intruder"}
+    off_grid["source_end_us"] += 1
+    assert runtime.step(off_grid)["status"] == "invalid"
+
+    good = make_batch(stream, 0, 10) | {"device_id": "demo-pi", "session_id": "sess-1"}
+    assert runtime.step(good)["status"] in {"valid", "warmup"}
+    assert runtime.snapshot()["device_id"] == "demo-pi"
+
+
+def test_a_new_epoch_does_not_inherit_the_old_identity(lui8, stream, make_batch):
+    runtime = session(lui8)
+    runtime.step(make_batch(stream, 0, 10) | {"device_id": "pi-a", "session_id": "sess-a"})
+    runtime.reset(epoch=2, source_time_us=0)  # no ids: the next batch teaches it
+    second = make_batch(stream, 0, 10, epoch=2) | {"device_id": "pi-b", "session_id": "sess-b"}
+    assert runtime.step(second)["status"] in {"valid", "warmup"}
+    assert runtime.snapshot()["session_id"] == "sess-b"
+
+
+def test_a_degraded_batch_counts_as_a_hole(lui8, stream, make_batch):
+    """`dropped_events` means frames are missing, so the decoder must not span it.
+
+    The backend already turns this flag into a StreamGap and overrides the
+    decision to `gap`; the runtime has to agree with it about the same batch.
+    """
+    runtime = session(lui8)
+    for first in range(0, 60, 10):
+        runtime.step(make_batch(stream, first, 10, seq=first // 10))
+    assert not runtime.warming_up
+
+    degraded = make_batch(stream, 60, 10, seq=6)
+    degraded["quality"] = {"dropped_events": 4, "adc_clipped": False}
+    after = runtime.step(degraded)
+    assert after["status"] == "warmup"
+    assert after["trigger"] is False
+    assert runtime.snapshot()["status"] == "gap"

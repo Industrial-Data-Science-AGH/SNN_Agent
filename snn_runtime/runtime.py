@@ -28,6 +28,14 @@ looks at ``source_start_us`` against the end of the last batch it consumed. The
 device lays batches on an exact frame grid (``rpi_agents/agent/batching.py``), so
 a hole between two batches is a real hole in the audio, and that is the only
 thing the integrator needs to know about it.
+
+That grid is the **encoder's**, not the integrator's. Hop ``k`` starts at
+``round(k * hop_samples / sample_rate_hz)`` seconds, about 9984 us at 192/19231,
+while ``runtime.dt_us`` is 10000 because that is the step the model was trained
+with. Frame counts therefore come from ``model.grid`` (see ``units.FrameGrid``)
+and physics from ``dt_us``; conflating the two made every batch the device
+actually emits fail as ``invalid``, and only a test driven by the real
+``BatchAssembler`` catches it.
 """
 
 from __future__ import annotations
@@ -152,8 +160,13 @@ class LuiRuntime:
         # A fresh session starts at rest, which is a real state and not an
         # assumption, so the only thing still unknown is the delay lines.
         self._warmup_left = model.plan.warmup_frames
-        self._device_id = device_id or self._device_id
-        self._session_id = session_id or self._session_id
+        # Not `device_id or self._device_id`: a new epoch that names no stream
+        # has to LEARN the identity from its first batch, as the docstring
+        # promises. Carrying the old one forward would label the new session's
+        # telemetry with the previous session and then reject its first batch
+        # as a SESSION_MISMATCH against an identity nobody set.
+        self._device_id = device_id
+        self._session_id = session_id
         self._frame_seq = 0
         self._last_spikes = (False,) * len(model.plan.neurons)
         # Nothing has been observed yet, so the state is rest by assumption
@@ -169,13 +182,13 @@ class LuiRuntime:
         """Consume one SpikeBatch and answer what the decoder now believes."""
         self._require_started()
         model = self.model
-        self._bind_stream(batch)
-
-        if model.is_scripted:
-            # A scripted package has no physics to integrate. Saying so is the
-            # only honest answer; inventing one would let a demo fixture look
-            # like a detector.
-            return _decision(False, "invalid", None, "unavailable", "demo")
+        if self._stopped:
+            # stop() promises the state is frozen and snapshot() labels it
+            # `stopped`. Integrating one more batch would quietly make that
+            # label false, so this is refused rather than tolerated.
+            raise RuntimeStateError(
+                "SESSION_STOPPED", "the session was stopped; open a new epoch to keep streaming",
+            )
 
         missing = _REQUIRED_BATCH_FIELDS.difference(batch)
         if missing:
@@ -196,21 +209,36 @@ class LuiRuntime:
                 "the batch was produced by a different encoder profile than the loaded model",
             )
 
-        dt, consumed = model.dt_us, self._source_time_us
+        consumed = self._source_time_us
         assert consumed is not None  # _require_started
         start, end = batch["source_start_us"], batch["source_end_us"]
-        span = end - start
-        if span <= 0 or span % dt or start % dt != consumed % dt:
-            return _decision(False, "invalid", None, model.score_kind, self._provenance)
-        if start < consumed:
-            # The backend rejects this before we are called; if it ever gets
-            # here, replaying already integrated time would corrupt the state.
+        frames = model.grid.frames_in(end - start)
+        missed = None if start == consumed else model.grid.frames_in(start - consumed)
+        if frames is None or start < consumed or (start != consumed and missed is None):
+            # Either the window is not a whole number of encoder frames, or it
+            # replays time already integrated, or the hole before it is not on
+            # the grid either. None of the three can be placed on the timeline,
+            # and guessing would put one frame's spikes into another.
             return _decision(False, "invalid", None, model.score_kind, self._provenance)
 
-        if start > consumed:
-            self._absorb_gap((start - consumed) // dt)
+        # Only now, once nothing can reject the batch, does it get to say which
+        # stream this is. A rejected batch that had already bound its identity
+        # would make the next good batch fail as a SESSION_MISMATCH.
+        self._bind_stream(batch)
 
-        frames = span // dt
+        if missed:
+            self._absorb_gap(missed)
+        self._absorb_quality(batch.get("quality") or {})
+
+        if model.is_scripted:
+            # A scripted package has no physics to integrate, and saying
+            # otherwise would let a demo fixture look like a detector. It still
+            # consumes the timeline, so its telemetry describes the input it was
+            # given rather than standing at the reset clock forever.
+            self._source_time_us = end
+            self._observed = True
+            return _decision(False, "invalid", None, "unavailable", "demo")
+
         triggered, spikes = self._run(self._frame_inputs(batch, frames), frames)
         self._source_time_us = end
         self._observed = True
@@ -250,7 +278,7 @@ class LuiRuntime:
             index = model.channel_index.get(spike["channel"])
             if index is None:
                 continue  # the contract validated this already; ignoring beats guessing
-            frame = spike["dt_us"] // model.dt_us
+            frame = model.grid.frame_of(spike["dt_us"])
             if 0 <= frame < frames:
                 # A channel that somehow reports twice in one frame is still one
                 # spike: the encoder pin is a level, not a counter.
@@ -277,6 +305,29 @@ class LuiRuntime:
             if decoder.step(bool(fired)):
                 triggered = True
         return triggered, spikes
+
+    def _absorb_quality(self, quality: Mapping[str, Any]) -> None:
+        """Take the device's own word for it when a batch is degraded.
+
+        ``IngestService._gaps`` already turns either flag into a ``StreamGap``
+        and overrides the decision to ``gap``. Without this the runtime would
+        disagree with the backend about the very same batch: the ack would say
+        a hole went past while ``snapshot()`` still reported ``running``.
+
+        The two flags are not the same kind of loss. ``dropped_events`` means
+        hops the device summarised away, so frames really are missing and the
+        decoder must not span the hole. ``adc_clipped`` means the input was
+        saturated, not absent, so the timeline is intact and only the viewer
+        needs to know the data is degraded.
+        """
+        if quality.get("dropped_events"):
+            decoder = self._decoder
+            assert decoder is not None
+            decoder.flush()
+            self._warmup_left = max(self._warmup_left, self._settle_frames)
+            self._gap_pending = True
+        elif quality.get("adc_clipped"):
+            self._gap_pending = True
 
     def _absorb_gap(self, missing: int) -> None:
         """Account for frames that were produced but never arrived."""

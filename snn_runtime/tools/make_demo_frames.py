@@ -37,15 +37,25 @@ def build(manifest: dict, *, frames: int, every_us: int, density: float, seed: i
     runtime.load(manifest)
     runtime.reset(epoch=1, source_time_us=0, device_id="demo-pi", session_id="demo-session")
 
-    dt = manifest["runtime"]["dt_us"]
-    channels = [c["channel"] for c in sorted(manifest["encoder_profile"]["channel_map"], key=lambda c: c["index"])]
+    profile = manifest["encoder_profile"]
+    fs, hop = profile["sample_rate_hz"], profile["hop_samples"]
+
+    def grid(hop_index: int) -> int:
+        """The device's timeline (rpi_agents/agent/batching.py), not dt_us.
+
+        Generating demo frames on the dt_us grid produced batches the runtime
+        correctly refuses, so the replay came out as untouched resting values.
+        """
+        return (hop_index * hop * 1_000_000 + fs // 2) // fs
+
+    channels = [c["channel"] for c in sorted(profile["channel_map"], key=lambda c: c["index"])]
     rng = random.Random(seed)
     feed = TelemetryFeed(min_interval_us=every_us)
 
     out: list[dict] = []
     for index in range(0, frames, BATCH_FRAMES):
         spikes = [
-            {"dt_us": (frame - index) * dt, "channel": channel}
+            {"dt_us": grid(frame) - grid(index), "channel": channel}
             for frame in range(index, min(index + BATCH_FRAMES, frames))
             for channel in channels
             if rng.random() < density
@@ -62,8 +72,8 @@ def build(manifest: dict, *, frames: int, every_us: int, density: float, seed: i
                 "boot_id": "demo-boot",
                 "batch_seq": index // BATCH_FRAMES,
                 "encoder_hash": manifest["encoder_hash"],
-                "source_start_us": index * dt,
-                "source_end_us": (index + count) * dt,
+                "source_start_us": grid(index),
+                "source_end_us": grid(index + count),
                 "spikes": spikes,
                 "quality": {"dropped_events": 0, "adc_clipped": False},
             }

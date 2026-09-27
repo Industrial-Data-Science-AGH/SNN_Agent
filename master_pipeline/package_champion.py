@@ -209,12 +209,35 @@ def _get_decoder_rule(manifest: Dict[str, Any], checkpoint_path: str, config_pat
     # dataclassów (DataConfig/GAConfig/TrainConfig).
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from pipeline_config import PipelineConfig
-    from continuous_eval import _load_champion_model, _build_real_fitness, _recover_operating_rule
+    from continuous_eval import (
+        _load_champion_model, _build_real_fitness, _recover_operating_rule,
+        OperatingRuleInfeasible,
+    )
 
     config = PipelineConfig.from_json(config_path)
     model, g = _load_champion_model(checkpoint_path, device)
     rf, stream_budget = _build_real_fitness(config, device, project_root)
-    (k, w), refrac = _recover_operating_rule(rf, model, g, stream_budget)
+    try:
+        (k, w), refrac = _recover_operating_rule(rf, model, g, stream_budget)
+    except OperatingRuleInfeasible as e:
+        # M3 odbior: "jesli budzet jest nieosiagalny, raport mowi infeasible" --
+        # NIE blokujemy calego pakietu z tego powodu. Checkpoint/topologia/wagi/
+        # calibration/golden-replay sa uzyteczne (i weryfikowalne) niezaleznie od
+        # tego, czy istnieje reguła alarmu mieszcząca się w budżecie 6 FA/h --
+        # Patryk/Wiktor nadal dostaja dokladnie oceniony, wczytywalny model.
+        # `package_champion.main()` odczytuje ten status i konczy kodem 2, tak
+        # samo jak champion.py/continuous_eval.py, zeby caller mogl odroznic
+        # "spakowane, ale operacyjnie infeasible" od bledu.
+        print(f"[PACKAGE] decoder_rule: INFEASIBLE -- {e}")
+        return {
+            "status": "infeasible",
+            "budget_fa_h": stream_budget,
+            "best_recall_at_budget": e.best_recall_at_budget,
+            "reason": str(e),
+            "source": "odtworzone na żywo przez package_champion.py (RealFitness.stream_recall) "
+                      "-- ten bieg nie miał jeszcze policzonego etapu continuous_eval (M4); "
+                      "żadna reguła (k,w) nie mieści budżetu FA/h na val.",
+        }
     return {
         "k": k, "w": w, "refrac_frames": refrac, "budget_fa_h": stream_budget,
         "source": "odtworzone na żywo przez package_champion.py (RealFitness.stream_recall) "
@@ -459,6 +482,12 @@ def package_champion(champion_json: Optional[str], out_dir: str,
             "kompatybilności z płytką Lu.i bez przeprowadzenia kalibracji na sprzęcie "
             "-- patrz calibration_status.json."
         ),
+        # M3 odbior: "jesli budzet jest nieosiagalny, raport mowi infeasible" --
+        # przeniesione tu z decoder.json, zeby main() moglo dac kod wyjscia 2 bez
+        # ponownego parsowania osobnego pliku. Pakiet i tak jest kompletny
+        # (checkpoint/topologia/wagi/calibration/golden-replay) -- infeasible
+        # dotyczy tylko reguly alarmu, nie samego modelu.
+        "decoder_status": decoder_rule.get("status", "ok"),
         "process_reminder": (
             "PR kierować do master (po poprawkach). Po jego squash kolejny etap "
             "zaczynać z aktualnego master, żeby nie powielać starej historii "
@@ -472,8 +501,12 @@ def package_champion(champion_json: Optional[str], out_dir: str,
     for a in artifacts:
         print(f"  [{a['storage']:>13}] {a['filename']:<32} sha256={a['sha256'][:16]}... "
               f"({a['size_bytes']} B)")
+    if package_manifest["decoder_status"] == "infeasible":
+        print("[PACKAGE] UWAGA: decoder_status=infeasible -- pakiet jest kompletny "
+              "(model wczytywalny i zweryfikowany), ale zaden (k,w) nie miesci "
+              "budzetu FA/h na val. Patrz decoder.json.")
 
-    return out_dir
+    return out_dir, package_manifest
 
 
 def main() -> None:
@@ -487,12 +520,16 @@ def main() -> None:
                     help="Nie odpalaj weryfikacji w czystym procesie po spakowaniu (odradzane).")
     args = ap.parse_args()
 
-    out_dir = package_champion(args.champion_json, args.out_dir, args.run_dir,
-                               args.checkpoint_path, args.device)
+    out_dir, package_manifest = package_champion(args.champion_json, args.out_dir, args.run_dir,
+                                                 args.checkpoint_path, args.device)
 
     if not args.skip_verify:
+        # Nazwa pliku na dysku to verify_package_champion.py (nie
+        # verify_champion_package.py) -- bez tej poprawki main() zawsze
+        # padał tu na FileNotFoundError przy domyślnym --skip-verify=False,
+        # bo subprocess.run dostawał ścieżkę do nieistniejącego pliku.
         verify_script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                     "verify_champion_package.py")
+                                     "verify_package_champion.py")
         print(f"\n[PACKAGE] Uruchamiam weryfikację w NOWYM procesie: {verify_script}")
         result = subprocess.run([sys.executable, verify_script, "--package-dir", out_dir])
         if result.returncode != 0:
@@ -504,6 +541,13 @@ def main() -> None:
     print("[PACKAGE] Pamiętaj: duże pliki (large_files_for_storage w package_manifest.json) "
           "NIE commitować do gita -- uzgodniony storage. PR do master, potem squash, "
           "kolejny etap z aktualnego master (M5 punkt 3).")
+
+    if package_manifest["decoder_status"] == "infeasible":
+        # Ten sam kod wyjscia co champion.py/continuous_eval.py (2, nie 0/1):
+        # pakiet jest zapisany i poprawny, ale operacyjnie infeasible przy
+        # obecnym budzecie FA/h -- caller (CI, skrypt) moze to odroznic od
+        # bledu pakowania (kod 1) bez parsowania stdout.
+        sys.exit(2)
 
 
 if __name__ == "__main__":

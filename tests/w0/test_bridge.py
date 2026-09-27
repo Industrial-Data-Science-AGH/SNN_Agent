@@ -5,7 +5,7 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from contracts.validation import fixture, validate
+from contracts.validation import content_hash, fixture, validate
 from rpi_agents.agent.api import ApiClient, Response, TransportError
 from rpi_agents.agent.bridge import Bridge
 from rpi_agents.agent.config import parse_config
@@ -68,10 +68,11 @@ class Hold(Data):
 
 class Rig:
     def __init__(self, tmp_path, client, **config):
+        manifest = client.app.state.demo_store.manifest
         data = {
             "device": {"id": "demo-pi", "input_kind": "replay"},
             "backend": {"url": "http://127.0.0.1:8000", "demo_scenario": "silence", "timeout_s": 5},
-            "session": {"mode": "demo", "model_hash": CREATE["model_hash"], "encoder_hash": CREATE["encoder_hash"]},
+            "session": {"mode": "demo", "model_hash": content_hash(manifest), "encoder_hash": manifest["encoder_hash"]},
             "serial": {"replay_file": "/unused", "channels": CHANNELS, "stall_s": 5.0},
             "state": {"dir": str(tmp_path)},
             "limits": {"heartbeat_s": 0.05, "command_poll_s": 0.05, "drain_s": 5.0},
@@ -501,7 +502,9 @@ def test_stopping_flushes_the_open_batch_and_stops_the_session(make_rig):
 
 def test_a_session_left_running_by_a_previous_process_is_stopped_first(make_rig):
     rig = make_rig()
-    old = rig.client.post("/v1/sessions?scenario=silence", json=CREATE, headers={"Idempotency-Key": "create-1"}).json()
+    manifest = rig.store.manifest
+    body = CREATE | {"model_hash": content_hash(manifest), "encoder_hash": manifest["encoder_hash"]}
+    old = rig.client.post("/v1/sessions?scenario=silence", json=body, headers={"Idempotency-Key": "create-1"}).json()
     rig.outbox.kv_set("session", '{"session_id": "%s", "epoch": %d}' % (old["session_id"], old["epoch"]))
     rig.make(Data(scenario("glass", 100))).run(threading.Event())
     states = {s["session_id"]: s["state"] for s in rig.sessions()}

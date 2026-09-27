@@ -1,0 +1,119 @@
+{
+    "status": "COMPLETED",
+    "git_sha": "d197ac85d774aefdbbf6198797366ed9a73932be",
+    "start_time": "2026-09-27T20:51:33.710154",
+    "hardware": {
+        "device": "cpu",
+        "workers": 16,
+        "benchmark_results_sec": {}
+    },
+    "execution_times_sec": {
+        "GA_search": 194.36,
+        "ext_eval_stage": 12.02,
+        "final_eval_stage": 1183.38,
+        "hardware_export": 0.02
+    },
+    "metrics": {
+        "ga_stage": {
+            "best_clip_f1": 0.6501955922865014,
+            "evaluated_candidates": 209,
+            "features_used": [
+                3,
+                4,
+                5
+            ],
+            "best_topology": {
+                "layers": [
+                    [
+                        [
+                            3,
+                            4
+                        ],
+                        [
+                            3,
+                            4,
+                            5
+                        ]
+                    ],
+                    [
+                        [
+                            0,
+                            1
+                        ],
+                        [
+                            0,
+                            1
+                        ]
+                    ],
+                    [
+                        [
+                            0,
+                            1
+                        ],
+                        [
+                            0,
+                            1
+                        ],
+                        [
+                            0,
+                            1
+                        ]
+                    ],
+                    [
+                        [
+                            0,
+                            1,
+                            2
+                        ]
+                    ]
+                ],
+                "total_neurons": 8,
+                "hidden_layers": 3,
+                "layer_sizes": [
+                    7,
+                    2,
+                    2,
+                    3,
+                    1
+                ]
+            }
+        },
+        "spikes_ext_eval": {
+            "n_features_used": 3,
+            "features_used": [
+                3,
+                4,
+                5
+            ],
+            "ext_clip_f1": 0.4197595884003742
+        },
+        "continuous_test": {
+            "dataset": "architecture_14_neurons_patryk_09_07/spikes_v2/test",
+            "test_clip_f1": 0.6706521739130434,
+            "val_clip_f1_median_of_5_seeds": 0.6231578947368421,
+            "winner_seeds": 5,
+            "decoder_k": 2,
+            "latency_sec": 1183.380479812622,
+            "checkpoint_path": "runs/run_20260927_205133/winner_checkpoint.pt",
+            "checkpoint_sha256": "a2e282920c43b0f73b917b42d1e8ba0c223545c66c54a8d7030242ca375b3633",
+            "seed": 42
+        },
+        "hardware_export": {
+            "pytorch_score": 0.6231578947368421,
+            "export_path": "runs/run_20260927_205133/hardware_export/hw_config.json",
+            "checkpoint_hash": "a2e282920c43b0f73b917b42d1e8ba0c223545c66c54a8d7030242ca375b3633",
+            "checkpoint_hash_verified_unchanged": true,
+            "source_commit": "d197ac85d774aefdbbf6198797366ed9a73932be",
+            "encoder_hash": "sha256:fec5ee948b16d578d073178a7f706865d28776a00b0b75b83d8c75cb7443f862",
+            "dataset_manifest_hash": {
+                "train": "e90e2fb63d9f8cb607b2d0716392ec70e21c94754aab14ff2440a0028acd35f9",
+                "val": "5d7e79c0ba2e7f8d14058d54a7eb9d07a1debe234c4ccc28c6a9d79ee16ffe28",
+                "test": "52cf2cffc4ed3a1c875b594924354a437910b09a4faf71b7f7ae2a44f031817b"
+            },
+            "lineage_source": "freeze_manifest.json",
+            "total_neurons": 8,
+            "hidden_layers": 3
+        }
+    },
+    "total_wall_time_sec": 1389.9
+}

@@ -47,70 +47,102 @@ def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
     log(f"[winner] plan: HAT 0..{hat_epochs-1}, QAT {hat_epochs}..{epochs-1}, "
             f"znaki zamrozone od {freeze_ep}")
     
+    # M3-fix (27.09.2026): quantize_ste (snn_hw_pipeline.py) zeruje kazda wage
+    # ponizej W_DEADZONE -- wiernie odtwarza trymer plytki Lu.i, wiec tego nie
+    # zmiekczamy. Ale HAT (float) nie ma zadnej presji, zeby trzymac wagi z
+    # dala od tej strefy, wiec u czesci seedow start kwantyzacji zeruje
+    # akurat krytyczna synapse i siec nigdy sie z tego nie podnosi: best w
+    # QAT zostaje dokladnie 0.0 (recall=0) az do konca patience. Zamiast
+    # czekac pelne patience=20 na martwym biegu i wpuszczac go do puli
+    # mediany tak jak zywy wynik, po krotkiej "grace" wychodzimy wczesniej i
+    # probujemy ten sam slot ponownie z innym sub-seedem (siec dalej ma pelne
+    # 60 epok/seed na wynik -- zmienia sie tylko, ile z tych probek naprawde
+    # cos wytrenowaly).
+    QAT_COLLAPSE_GRACE = 8
+    QAT_COLLAPSE_FLOOR = 1e-9
+    MAX_SEED_RETRIES = 2
+
     all_runs = []
 
     for seed_idx in range(seeds):
-        log(f"\n--- Trening Zwycięzcy: Seed {seed_idx + 1}/{seeds} ---")
-        torch_.manual_seed(seed_idx); np.random.seed(seed_idx)
+        attempt = 0
+        while True:
+            sub_seed = seed_idx if attempt == 0 else 1000 + seed_idx * 100 + attempt
+            label = f"{seed_idx + 1}/{seeds}" + (f" (retry {attempt}, sub-seed {sub_seed})" if attempt else "")
+            log(f"\n--- Trening Zwycięzcy: Seed {label} ---")
+            torch_.manual_seed(sub_seed); np.random.seed(sub_seed)
 
-        model = net.GenomeNet(genome, hw=None, quantize=False).to(dev)
-        opt = torch_.optim.Adam(model.parameters(), lr=lr)
-        sched = torch_.optim.lr_scheduler.CosineAnnealingLR(opt, epochs)
+            model = net.GenomeNet(genome, hw=None, quantize=False).to(dev)
+            opt = torch_.optim.Adam(model.parameters(), lr=lr)
+            sched = torch_.optim.lr_scheduler.CosineAnnealingLR(opt, epochs)
 
-        best, since, best_state, best_m = -1.0, 0, None, {}
-        for ep in range(epochs):
-            t0 = time.time()
-            phase = "HAT" if ep < hat_epochs else "QAT"
-            if ep == hat_epochs:
-                model.set_quantize(True)
-                best, since = -1.0, 0
-                log(f"[winner ep {ep}] start QAT: kwantyzacja on, reset best")
-            if ep == freeze_ep:
-                model.freeze_signs()
-                log(f"[winner ep {ep}] znaki wag zamrozone")
+            best, since, best_state, best_m = -1.0, 0, None, {}
+            collapsed = False
+            for ep in range(epochs):
+                t0 = time.time()
+                phase = "HAT" if ep < hat_epochs else "QAT"
+                if ep == hat_epochs:
+                    model.set_quantize(True)
+                    best, since = -1.0, 0
+                    log(f"[winner ep {ep}] start QAT: kwantyzacja on, reset best")
+                if ep == freeze_ep:
+                    model.freeze_signs()
+                    log(f"[winner ep {ep}] znaki wag zamrozone")
 
-            model.train(); model.set_mismatch(True)
-            loss_sum, nb = 0.0, 0
-            for x, y in dl_tr:
-                x, y = x.to(dev), y.to(dev)
-                loss, _ = net.genome_loss(model(x), y, pos_weight, k_ref=rf.k)
-                opt.zero_grad(); loss.backward()
-                nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                opt.step()
-                loss_sum += loss.item(); nb += 1
-            model.set_mismatch(False)
-            sched.step()
+                model.train(); model.set_mismatch(True)
+                loss_sum, nb = 0.0, 0
+                for x, y in dl_tr:
+                    x, y = x.to(dev), y.to(dev)
+                    loss, _ = net.genome_loss(model(x), y, pos_weight, k_ref=rf.k)
+                    opt.zero_grad(); loss.backward()
+                    nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                    opt.step()
+                    loss_sum += loss.item(); nb += 1
+                model.set_mismatch(False)
+                sched.step()
 
-            m = rf.eval_events(model, split="val")
-            current_score = m.get(select_metric, m.get("clip_f1", 0))
-            # DODANE: Jeśli wybraliśmy recall_fa, i jesteśmy w fazie QAT, 
-            # nadpisz score metryką strumieniową
-            if select_metric == "recall_fa" and phase == "QAT":
-                rec, _ = rf.stream_recall(model, genome)
-                m["recall_fa"] = rec  # Zapisujemy do słownika, by móc posortować
-                current_score = rec
+                m = rf.eval_events(model, split="val")
+                current_score = m.get(select_metric, m.get("clip_f1", 0))
+                # DODANE: Jeśli wybraliśmy recall_fa, i jesteśmy w fazie QAT,
+                # nadpisz score metryką strumieniową
+                if select_metric == "recall_fa" and phase == "QAT":
+                    rec, _ = rf.stream_recall(model, genome)
+                    m["recall_fa"] = rec  # Zapisujemy do słownika, by móc posortować
+                    current_score = rec
 
-            tag = ""
-            if current_score > best:
-                best, since, tag = current_score, 0, " *"
-                best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
-                best_m = m
-            else:
-                since += 1
+                tag = ""
+                if current_score > best:
+                    best, since, tag = current_score, 0, " *"
+                    best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+                    best_m = m
+                else:
+                    since += 1
 
-            # Ograniczenie spamu w konsoli (co 10 epok lub przy biciu rekordu)
-            if tag or ep % 10 == 0:
-                log(f"[winner ep {ep:3d} {phase}] loss {loss_sum/max(nb,1):.4f} "
-                    f"clipF1 {m['clip_f1']:.3f} AP {m['ap']:.3f} rec {m['clip_recall']:.3f} "
-                    f"FA {m['clip_fa_rate']:.3f} {time.time()-t0:.0f}s{tag}")
-                
-            if since >= patience and phase == "QAT":
-                log(f"[winner] early stop (QAT, brak poprawy {patience})")
-                break
+                # Ograniczenie spamu w konsoli (co 10 epok lub przy biciu rekordu)
+                if tag or ep % 10 == 0:
+                    log(f"[winner ep {ep:3d} {phase}] loss {loss_sum/max(nb,1):.4f} "
+                        f"clipF1 {m['clip_f1']:.3f} AP {m['ap']:.3f} rec {m['clip_recall']:.3f} "
+                        f"FA {m['clip_fa_rate']:.3f} {time.time()-t0:.0f}s{tag}")
+
+                since_qat = ep - hat_epochs
+                if phase == "QAT" and since_qat == QAT_COLLAPSE_GRACE and best <= QAT_COLLAPSE_FLOOR:
+                    collapsed = True
+                    verdict = "ostatnia próba, przyjmuję zapadnięty wynik" if attempt >= MAX_SEED_RETRIES else "ponawiam z innym sub-seedem"
+                    log(f"[winner] seed {label}: QAT zapadło się do zera po {QAT_COLLAPSE_GRACE} epokach ({verdict})")
+                    break
+
+                if since >= patience and phase == "QAT":
+                    log(f"[winner] early stop (QAT, brak poprawy {patience})")
+                    break
+
+            if collapsed and attempt < MAX_SEED_RETRIES:
+                attempt += 1
+                continue
+            break
 
         if best_state is not None:
             model.load_state_dict(best_state)
-        
+
         all_runs.append((model, best_state, best_m))
 
     all_runs.sort(key=lambda x: x[2].get(select_metric, x[2].get("clip_f1", 0)))

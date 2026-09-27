@@ -1,0 +1,374 @@
+{
+  "dt_s": 0.01,
+  "v_th": 1.0,
+  "channels": [
+    "peak",
+    "hjorth_mobility",
+    "autocorr_lag1",
+    "zcr",
+    "flux",
+    "hf_lo",
+    "hf_hi"
+  ],
+  "topology": {
+    "layers": [
+      [
+        [
+          3,
+          4
+        ],
+        [
+          3,
+          4,
+          5
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          0,
+          1,
+          2
+        ]
+      ]
+    ],
+    "total_neurons": 8,
+    "hidden_layers": 3,
+    "layer_sizes": [
+      7,
+      2,
+      2,
+      3,
+      1
+    ]
+  },
+  "boards": {
+    "L1n0": {
+      "tau_syn_ms": 43.8,
+      "tau_mem_ms": 223.7,
+      "v_leak": 0.2,
+      "led_bar_pct": 10.0,
+      "scale_k": 1.316,
+      "synapses": [
+        {
+          "port": "J1",
+          "from": "zcr",
+          "sign": "+",
+          "pot_pct": 13.2,
+          "w_sim": 0.16,
+          "pulses_to_fire_100Hz": 3
+        },
+        {
+          "port": "J2",
+          "from": "flux",
+          "sign": "+",
+          "pot_pct": 32.9,
+          "w_sim": 0.4,
+          "pulses_to_fire_100Hz": 2
+        }
+      ]
+    },
+    "L1n1": {
+      "tau_syn_ms": 65.2,
+      "tau_mem_ms": 728.9,
+      "v_leak": 0.69,
+      "led_bar_pct": 34.5,
+      "scale_k": 1.429,
+      "synapses": [
+        {
+          "port": "J1",
+          "from": "zcr",
+          "sign": "+",
+          "pot_pct": 0.0,
+          "w_sim": 0.0,
+          "pulses_to_fire_100Hz": null
+        },
+        {
+          "port": "J2",
+          "from": "flux",
+          "sign": "+",
+          "pot_pct": 28.6,
+          "w_sim": 0.32,
+          "pulses_to_fire_100Hz": 1
+        },
+        {
+          "port": "J3",
+          "from": "hf_lo",
+          "sign": "-",
+          "pot_pct": 100.0,
+          "w_sim": -1.12,
+          "pulses_to_fire_100Hz": 1
+        }
+      ]
+    },
+    "L2n0": {
+      "tau_syn_ms": 54.1,
+      "tau_mem_ms": 130.0,
+      "v_leak": 0.2,
+      "led_bar_pct": 10.0,
+      "scale_k": 1.016,
+      "synapses": [
+        {
+          "port": "J1",
+          "from": "L1n0",
+          "sign": "+",
+          "pot_pct": 25.4,
+          "w_sim": 0.4,
+          "pulses_to_fire_100Hz": 2
+        },
+        {
+          "port": "J2",
+          "from": "L1n1",
+          "sign": "-",
+          "pot_pct": 35.6,
+          "w_sim": -0.56,
+          "pulses_to_fire_100Hz": 2
+        }
+      ]
+    },
+    "L2n1": {
+      "tau_syn_ms": 58.5,
+      "tau_mem_ms": 687.0,
+      "v_leak": 0.288,
+      "led_bar_pct": 14.4,
+      "scale_k": 2.5,
+      "synapses": [
+        {
+          "port": "J1",
+          "from": "L1n0",
+          "sign": "-",
+          "pot_pct": 50.0,
+          "w_sim": -0.32,
+          "pulses_to_fire_100Hz": 1
+        },
+        {
+          "port": "J2",
+          "from": "L1n1",
+          "sign": "+",
+          "pot_pct": 100.0,
+          "w_sim": 0.64,
+          "pulses_to_fire_100Hz": 1
+        }
+      ]
+    },
+    "L3n0": {
+      "tau_syn_ms": 74.1,
+      "tau_mem_ms": 600.0,
+      "v_leak": 0.709,
+      "led_bar_pct": 35.5,
+      "scale_k": 1.333,
+      "synapses": [
+        {
+          "port": "J1",
+          "from": "L2n0",
+          "sign": "-",
+          "pot_pct": 100.0,
+          "w_sim": -1.2,
+          "pulses_to_fire_100Hz": 1
+        },
+        {
+          "port": "J2",
+          "from": "L2n1",
+          "sign": "+",
+          "pot_pct": 53.3,
+          "w_sim": 0.64,
+          "pulses_to_fire_100Hz": 1
+        }
+      ]
+    },
+    "L3n1": {
+      "tau_syn_ms": 21.6,
+      "tau_mem_ms": 198.1,
+      "v_leak": 0.2,
+      "led_bar_pct": 10.0,
+      "scale_k": 1.473,
+      "synapses": [
+        {
+          "port": "J1",
+          "from": "L2n0",
+          "sign": "+",
+          "pot_pct": 22.1,
+          "w_sim": 0.24,
+          "pulses_to_fire_100Hz": 2
+        },
+        {
+          "port": "J2",
+          "from": "L2n1",
+          "sign": "-",
+          "pot_pct": 29.5,
+          "w_sim": -0.32,
+          "pulses_to_fire_100Hz": 2
+        }
+      ]
+    },
+    "L3n2": {
+      "tau_syn_ms": 73.3,
+      "tau_mem_ms": 477.7,
+      "v_leak": 0.74,
+      "led_bar_pct": 37.0,
+      "scale_k": 1.0,
+      "synapses": [
+        {
+          "port": "J1",
+          "from": "L2n0",
+          "sign": "-",
+          "pot_pct": 100.0,
+          "w_sim": -1.6,
+          "pulses_to_fire_100Hz": 1
+        },
+        {
+          "port": "J2",
+          "from": "L2n1",
+          "sign": "+",
+          "pot_pct": 0.0,
+          "w_sim": 0.0,
+          "pulses_to_fire_100Hz": null
+        }
+      ]
+    },
+    "L4n0": {
+      "tau_syn_ms": 15.5,
+      "tau_mem_ms": 111.7,
+      "v_leak": 0.434,
+      "led_bar_pct": 21.7,
+      "scale_k": 1.429,
+      "synapses": [
+        {
+          "port": "J1",
+          "from": "L3n0",
+          "sign": "-",
+          "pot_pct": 100.0,
+          "w_sim": -1.12,
+          "pulses_to_fire_100Hz": 1
+        },
+        {
+          "port": "J2",
+          "from": "L3n1",
+          "sign": "+",
+          "pot_pct": 14.3,
+          "w_sim": 0.16,
+          "pulses_to_fire_100Hz": 3
+        },
+        {
+          "port": "J3",
+          "from": "L3n2",
+          "sign": "-",
+          "pot_pct": 14.3,
+          "w_sim": -0.16,
+          "pulses_to_fire_100Hz": 3
+        }
+      ]
+    }
+  },
+  "best_clip_f1": 0.6231578947368421,
+  "topology_manifest": {
+    "layers": [
+      [
+        [
+          3,
+          4
+        ],
+        [
+          3,
+          4,
+          5
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      [
+        [
+          0,
+          1,
+          2
+        ]
+      ]
+    ],
+    "total_neurons": 8,
+    "hidden_layers": 3,
+    "layer_sizes": [
+      7,
+      2,
+      2,
+      3,
+      1
+    ]
+  },
+  "source_commit": "d197ac85d774aefdbbf6198797366ed9a73932be",
+  "seed": 42,
+  "encoder_hash": "sha256:fec5ee948b16d578d073178a7f706865d28776a00b0b75b83d8c75cb7443f862",
+  "dataset_manifest_hash": {
+    "train": "e90e2fb63d9f8cb607b2d0716392ec70e21c94754aab14ff2440a0028acd35f9",
+    "val": "5d7e79c0ba2e7f8d14058d54a7eb9d07a1debe234c4ccc28c6a9d79ee16ffe28",
+    "test": "52cf2cffc4ed3a1c875b594924354a437910b09a4faf71b7f7ae2a44f031817b"
+  },
+  "lineage_source": "freeze_manifest.json",
+  "checkpoint_path": "runs/run_20260927_205133/winner_checkpoint.pt",
+  "checkpoint_hash": "a2e282920c43b0f73b917b42d1e8ba0c223545c66c54a8d7030242ca375b3633",
+  "decoder": {
+    "k": 2,
+    "note": ">= k spikow neuronu D w oknie = alarm (winner.tune_k)"
+  },
+  "units": {
+    "dt_s": "s",
+    "v_th": "V",
+    "tau_syn_ms": "ms",
+    "tau_mem_ms": "ms",
+    "v_leak": "V",
+    "led_bar_pct": "%",
+    "pot_pct": "% zakresu trymera",
+    "pulses_to_fire_100Hz": "liczba impulsow @ 100Hz drive"
+  },
+  "platform_validation": {
+    "uno_atmega328p": {
+      "status": "Estimated",
+      "source": "simavr (cycle-accurate simulator, nie fizyczny krzem)",
+      "note": "RAM/czas kompilacji NIE potwierdzone na fizycznym ATmega328P. Do zweryfikowania przez Kacpra, gdy będzie miał czas/dostęp do płytki. Nie blokuje M1 -- traktować jako otwarte ryzyko."
+    }
+  }
+}

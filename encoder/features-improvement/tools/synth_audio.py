@@ -35,8 +35,56 @@ def make(seconds=20.0, seed=0, bg_level=0.004):
     add(0.5, 0.12 * seg / seg.std() * env * 0.5)
     return np.clip(y, -1, 1).astype(np.float32)
 
+def make_k2_vector(seed=0, bg_level=0.004):
+    """Ustalony wektor dla K2 krok 2: cisza, impuls, sinus, nagla zmiana amplitudy, szklo
+    (w tej kolejnosci, jako jeden ciagly plik). Nie zastepuje realnych nagran ESC-50 -
+    to synteza specjalnie pod te 5 przypadkow z opisu zadania, ktorych brakowalo w make()."""
+    rng = np.random.default_rng(seed)
+    segments = []
+
+    def seg(seconds):
+        n = int(seconds * SR)
+        return np.zeros(n, dtype=np.float64), n
+
+    # 1) cisza: tylko szum kwantyzacji ADC, bez zadnego sygnalu
+    y, n = seg(2.0)
+    y += 1e-4 * rng.normal(size=n)
+    segments.append(y)
+
+    # 2) impuls: pojedynczy szerokopasmowy klik ~5ms (nie 'szklo' - bez rezonansow), potem cisza
+    y, n = seg(1.0)
+    tt = np.arange(int(0.005 * SR)) / SR
+    click = _bp(rng.normal(size=len(tt)), 500, 15000) * np.exp(-tt / 0.001)
+    click = 0.6 * click / (np.abs(click).max() + 1e-9)
+    y[: len(click)] += click
+    segments.append(y)
+
+    # 3) sinus: ton ciagly 1 kHz przez 2s (bez obwiedni/zaniku, w odroznieniu od 'dudnienia' w make())
+    n = int(2.0 * SR)
+    tt = np.arange(n) / SR
+    segments.append(0.2 * np.sin(2 * np.pi * 1000 * tt))
+
+    # 4) nagla zmiana amplitudy: skok do stalego, glosnego poziomu bez narastania (test DC/floor trackera)
+    y, n = seg(1.0)
+    y[:] = bg_level * 20
+    y += bg_level * 2 * rng.normal(size=n)
+    segments.append(y)
+
+    # 5) szklo: ten sam ksztalt transientu co w make(), jedno zdarzenie
+    y, n = seg(1.5)
+    tt = np.arange(int(1.2 * SR)) / SR
+    burst = _bp(rng.normal(size=len(tt)), 3500, 12000) * np.exp(-tt / 0.18)
+    ring = sum(np.sin(2 * np.pi * f * tt) * np.exp(-tt / d) for f, d in ((4300, .25), (6100, .18), (8800, .12)))
+    y[: len(tt)] += 0.30 * burst / (burst.std() + 1e-9) * 0.25 + 0.10 * ring
+    segments.append(y)
+
+    out = np.concatenate(segments)
+    return np.clip(out, -1, 1).astype(np.float32)
+
+
 if __name__ == "__main__":
     import sys
     out = sys.argv[1] if len(sys.argv) > 1 else "synth.wav"
-    sf.write(out, make(), SR)
+    which = sys.argv[2] if len(sys.argv) > 2 else "base"
+    sf.write(out, make_k2_vector() if which == "k2" else make(), SR)
     print("zapisano", out)

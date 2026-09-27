@@ -242,6 +242,11 @@ ISR(ADC_vect) {
   int16_t s = (x >= 0) ? 1 : -1;
   if (s != prev_sign) { acc_zc++; prev_sign = s; }
 
+    // uwaga: frame_ready to pojedynczy latch - gdy loop() nie zdąży przed kolejnym hopem,
+  // n_samp rośnie dalej i kolejne próbki ADC wchodzą do TEJ SAMEJ ramki (n > HOP_SAMPLES).
+  // To zamierzone: firmware zgłasza to jako "spóźnioną"/scaloną ramkę (patrz bench late/sn_max),
+  // a bridge W1 raportuje to jako dropped_events, nie ukrywa (test_merged_frame_is_reported_as_degraded_not_hidden,
+  // tests/w0/test_batching.py, n=384). Nie buforować/nie odrzucać próbek tutaj - to zmieniłoby kontrakt.
   if (++n_samp >= HOP_SAMPLES) frame_ready = true;
 #if ENC_ISR_PIN
   PORTB &= ~_BV(1);         // D9 nisko

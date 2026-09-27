@@ -14,7 +14,7 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from contracts.validation import fixture
+from contracts.validation import content_hash, fixture
 from rpi_agents.agent.api import ApiClient, Response
 from rpi_agents.agent.bridge import Bridge
 from rpi_agents.agent.config import parse_config
@@ -33,7 +33,6 @@ from tests.w0.fakes import FakeNotifier, FakeVision, make_jpeg
 from tests.w0.test_bridge import Hold, wait_for
 
 CHANNELS = [c["channel"] for c in fixture("model-manifest")["encoder_profile"]["channel_map"]]
-CREATE = fixture("session-create")
 GLASS = Observation(True, True, "good", "Broken glass and a person near the window.")
 
 
@@ -99,7 +98,7 @@ class System:
         config = parse_config({
             "device": {"id": "demo-pi", "input_kind": "replay"},
             "backend": {"url": "http://127.0.0.1:8000", "timeout_s": 5},
-            "session": {"mode": "demo", "model_hash": CREATE["model_hash"], "encoder_hash": CREATE["encoder_hash"]},
+            "session": {"mode": "demo", "model_hash": content_hash(env.manifest), "encoder_hash": env.manifest["encoder_hash"]},
             "serial": {"replay_file": "/unused", "channels": CHANNELS, "stall_s": 5.0},
             "images": {"upload": True}, "state": {"dir": str(tmp_path)},
             "limits": {"heartbeat_s": 0.2, "command_poll_s": 0.05, "drain_s": 5.0},

@@ -40,7 +40,7 @@
  *    KAŻDEGO klasycznego AVR z tym samym ADC (Uno/Nano włącznie, nie tylko Mega) --
  *    jeśli fizyczne Uno było kiedyś testowane z prescaler=32, miało ten sam błąd 2x.
  *
- *  9. (27.09.2026) Alarm LED+buzzer na płytce enkodera (D9/D10), sterowane komendą
+ *  9. (27.09.2026) Alarm LED+buzzer na płytce enkodera (D9/D13), sterowane komendą
  *     serialową 'A' z Pi/hosta ('A<ms>\n', ms opcjonalny, domyślnie ALARM_MS).
  *     Wcześniej LED wisiała na GPIO Raspberry Pi, sterowana zdalnym SSH z mostu --
  *     to działało, ale dodawało kabel Pi->dioda i latencję rzędu sekund. Teraz Pi
@@ -71,9 +71,13 @@ enum Ch { CH_PEAK = 0, CH_PEAKCNT, CH_CV, CH_ZCR, CH_FLUX, CH_HFLO, CH_HFHI };
 // Piny wyjściowe: kanał c -> PULSE_PINS[c] (D2..D8). Ten sam kod działa na Uno i Mega.
 static const uint8_t PULSE_PINS[N_CH] = {2, 3, 4, 5, 6, 7, 8};
 
-// Alarm LED+buzzer -- D9/D10, wolne na obu płytkach (D2..D8 = kanały, D0/D1 = UART).
+// Alarm LED+buzzer -- D9/D13 (27.09.2026: dopasowane do realnego okablowania Wiktora
+// na MH-ET Tiny; D13 dzieli się z wbudowaną LED płytki -- nieszkodliwe, kosmetyczne).
+// D6 (kanał 4, flux) był pierwotnie planowany pod diodę, ale jest zajęty przez
+// PULSE_PINS -- dioda migałaby razem z impulsami spike'owymi tego kanału, nie z
+// prawdziwym alarmem, więc D9 zamiast D6.
 #define LED_PIN      9
-#define BUZZER_PIN   10
+#define BUZZER_PIN   13
 #define BUZZER_HZ    2000    // ton syczący, dobrze słyszalny na małych piezo
 #define ALARM_MS     1500UL  // domyślny czas trwania, gdy 'A' przyjdzie bez argumentu
 

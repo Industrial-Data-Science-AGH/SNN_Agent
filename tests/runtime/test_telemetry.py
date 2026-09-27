@@ -74,12 +74,12 @@ def test_reading_telemetry_does_not_move_the_simulation(lui8, stream, make_batch
     assert second["frame_seq"] == first["frame_seq"] + 1
 
 
-def test_pausing_the_view_leaves_the_stream_running(lui8, stream, make_batch):
+def test_pausing_the_view_leaves_the_stream_running(lui8, stream, make_batch, grid):
     """Nobody has to call snapshot() for the decisions to keep coming."""
     runtime = started(lui8)
     for first in range(0, 100, 10):
         runtime.step(make_batch(stream, first, 10, seq=first // 10))
-    assert runtime.source_time_us == 100 * lui8["runtime"]["dt_us"]
+    assert runtime.source_time_us == grid(100)
     assert runtime.snapshot()["frame_seq"] == 0  # first frame anyone asked for
 
 
@@ -110,8 +110,13 @@ def test_a_hole_in_the_input_is_reported_once_and_not_as_silence(lui8, stream, m
     # starts at 90, which is a real hole in the audio and not quiet audio.
     runtime.step(make_batch(stream, 90, 10, seq=9))
 
-    assert runtime.snapshot()["status"] == "gap"
-    assert runtime.snapshot()["status"] != "gap"  # announced once, to somebody
+    # Two separate snapshots on purpose: the first one to look after the hole
+    # carries the announcement, and taking it consumes the flag. Reading these
+    # as one contradictory assertion is an easy mistake, hence the names.
+    first_after_the_hole = runtime.snapshot()
+    the_one_after_that = runtime.snapshot()
+    assert first_after_the_hole["status"] == "gap"
+    assert the_one_after_that["status"] != "gap"
 
 
 def test_a_stopped_session_says_stopped(lui8, stream, make_batch):
@@ -252,3 +257,27 @@ def test_inhibition_can_drive_a_potential_below_reset(lui8):
 
     values = [n["v_mem"] for f in build(lui8, frames=200, every_us=50_000, density=0.25, seed=1) for n in f["neurons"]]
     assert min(values) < 0
+
+
+def test_frame_seq_counts_frames_sent_not_frames_taken(lui8, stream, make_batch):
+    """TELEMETRY.md promises a continuous sequence, so thinning cannot hole it.
+
+    The snapshot counter cannot serve that promise: the feed drops frames, so
+    reusing it would hand the viewer gaps in `frame_seq` that mean nothing.
+    A hole there is how a viewer detects it lost frames, so it has to be real.
+    """
+    from snn_runtime.telemetry import TelemetryFeed
+
+    runtime = started(lui8)
+    feed = TelemetryFeed(min_interval_us=250_000)
+
+    sent = []
+    for first in range(0, 200, 5):
+        runtime.step(make_batch(stream, first, 5, seq=first // 5))
+        frame = feed.offer(runtime.snapshot())
+        if frame is not None:
+            sent.append(frame)
+
+    assert feed.skipped > 0, "nothing was thinned, so the test proves nothing"
+    assert [f["frame_seq"] for f in sent] == list(range(len(sent)))
+    assert feed.sent == len(sent)

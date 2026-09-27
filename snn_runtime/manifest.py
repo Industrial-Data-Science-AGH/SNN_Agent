@@ -36,6 +36,7 @@ from .units import (
     DT_TOLERANCE_FRACTION,
     KNOWN_INTEGRATORS,
     SCRIPTED_INTEGRATOR,
+    FrameGrid,
     frame_period_us,
 )
 
@@ -77,6 +78,7 @@ class LoadedModel:
     model_hash: str
     encoder_hash: str
     dt_us: int
+    grid: FrameGrid
     integrator: str
     potential_unit: str
     calibration: str
@@ -326,6 +328,10 @@ def load_manifest(
         model_hash=content_hash(manifest),
         encoder_hash=manifest["encoder_hash"],
         dt_us=dt_us,
+        grid=FrameGrid(
+            sample_rate_hz=manifest["encoder_profile"]["sample_rate_hz"],
+            hop_samples=manifest["encoder_profile"]["hop_samples"],
+        ),
         integrator=integrator,
         potential_unit=manifest["runtime"]["potential_unit"],
         calibration=calibration,

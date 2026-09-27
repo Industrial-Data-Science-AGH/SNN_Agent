@@ -38,6 +38,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from contracts.validation import ContractError, fixture
+from rpi_agents.cloud.app.demo_frames import ensure_neuron_frames
 
 _APP_DIR = Path(__file__).parent
 _TEMPLATES_DIR = _APP_DIR / "templates"
@@ -85,7 +86,7 @@ def demo_fixture(name: str) -> JSONResponse:
     return JSONResponse({"schema_version": "1.0", "demo": True, "fixture": name, "data": data})
 
 
-# --------------------------------------------------------------------------- dev harness
+# dev harness
 
 
 def create_dashboard_app() -> FastAPI:
@@ -95,6 +96,7 @@ def create_dashboard_app() -> FastAPI:
     hardware or SNN inference. In production the dashboard ``router`` is mounted
     into Wiktor's backend, which supplies the real ``/auth`` and ``/v1`` routes.
     """
+    ensure_neuron_frames()  # generate the golden demo replay if it isn't on disk
     app = FastAPI(title="SNN Lab dashboard — DEV harness", version="0.9.0")
 
     @app.exception_handler(ContractError)
@@ -107,7 +109,7 @@ def create_dashboard_app() -> FastAPI:
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
     app.include_router(router)
 
-    # ---- demo sign-in stub (same contract as api.py, no real data) ----------
+    #  demo sign-in stub (same contract as api.py, no real data) 
 
     def _authenticated(request: Request) -> bool:
         return request.cookies.get(_DEMO_COOKIE) == "demo-session"

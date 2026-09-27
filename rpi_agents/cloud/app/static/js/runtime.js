@@ -13,6 +13,17 @@
 
 const STALE_MS = 3000;
 const MAX_BUFFER = 2000; // bounded live buffer — old frames are dropped, memory stays flat
+const SCHEMA = "1.0";
+
+// A frame's time in seconds. The contract carries source_time_us; the demo
+// golden replay also carries a convenience `t`. Live frames get `t` computed
+// relative to the first frame so the axis starts at 0.
+function frameSeconds(frame) {
+  if (frame == null) return 0;
+  if (typeof frame.t === "number") return frame.t;
+  if (typeof frame.source_time_us === "number") return frame.source_time_us / 1e6;
+  return 0;
+}
 
 class Emitter {
   constructor() { this._h = {}; }
@@ -53,7 +64,7 @@ class DemoRuntime extends Emitter {
   }
 
   get currentFrame() { return this.frames[this.index] || null; }
-  get currentTime() { return this.currentFrame ? this.currentFrame.t : 0; }
+  get currentTime() { return frameSeconds(this.currentFrame); }
   framesUpTo(index = this.index) { return this.frames.slice(0, index + 1); }
 
   _tick() {
@@ -122,16 +133,26 @@ class LiveRuntime extends Emitter {
     this._es = null;
     this._staleTimer = null;
     this._retry = null;
+    // binding + ordering guards — established from the first accepted frame
+    this._boundSession = null;
+    this._boundEpoch = null;
+    this._lastSeq = -Infinity;
+    this._t0 = null;
   }
 
   async load() {
-    // Meta is learned from the first frame; sensible defaults until then.
-    this.meta = { potential_unit: "a.u.", v_threshold: 1, v_reset: 0, neuron_ids: [], calibration: { status: "unverified", label: "Unverified" }, frameCount: 0, demo: false };
+    // Meta is learned from frames. Thresholds are PER NEURON in the contract,
+    // so nothing global is assumed here (null → read each neuron's own value).
+    this.meta = {
+      potential_unit: "a.u.", v_threshold: null, v_reset: null,
+      neuron_ids: [], calibration: { status: "unverified", label: "Unverified" },
+      frameCount: 0, demo: false,
+    };
     return this.meta;
   }
 
   get currentFrame() { return this.frames[this.index] || null; }
-  get currentTime() { return this.currentFrame ? (this.currentFrame.t ?? 0) : 0; }
+  get currentTime() { return frameSeconds(this.currentFrame); }
   framesUpTo(index = this.index) { return this.frames.slice(0, index + 1); }
 
   _connect() {
@@ -147,15 +168,38 @@ class LiveRuntime extends Emitter {
     this._es.onerror = () => { this._es?.close(); this._scheduleReconnect(); };
   }
 
+  // Accept a frame only if it belongs to this session/epoch, has the right
+  // schema and is not out of order. Rejected frames never touch the buffer.
+  _accept(frame) {
+    if (!frame || frame.schema_version !== SCHEMA) return false;
+    if (this._boundSession == null) {
+      this._boundSession = frame.session_id ?? null;
+      this._boundEpoch = frame.epoch ?? null;
+    } else if (frame.session_id !== this._boundSession || frame.epoch !== this._boundEpoch) {
+      return false; // frame from another session/epoch — do not splice it in
+    }
+    if (typeof frame.frame_seq === "number") {
+      if (frame.frame_seq <= this._lastSeq) return false; // stale / duplicate
+      this._lastSeq = frame.frame_seq;
+    }
+    return true;
+  }
+
   _onFrame(e) {
     let frame;
     try { frame = JSON.parse(e.data); } catch { return; } // data only, no eval
+    if (!this._accept(frame)) return;
+
+    // normalise time to seconds from the first accepted frame
+    if (this._t0 == null) this._t0 = frame.source_time_us ?? 0;
+    frame.t = ((frame.source_time_us ?? 0) - this._t0) / 1e6;
+
     this.frames.push(frame);
     if (this.frames.length > MAX_BUFFER) this.frames.splice(0, this.frames.length - MAX_BUFFER);
     this.index = this.frames.length - 1;
     if (this.meta && frame.neurons) this.meta.neuron_ids = frame.neurons.map((n) => n.neuron_id);
     this.emit("frame", frame, this.index);
-    this.emit("status", "connected");
+    this.emit("status", frame.status === "gap" ? "stale" : "connected");
     clearTimeout(this._staleTimer);
     this._staleTimer = setTimeout(() => this.emit("status", "stale"), STALE_MS);
   }

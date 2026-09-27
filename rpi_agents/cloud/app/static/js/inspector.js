@@ -91,9 +91,12 @@ export function mountInspector(container, runtime, editor) {
 
   function drawVmem(chart) {
     const frames = runtime.framesUpTo();
+    const tOf = (f) => (typeof f.t === "number" ? f.t : (f.source_time_us ?? 0) / 1e6);
     let series = frames.map((f) => {
       const n = f.neurons.find((x) => x.neuron_id === neuronId);
-      return { t: f.t ?? 0, v: n ? n.v_mem : 0, spiked: n?.spiked };
+      // null v_mem = no reading (gap / packet without physics) — kept as null,
+      // never coerced to 0, and drawn as a break in the line.
+      return { t: tOf(f), v: n && n.v_mem != null ? n.v_mem : null, spiked: n?.spiked };
     });
     if (series.length > MAX_POINTS) {
       // keep every k-th point, but never drop a spike
@@ -101,10 +104,13 @@ export function mountInspector(container, runtime, editor) {
       series = series.filter((p, i) => i % k === 0 || p.spiked);
     }
     const meta = runtime.meta || {};
+    // threshold/reset are PER NEURON — read the selected neuron's own values.
+    const cur = runtime.currentFrame?.neurons?.find((x) => x.neuron_id === neuronId);
+    const vth = cur?.v_threshold ?? meta.v_threshold ?? 1;
     const dur = meta.duration_s || (series.length ? series[series.length - 1].t : 1) || 1;
-    const vth = meta.v_threshold ?? 1;
-    let lo = Math.min(vth, ...series.map((p) => p.v));
-    let hi = Math.max(vth, ...series.map((p) => p.v));
+    const vals = series.map((p) => p.v).filter((v) => v != null);
+    let lo = Math.min(vth, ...(vals.length ? vals : [vth]));
+    let hi = Math.max(vth, ...(vals.length ? vals : [vth]));
     if (!isFinite(lo)) { lo = 0; hi = 1; }
     const pad = (hi - lo) * 0.15 || 0.2;
     lo -= pad; hi += pad;
@@ -130,11 +136,15 @@ export function mountInspector(container, runtime, editor) {
     }
     // threshold
     chart.append(s("line", { x1: PL, y1: Y(vth), x2: PL + xw, y2: Y(vth), class: "vmem-thresh" }));
-    // vmem line
-    if (series.length) {
-      const d = series.map((p, i) => `${i ? "L" : "M"} ${X(p.t).toFixed(1)} ${Y(p.v).toFixed(1)}`).join(" ");
-      chart.append(s("path", { d, class: "vmem-line" }));
+    // vmem line — breaks at null (no reading), so gaps are visible, not faked
+    let d = "";
+    let pen = false;
+    for (const p of series) {
+      if (p.v == null) { pen = false; continue; }
+      d += `${pen ? "L" : "M"} ${X(p.t).toFixed(1)} ${Y(p.v).toFixed(1)} `;
+      pen = true;
     }
+    if (d) chart.append(s("path", { d: d.trim(), class: "vmem-line" }));
     // spike ticks
     for (const p of series) if (p.spiked) {
       chart.append(s("line", { x1: X(p.t), y1: PT + yh - 10, x2: X(p.t), y2: PT + yh, class: "vmem-spike" }));

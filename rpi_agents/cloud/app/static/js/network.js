@@ -341,17 +341,20 @@ export async function mountNetworkEditor(container, { readonly = false } = {}) {
     for (const n of frame.neurons) {
       const g = gBoards.querySelector(`.board[data-id="${n.neuron_id}"]`);
       if (!g) continue;
-      const vth = n.v_threshold ?? 1;
-      const vr = n.v_reset ?? 0;
-      const level = clamp((n.v_mem - vr) / (vth - vr || 1), 0, 1);
       const core = g.querySelector(".led-potential .led-core");
       const glow = g.querySelector(".led-potential .led-glow");
-      if (core) {
-        // lerp dim -> bright orange by membrane level
-        core.setAttribute("fill", level > 0.98 ? "#ffd089" : "#7a5230");
-        core.style.fill = mixOrange(level);
+      // v_mem: null means "no reading" (packet without physics / gap) — show a
+      // neutral LED, never a bright/zero value that would fake a measurement.
+      if (n.v_mem == null) {
+        if (core) { core.setAttribute("fill", "#3a2d5c"); core.style.fill = "#3a2d5c"; }
+        if (glow) glow.setAttribute("opacity", "0.08");
+      } else {
+        const vth = n.v_threshold ?? 1;
+        const vr = n.v_reset ?? 0;
+        const level = clamp((n.v_mem - vr) / (vth - vr || 1), 0, 1);
+        if (core) core.style.fill = mixOrange(level);
+        if (glow) glow.setAttribute("opacity", (0.12 + level * 0.5).toFixed(3));
       }
-      if (glow) glow.setAttribute("opacity", (0.12 + level * 0.5).toFixed(3));
       if (n.spiked) flashSpike(g);
     }
   }

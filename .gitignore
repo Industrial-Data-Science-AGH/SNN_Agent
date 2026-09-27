@@ -62,3 +62,6 @@ architecture_14_neurons_patryk_09_07/spikes_v*/
 .venv-w0/
 .pytest_cache/
 .ruff_cache/
+
+# Dashboard: generated golden demo replay (derived, not committed)
+rpi_agents/cloud/app/static/demo/neuron-frames.json

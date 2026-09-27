@@ -1,0 +1,88 @@
+{
+  "protocol_schema_version": "1.0",
+  "milestone": "M1 punkt 3 -- macierz porownan SNN symulowane / Lu.i fizyczne / Uno FFT",
+  "created": "2026-09-25",
+  "author": "Marcel",
+  "status": "DRAFT -- szkielet protokolu, wymaga uzupelnienia realnych identyfikatorow i pomiarow w M3/M4",
+
+  "principle": "Wszystkie trzy backendy oceniane na IDENTYCZNYCH strumieniach wejsciowych (te same pliki/klipy, ta sama kolejnosc zdarzen), ale KAZDY ma WLASNA, oddzielna granice energii -- nie porownujemy do jednego wspolnego budzetu, bo fizyka platform jest rozna (analogowe plytki Lu.i vs mikrokontroler Uno vs symulacja PyTorch bez realnego poboru mocy).",
+
+  "streams": {
+    "identical_across_backends": true,
+    "source_dataset": "TODO: wskazac dokladny continuous manifest Kacpra (ten sam, ktorego uzyje M4)",
+    "encoder_hash": "TODO: wkleic zamrozony encoder_hash z K1, gdy profile_id/encoder_variant zostana ostatecznie potwierdzone",
+    "lineage_fields_required": ["source", "group_id", "kind"],
+    "note": "Zero overlap ze zbiorem train/val/test uzytym w GA (M1 punkt 1) -- to osobny, ciagly strumien do oceny end-to-end, nie do selekcji modelu."
+  },
+
+  "backends": {
+    "snn_simulated": {
+      "opis": "GenomeNet w PyTorch -- ten sam model, ktory przeszedl trening w run_final_evaluation_stage / run_hardware_export_stage",
+      "artefakt_zrodlowy": "manifest.json z run-a pipeline.py (topology_manifest + wagi)",
+      "energy_model": {
+        "status": "Estimated",
+        "metoda": "szacunek analityczny (liczba spike'ow / operacji), NIE pomiar fizycznego poboru pradu -- symulacja nie ma wlasnego zasilania"
+      },
+      "wynik_funkcjonalny": {
+        "status": "Measured",
+        "zrodlo": "eval_events() na splicie test, run_final_evaluation_stage (patrz poprawka M1 punkt 2)"
+      }
+    },
+
+    "lui_physical": {
+      "opis": "Fizyczne plytki Lu.i z nastawami trymerow wyeksportowanymi przez run_hardware_export_stage (hw_config.json)",
+      "artefakt_zrodlowy": "hardware_export/hw_config.json",
+      "energy_model": {
+        "status": "Missing",
+        "metoda_docelowa": "pomiar multimetrem/INA219: P_idle, P_active, energia przyrostowa na zdarzenie, napiecie zasilania",
+        "wlasny_budzet_energii": "TODO -- do ustalenia z Patrykiem/Andrzejem po pierwszym pomiarze fizycznym"
+      },
+      "wynik_funkcjonalny": {
+        "status": "Missing",
+        "uwaga": "Wymaga rekalibracji trymerow na plytce wg hw_config.json przed pomiarem -- procedura Fazy C"
+      }
+    },
+
+    "uno_fft": {
+      "opis": "Alternatywna implementacja bazowa (FFT) na Arduino Uno / ATmega328P, bez SNN -- punkt odniesienia",
+      "energy_model": {
+        "status": "Estimated",
+        "zrodlo": "hardware_export/hw_config.json -> platform_validation.uno_atmega328p (simavr, nie fizyczny krzem)",
+        "wlasny_budzet_energii": "TODO -- do ustalenia po realnym pomiarze na krzemie"
+      },
+      "wynik_funkcjonalny": {
+        "status": "Missing",
+        "uwaga": "Wymaga faktycznej implementacji FFT-baseline na strumieniu identycznym jak dla SNN"
+      }
+    }
+  },
+
+  "metrics_compared": [
+    "event_recall",
+    "fa_per_hour",
+    "false_alarm_count",
+    "background_time_s",
+    "one_to_one_matching",
+    "onset_latency_ms",
+    "p_idle_mW",
+    "p_active_mW",
+    "energy_per_event_mJ"
+  ],
+
+  "runs_still_needed": [
+    {
+      "for": "Andrzej",
+      "run": "Lu.i physical -- pomiar P_idle/P_active na fizycznej plytce (multimetr/INA219) na strumieniu z sekcji 'streams' powyzej, po rekalibracji wg hw_config.json"
+    },
+    {
+      "for": "Andrzej",
+      "run": "Uno FFT -- zbudowanie baseline'u FFT i pomiar tego samego strumienia na fizycznym Uno (RAM/czas + energia)"
+    },
+    {
+      "for": "Kacper",
+      "run": "Dostarczenie continuous manifest (protokol budowy) uzywanego identycznie przez wszystkie trzy backendy -- patrz 'streams.source_dataset'"
+    }
+  ],
+
+  "acceptance_note": "Ta macierz jest SZKIELETEM protokolu (M1 punkt 3), nie wynikiem koncowym -- rzeczywiste pomiary/wypelnienie 'Missing' pol nastepuja w M3 (kontrolowany trening) i M4 (ocena ciaglego strumienia)."
+}

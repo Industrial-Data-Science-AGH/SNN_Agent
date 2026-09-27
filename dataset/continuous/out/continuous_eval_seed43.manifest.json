@@ -1,0 +1,2181 @@
+{
+  "manifest_schema_version": "1.1.0",
+  "generator_version": "1.1.0",
+  "generated_utc": "2026-09-26T08:13:10+00:00",
+  "seed": 43,
+  "git_commit": "f041db6a",
+  "audio": {
+    "path": "continuous_eval_seed43.wav",
+    "sha256": "3311cb7c2f255167bc7cf2b18ac56de66dce3848020416a92bfa55f3155143df",
+    "sample_rate": 44100,
+    "channels": 1,
+    "subtype": "PCM_16",
+    "duration_s": 600.0
+  },
+  "config": {
+    "glassbreak_mode": "clean",
+    "min_gap_s": 10.0,
+    "end_margin_s": 10.0,
+    "warmup_s": 30.0,
+    "warmup_excluded_from_fa": true,
+    "event_gain_db_range": [
+      -3.0,
+      3.0
+    ],
+    "background_gain_db": -5.664,
+    "background_dirs": [
+      "data/ESC-50-master/audio"
+    ],
+    "glass_audio_root": "dataset/clean/audio",
+    "glass_allowed_stems_file": "dataset/clean/target/synthetic_target_test.txt",
+    "overlap_check": {
+      "glass": {
+        "dataset/clean/source/synthetic_source_training.txt": [],
+        "dataset/clean/source/synthetic_source_validation.txt": []
+      },
+      "background": {
+        "dataset/versions/v2.0.0/manifest.csv": [
+          "esc50_1_100038",
+          "esc50_1_101336",
+          "esc50_1_103298",
+          "esc50_1_115521",
+          "esc50_1_115545",
+          "esc50_1_181071",
+          "esc50_1_21896",
+          "esc50_1_23094",
+          "esc50_1_23996",
+          "esc50_1_24796",
+          "esc50_1_25777",
+          "esc50_1_260640",
+          "esc50_1_26188",
+          "esc50_1_27166",
+          "esc50_1_30214",
+          "esc50_1_31251",
+          "esc50_1_39901",
+          "esc50_1_40154",
+          "esc50_1_40967",
+          "esc50_1_42139",
+          "esc50_1_46040",
+          "esc50_1_47923",
+          "esc50_1_51805",
+          "esc50_1_53444",
+          "esc50_1_53467",
+          "esc50_1_54505",
+          "esc50_1_56380",
+          "esc50_1_58923",
+          "esc50_1_60997",
+          "esc50_1_62509",
+          "esc50_1_67152",
+          "esc50_1_79113",
+          "esc50_1_7974",
+          "esc50_1_81001",
+          "esc50_1_81269",
+          "esc50_2_102414",
+          "esc50_2_102567",
+          "esc50_2_102581",
+          "esc50_2_102852",
+          "esc50_2_104105",
+          "esc50_2_106015",
+          "esc50_2_108767",
+          "esc50_2_109371",
+          "esc50_2_110417",
+          "esc50_2_118072",
+          "esc50_2_118104",
+          "esc50_2_132157",
+          "esc50_2_138465",
+          "esc50_2_151079",
+          "esc50_2_188822",
+          "esc50_2_209477",
+          "esc50_2_262579",
+          "esc50_2_30322",
+          "esc50_2_37806",
+          "esc50_2_39441",
+          "esc50_2_52085",
+          "esc50_2_57191",
+          "esc50_2_65484",
+          "esc50_2_69131",
+          "esc50_2_70367",
+          "esc50_2_73544",
+          "esc50_2_86160",
+          "esc50_2_87799",
+          "esc50_2_93030",
+          "esc50_3_102583",
+          "esc50_3_103401",
+          "esc50_3_103599",
+          "esc50_3_104761",
+          "esc50_3_108451",
+          "esc50_3_115387",
+          "esc50_3_119120",
+          "esc50_3_124376",
+          "esc50_3_125418",
+          "esc50_3_138212",
+          "esc50_3_144253",
+          "esc50_3_144259",
+          "esc50_3_145719",
+          "esc50_3_145774",
+          "esc50_3_146697",
+          "esc50_3_147343",
+          "esc50_3_148932",
+          "esc50_3_149465",
+          "esc50_3_151206",
+          "esc50_3_151557",
+          "esc50_3_153057",
+          "esc50_3_154781",
+          "esc50_3_159347",
+          "esc50_3_160993",
+          "esc50_3_166546",
+          "esc50_3_170002",
+          "esc50_3_171041",
+          "esc50_3_180147",
+          "esc50_3_94343",
+          "esc50_3_97909",
+          "esc50_4_119648",
+          "esc50_4_133674",
+          "esc50_4_143118",
+          "esc50_4_144083",
+          "esc50_4_156827",
+          "esc50_4_156993",
+          "esc50_4_160036",
+          "esc50_4_164064",
+          "esc50_4_164859",
+          "esc50_4_165791",
+          "esc50_4_167077",
+          "esc50_4_168155",
+          "esc50_4_171519",
+          "esc50_4_171652",
+          "esc50_4_172366",
+          "esc50_4_172500",
+          "esc50_4_178402",
+          "esc50_4_181286",
+          "esc50_4_181362",
+          "esc50_4_182613",
+          "esc50_4_185575",
+          "esc50_4_186962",
+          "esc50_4_187384",
+          "esc50_4_191246",
+          "esc50_4_193480",
+          "esc50_4_194711",
+          "esc50_4_194754",
+          "esc50_4_195497",
+          "esc50_4_205526",
+          "esc50_4_210000",
+          "esc50_4_210593",
+          "esc50_4_212604",
+          "esc50_4_213193",
+          "esc50_4_213915",
+          "esc50_4_80761",
+          "esc50_4_99644",
+          "esc50_5_156026",
+          "esc50_5_156999",
+          "esc50_5_157204",
+          "esc50_5_172299",
+          "esc50_5_177614",
+          "esc50_5_179868",
+          "esc50_5_187444",
+          "esc50_5_189237",
+          "esc50_5_189795",
+          "esc50_5_191497",
+          "esc50_5_197118",
+          "esc50_5_197121",
+          "esc50_5_200461",
+          "esc50_5_201194",
+          "esc50_5_201274",
+          "esc50_5_202220",
+          "esc50_5_209698",
+          "esc50_5_213802",
+          "esc50_5_214759",
+          "esc50_5_215179",
+          "esc50_5_215449",
+          "esc50_5_218196",
+          "esc50_5_221518",
+          "esc50_5_221593",
+          "esc50_5_223099",
+          "esc50_5_234145",
+          "esc50_5_234923",
+          "esc50_5_235593",
+          "esc50_5_253101",
+          "esc50_5_259180",
+          "esc50_5_260164",
+          "esc50_5_263491",
+          "esc50_5_61635"
+        ]
+      }
+    }
+  },
+  "events": [
+    {
+      "index": 0,
+      "start_s": 101.953414,
+      "end_s": 102.893414,
+      "duration_s": 0.94,
+      "source_stem": "synthetic_153",
+      "source_start_s": 32.36,
+      "source_end_s": 33.3,
+      "is_contaminated": false,
+      "overlapping_labels": [],
+      "gain_db": -1.88
+    },
+    {
+      "index": 1,
+      "start_s": 131.692025,
+      "end_s": 132.452025,
+      "duration_s": 0.76,
+      "source_stem": "synthetic_172",
+      "source_start_s": 14.52,
+      "source_end_s": 15.28,
+      "is_contaminated": false,
+      "overlapping_labels": [],
+      "gain_db": 0.476
+    },
+    {
+      "index": 2,
+      "start_s": 181.974155,
+      "end_s": 183.114155,
+      "duration_s": 1.14,
+      "source_stem": "synthetic_143",
+      "source_start_s": 42.04,
+      "source_end_s": 43.18,
+      "is_contaminated": false,
+      "overlapping_labels": [],
+      "gain_db": -2.619
+    },
+    {
+      "index": 3,
+      "start_s": 246.38169,
+      "end_s": 247.04169,
+      "duration_s": 0.66,
+      "source_stem": "synthetic_181",
+      "source_start_s": 33.1,
+      "source_end_s": 33.76,
+      "is_contaminated": false,
+      "overlapping_labels": [],
+      "gain_db": -2.006
+    },
+    {
+      "index": 4,
+      "start_s": 576.716267,
+      "end_s": 577.816267,
+      "duration_s": 1.1,
+      "source_stem": "synthetic_193",
+      "source_start_s": 28.96,
+      "source_end_s": 30.06,
+      "is_contaminated": false,
+      "overlapping_labels": [],
+      "gain_db": -2.632
+    }
+  ],
+  "background_segments": [
+    {
+      "path": "data/ESC-50-master/audio/4-210000-A-23.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_4_210000",
+      "stream_start_s": 0.0,
+      "stream_end_s": 3.136712
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-102581-B-29.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_102581",
+      "stream_start_s": 3.136712,
+      "stream_end_s": 7.871995
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-24796-A-47.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_24796",
+      "stream_start_s": 7.871995,
+      "stream_end_s": 8.959388
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-26188-A-30.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_26188",
+      "stream_start_s": 8.959388,
+      "stream_end_s": 8.978095
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-25777-A-48.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_25777",
+      "stream_start_s": 8.978095,
+      "stream_end_s": 10.011882
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-156907-A-15.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_156907",
+      "stream_start_s": 10.011882,
+      "stream_end_s": 13.5978
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-103599-B-25.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_103599",
+      "stream_start_s": 13.5978,
+      "stream_end_s": 16.512585
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-260640-C-2.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_1_260640",
+      "stream_start_s": 16.512585,
+      "stream_end_s": 18.91161
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-53467-A-47.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_53467",
+      "stream_start_s": 18.91161,
+      "stream_end_s": 19.715079
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-30214-A-18.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_1_30214",
+      "stream_start_s": 19.715079,
+      "stream_end_s": 23.804467
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-173865-A-9.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_4_173865",
+      "stream_start_s": 23.804467,
+      "stream_end_s": 27.910612
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-156026-C-4.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_5_156026",
+      "stream_start_s": 27.910612,
+      "stream_end_s": 31.92254
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-127990-A-2.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_5_127990",
+      "stream_start_s": 31.92254,
+      "stream_end_s": 32.981837
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-96950-A-9.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_1_96950",
+      "stream_start_s": 32.981837,
+      "stream_end_s": 34.997642
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-152895-A-31.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_152895",
+      "stream_start_s": 34.997642,
+      "stream_end_s": 38.861655
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-157611-B-41.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_157611",
+      "stream_start_s": 38.861655,
+      "stream_end_s": 41.322404
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-68630-B-40.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_68630",
+      "stream_start_s": 41.322404,
+      "stream_end_s": 44.946463
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-170015-A-0.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_3_170015",
+      "stream_start_s": 44.946463,
+      "stream_end_s": 47.446984
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-209698-A-38.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_5_209698",
+      "stream_start_s": 47.446984,
+      "stream_end_s": 49.302494
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-253101-B-49.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_253101",
+      "stream_start_s": 49.302494,
+      "stream_end_s": 54.028118
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-191246-B-7.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_4_191246",
+      "stream_start_s": 54.028118,
+      "stream_end_s": 58.435057
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-157204-B-16.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_5_157204",
+      "stream_start_s": 58.435057,
+      "stream_end_s": 62.459819
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-223099-B-32.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_223099",
+      "stream_start_s": 62.459819,
+      "stream_end_s": 65.444036
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-103298-A-9.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_1_103298",
+      "stream_start_s": 65.444036,
+      "stream_end_s": 66.916145
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-133674-A-26.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_4_133674",
+      "stream_start_s": 66.916145,
+      "stream_end_s": 69.076395
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-23094-A-15.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_23094",
+      "stream_start_s": 69.076395,
+      "stream_end_s": 71.340295
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-186962-A-44.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_186962",
+      "stream_start_s": 71.340295,
+      "stream_end_s": 73.080113
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-189237-A-12.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_5_189237",
+      "stream_start_s": 73.080113,
+      "stream_end_s": 76.735828
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-165823-B-41.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_165823",
+      "stream_start_s": 76.735828,
+      "stream_end_s": 78.075329
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-60997-A-20.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_1_60997",
+      "stream_start_s": 78.075329,
+      "stream_end_s": 81.526871
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-143118-A-7.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_4_143118",
+      "stream_start_s": 81.526871,
+      "stream_end_s": 84.159274
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-27166-A-35.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_1_27166",
+      "stream_start_s": 84.159274,
+      "stream_end_s": 85.659478
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-51170-A-18.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_1_51170",
+      "stream_start_s": 85.659478,
+      "stream_end_s": 87.396417
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-164593-A-15.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_164593",
+      "stream_start_s": 87.396417,
+      "stream_end_s": 90.034036
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-195497-B-11.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_4_195497",
+      "stream_start_s": 90.034036,
+      "stream_end_s": 93.072653
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-179868-A-43.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_179868",
+      "stream_start_s": 93.072653,
+      "stream_end_s": 95.601247
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-165791-B-45.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_165791",
+      "stream_start_s": 95.601247,
+      "stream_end_s": 95.768798
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-115387-A-47.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_115387",
+      "stream_start_s": 95.768798,
+      "stream_end_s": 98.345896
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-147343-A-34.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_147343",
+      "stream_start_s": 98.345896,
+      "stream_end_s": 100.595828
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-221593-A-21.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_5_221593",
+      "stream_start_s": 100.595828,
+      "stream_end_s": 100.656757
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-144083-A-16.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_4_144083",
+      "stream_start_s": 100.656757,
+      "stream_end_s": 102.586259
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-188822-D-40.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_188822",
+      "stream_start_s": 102.586259,
+      "stream_end_s": 106.273084
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-213915-C-3.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_4_213915",
+      "stream_start_s": 106.273084,
+      "stream_end_s": 110.669229
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-180147-A-30.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_180147",
+      "stream_start_s": 110.669229,
+      "stream_end_s": 113.285805
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-103401-B-33.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_103401",
+      "stream_start_s": 113.285805,
+      "stream_end_s": 114.949365
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-47819-B-5.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_1_47819",
+      "stream_start_s": 114.949365,
+      "stream_end_s": 116.160567
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-188287-A-9.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_4_188287",
+      "stream_start_s": 116.160567,
+      "stream_end_s": 118.740544
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-149294-A-41.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_149294",
+      "stream_start_s": 118.740544,
+      "stream_end_s": 120.425102
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-200461-B-11.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_5_200461",
+      "stream_start_s": 120.425102,
+      "stream_end_s": 121.293855
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-191497-A-33.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_191497",
+      "stream_start_s": 121.293855,
+      "stream_end_s": 122.077574
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-138212-A-45.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_138212",
+      "stream_start_s": 122.077574,
+      "stream_end_s": 123.733129
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-262957-A-22.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_262957",
+      "stream_start_s": 123.733129,
+      "stream_end_s": 127.647075
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-215449-A-47.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_215449",
+      "stream_start_s": 127.647075,
+      "stream_end_s": 128.886485
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-43806-A-42.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_43806",
+      "stream_start_s": 128.886485,
+      "stream_end_s": 131.992562
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-201194-A-38.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_5_201194",
+      "stream_start_s": 131.992562,
+      "stream_end_s": 133.765578
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-177957-B-40.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_177957",
+      "stream_start_s": 133.765578,
+      "stream_end_s": 136.464558
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-197121-A-45.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_197121",
+      "stream_start_s": 136.464558,
+      "stream_end_s": 141.297778
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-151557-A-28.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_3_151557",
+      "stream_start_s": 141.297778,
+      "stream_end_s": 141.976259
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-70939-A-42.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_70939",
+      "stream_start_s": 141.976259,
+      "stream_end_s": 144.90644
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-108760-B-14.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_2_108760",
+      "stream_start_s": 144.90644,
+      "stream_end_s": 148.606961
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-193480-B-40.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_193480",
+      "stream_start_s": 148.606961,
+      "stream_end_s": 150.803537
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-22694-B-20.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_1_22694",
+      "stream_start_s": 150.803537,
+      "stream_end_s": 154.985125
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-102852-A-11.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_2_102852",
+      "stream_start_s": 154.985125,
+      "stream_end_s": 156.107755
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-166661-A-10.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_4_166661",
+      "stream_start_s": 156.107755,
+      "stream_end_s": 159.622154
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-202220-A-21.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_5_202220",
+      "stream_start_s": 159.622154,
+      "stream_end_s": 163.813878
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-253094-A-49.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_253094",
+      "stream_start_s": 163.813878,
+      "stream_end_s": 167.826122
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-180453-A-17.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_4_180453",
+      "stream_start_s": 167.826122,
+      "stream_end_s": 171.370998
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-67152-A-17.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_1_67152",
+      "stream_start_s": 171.370998,
+      "stream_end_s": 172.983946
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-30322-A-12.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_2_30322",
+      "stream_start_s": 172.983946,
+      "stream_end_s": 175.098345
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-51805-B-33.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_51805",
+      "stream_start_s": 175.098345,
+      "stream_end_s": 179.020091
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-115521-A-19.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_115521",
+      "stream_start_s": 179.020091,
+      "stream_end_s": 183.905624
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-153388-A-31.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_153388",
+      "stream_start_s": 183.905624,
+      "stream_end_s": 187.43068
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-137-A-32.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_137",
+      "stream_start_s": 187.43068,
+      "stream_end_s": 189.938526
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-171652-A-44.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_171652",
+      "stream_start_s": 189.938526,
+      "stream_end_s": 193.537664
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-62509-A-45.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_62509",
+      "stream_start_s": 193.537664,
+      "stream_end_s": 195.968639
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-211527-A-20.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_1_211527",
+      "stream_start_s": 195.968639,
+      "stream_end_s": 197.890476
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-7974-B-49.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_7974",
+      "stream_start_s": 197.890476,
+      "stream_end_s": 197.975533
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-81269-A-3.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_1_81269",
+      "stream_start_s": 197.975533,
+      "stream_end_s": 198.139206
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-171519-A-21.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_4_171519",
+      "stream_start_s": 198.139206,
+      "stream_end_s": 200.422086
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-187444-A-33.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_187444",
+      "stream_start_s": 200.422086,
+      "stream_end_s": 201.257755
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-213193-A-29.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_213193",
+      "stream_start_s": 201.257755,
+      "stream_end_s": 203.328753
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-100038-A-14.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_1_100038",
+      "stream_start_s": 203.328753,
+      "stream_end_s": 207.16898
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-182613-B-11.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_4_182613",
+      "stream_start_s": 207.16898,
+      "stream_end_s": 209.448594
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-194754-A-0.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_4_194754",
+      "stream_start_s": 209.448594,
+      "stream_end_s": 209.964898
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-208624-A-38.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_5_208624",
+      "stream_start_s": 209.964898,
+      "stream_end_s": 214.283492
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-73544-A-27.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_73544",
+      "stream_start_s": 214.283492,
+      "stream_end_s": 214.67619
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-172734-A-36.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_4_172734",
+      "stream_start_s": 214.67619,
+      "stream_end_s": 217.714739
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-171041-A-38.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_3_171041",
+      "stream_start_s": 217.714739,
+      "stream_end_s": 219.719705
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-115545-C-48.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_115545",
+      "stream_start_s": 219.719705,
+      "stream_end_s": 220.306893
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-117330-A-28.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_2_117330",
+      "stream_start_s": 220.306893,
+      "stream_end_s": 225.09322
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-262579-A-45.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_262579",
+      "stream_start_s": 225.09322,
+      "stream_end_s": 225.256259
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-213802-A-12.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_5_213802",
+      "stream_start_s": 225.256259,
+      "stream_end_s": 226.842698
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-110417-A-28.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_2_110417",
+      "stream_start_s": 226.842698,
+      "stream_end_s": 228.9861
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-53444-A-28.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_1_53444",
+      "stream_start_s": 228.9861,
+      "stream_end_s": 233.748073
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-93030-A-21.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_2_93030",
+      "stream_start_s": 233.748073,
+      "stream_end_s": 235.308889
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-86160-A-27.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_86160",
+      "stream_start_s": 235.308889,
+      "stream_end_s": 237.533016
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-214759-B-5.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_5_214759",
+      "stream_start_s": 237.533016,
+      "stream_end_s": 239.382041
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-99644-A-4.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_4_99644",
+      "stream_start_s": 239.382041,
+      "stream_end_s": 243.406825
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-156993-A-19.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_156993",
+      "stream_start_s": 243.406825,
+      "stream_end_s": 246.795646
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-70367-A-33.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_70367",
+      "stream_start_s": 246.795646,
+      "stream_end_s": 250.655057
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-69131-A-5.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_2_69131",
+      "stream_start_s": 250.655057,
+      "stream_end_s": 254.059955
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-146033-A-13.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_3_146033",
+      "stream_start_s": 254.059955,
+      "stream_end_s": 258.256939
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-170002-A-34.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_170002",
+      "stream_start_s": 258.256939,
+      "stream_end_s": 259.174739
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-23996-A-35.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_1_23996",
+      "stream_start_s": 259.174739,
+      "stream_end_s": 262.223016
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-259180-A-15.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_259180",
+      "stream_start_s": 262.223016,
+      "stream_end_s": 266.206621
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-87799-A-24.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_2_87799",
+      "stream_start_s": 266.206621,
+      "stream_end_s": 270.847959
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-119120-C-48.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_119120",
+      "stream_start_s": 270.847959,
+      "stream_end_s": 271.866961
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-125418-A-24.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_3_125418",
+      "stream_start_s": 271.866961,
+      "stream_end_s": 271.991134
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-204352-B-13.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_5_204352",
+      "stream_start_s": 271.991134,
+      "stream_end_s": 275.230431
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-151079-A-20.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_2_151079",
+      "stream_start_s": 275.230431,
+      "stream_end_s": 277.652494
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-119120-B-48.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_119120",
+      "stream_start_s": 277.652494,
+      "stream_end_s": 280.57966
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-32579-A-29.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_32579",
+      "stream_start_s": 280.57966,
+      "stream_end_s": 283.112993
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-160036-B-33.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_160036",
+      "stream_start_s": 283.112993,
+      "stream_end_s": 287.051746
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-108451-B-17.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_3_108451",
+      "stream_start_s": 287.051746,
+      "stream_end_s": 290.834739
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-168155-A-15.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_168155",
+      "stream_start_s": 290.834739,
+      "stream_end_s": 293.695782
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-159347-A-36.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_3_159347",
+      "stream_start_s": 293.695782,
+      "stream_end_s": 294.817506
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-118072-A-0.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_2_118072",
+      "stream_start_s": 294.817506,
+      "stream_end_s": 298.560249
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-246513-A-16.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_3_246513",
+      "stream_start_s": 298.560249,
+      "stream_end_s": 299.548413
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-80761-A-42.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_80761",
+      "stream_start_s": 299.548413,
+      "stream_end_s": 301.516916
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-215179-A-13.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_5_215179",
+      "stream_start_s": 301.516916,
+      "stream_end_s": 303.410816
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-100024-B-27.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_100024",
+      "stream_start_s": 303.410816,
+      "stream_end_s": 305.991837
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-52085-A-4.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_2_52085",
+      "stream_start_s": 305.991837,
+      "stream_end_s": 310.959569
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-68630-A-40.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_68630",
+      "stream_start_s": 310.959569,
+      "stream_end_s": 315.89619
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-182368-A-12.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_4_182368",
+      "stream_start_s": 315.89619,
+      "stream_end_s": 316.147392
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-198600-A-45.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_198600",
+      "stream_start_s": 316.147392,
+      "stream_end_s": 318.546553
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-107120-A-33.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_107120",
+      "stream_start_s": 318.546553,
+      "stream_end_s": 323.127029
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-156999-B-19.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_156999",
+      "stream_start_s": 323.127029,
+      "stream_end_s": 324.440499
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-36164-B-26.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_1_36164",
+      "stream_start_s": 324.440499,
+      "stream_end_s": 325.96839
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-106015-A-44.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_106015",
+      "stream_start_s": 325.96839,
+      "stream_end_s": 329.093583
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-209477-A-25.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_209477",
+      "stream_start_s": 329.093583,
+      "stream_end_s": 334.029751
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-210309-A-31.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_210309",
+      "stream_start_s": 334.029751,
+      "stream_end_s": 334.733311
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-103599-A-25.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_103599",
+      "stream_start_s": 334.733311,
+      "stream_end_s": 337.597302
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-75190-A-8.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_1_75190",
+      "stream_start_s": 337.597302,
+      "stream_end_s": 339.582132
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-54505-A-21.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_1_54505",
+      "stream_start_s": 339.582132,
+      "stream_end_s": 343.196417
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-17585-A-7.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_1_17585",
+      "stream_start_s": 343.196417,
+      "stream_end_s": 343.28059
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-54958-A-10.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_1_54958",
+      "stream_start_s": 343.28059,
+      "stream_end_s": 347.30517
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-69422-A-3.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_1_69422",
+      "stream_start_s": 347.30517,
+      "stream_end_s": 347.776621
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-212604-A-15.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_212604",
+      "stream_start_s": 347.776621,
+      "stream_end_s": 351.715102
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-212728-A-34.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_212728",
+      "stream_start_s": 351.715102,
+      "stream_end_s": 353.297188
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-58923-B-27.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_58923",
+      "stream_start_s": 353.297188,
+      "stream_end_s": 355.82941
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-104105-A-19.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_104105",
+      "stream_start_s": 355.82941,
+      "stream_end_s": 356.401361
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-154781-A-32.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_154781",
+      "stream_start_s": 356.401361,
+      "stream_end_s": 360.959637
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-145774-A-12.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_3_145774",
+      "stream_start_s": 360.959637,
+      "stream_end_s": 363.982336
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-235593-A-23.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_5_235593",
+      "stream_start_s": 363.982336,
+      "stream_end_s": 368.052585
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-194711-A-38.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_4_194711",
+      "stream_start_s": 368.052585,
+      "stream_end_s": 372.532925
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-47923-A-28.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_1_47923",
+      "stream_start_s": 372.532925,
+      "stream_end_s": 375.234943
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-166546-B-34.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_166546",
+      "stream_start_s": 375.234943,
+      "stream_end_s": 376.528753
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-40967-A-28.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_1_40967",
+      "stream_start_s": 376.528753,
+      "stream_end_s": 380.513424
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-185575-B-20.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_4_185575",
+      "stream_start_s": 380.513424,
+      "stream_end_s": 384.129456
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-138465-A-43.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_138465",
+      "stream_start_s": 384.129456,
+      "stream_end_s": 386.202948
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-207681-A-24.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_5_207681",
+      "stream_start_s": 386.202948,
+      "stream_end_s": 387.647664
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-161303-B-5.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_4_161303",
+      "stream_start_s": 387.647664,
+      "stream_end_s": 390.3922
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-223810-A-35.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_5_223810",
+      "stream_start_s": 390.3922,
+      "stream_end_s": 393.227778
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-151206-A-23.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_3_151206",
+      "stream_start_s": 393.227778,
+      "stream_end_s": 397.259184
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-65484-A-18.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_2_65484",
+      "stream_start_s": 397.259184,
+      "stream_end_s": 398.754422
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-181362-A-13.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_4_181362",
+      "stream_start_s": 398.754422,
+      "stream_end_s": 403.207732
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-102567-C-35.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_2_102567",
+      "stream_start_s": 403.207732,
+      "stream_end_s": 406.213288
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-171653-A-41.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_171653",
+      "stream_start_s": 406.213288,
+      "stream_end_s": 409.069274
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-57191-A-46.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_57191",
+      "stream_start_s": 409.069274,
+      "stream_end_s": 410.97068
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-81001-B-30.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_81001",
+      "stream_start_s": 410.97068,
+      "stream_end_s": 414.733175
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-61635-A-8.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_5_61635",
+      "stream_start_s": 414.733175,
+      "stream_end_s": 417.51059
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-21896-A-35.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_1_21896",
+      "stream_start_s": 417.51059,
+      "stream_end_s": 421.456848
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-39441-A-19.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_39441",
+      "stream_start_s": 421.456848,
+      "stream_end_s": 423.131429
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-40154-A-46.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_40154",
+      "stream_start_s": 423.131429,
+      "stream_end_s": 425.288367
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-164064-A-1.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_4_164064",
+      "stream_start_s": 425.288367,
+      "stream_end_s": 428.38805
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-234923-A-32.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_234923",
+      "stream_start_s": 428.38805,
+      "stream_end_s": 428.472517
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-187384-A-34.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_187384",
+      "stream_start_s": 428.472517,
+      "stream_end_s": 429.249932
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-101336-A-30.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_101336",
+      "stream_start_s": 429.249932,
+      "stream_end_s": 430.85898
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-119648-B-48.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_119648",
+      "stream_start_s": 430.85898,
+      "stream_end_s": 431.414898
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-218196-A-27.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_218196",
+      "stream_start_s": 431.414898,
+      "stream_end_s": 435.48068
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-201274-A-21.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_5_201274",
+      "stream_start_s": 435.48068,
+      "stream_end_s": 440.012857
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-144253-A-29.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_144253",
+      "stream_start_s": 440.012857,
+      "stream_end_s": 442.68542
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-39901-A-11.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_1_39901",
+      "stream_start_s": 442.68542,
+      "stream_end_s": 443.053084
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-110417-B-28.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_2_110417",
+      "stream_start_s": 443.053084,
+      "stream_end_s": 447.33424
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-187284-A-30.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_187284",
+      "stream_start_s": 447.33424,
+      "stream_end_s": 448.935034
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-153057-A-43.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_153057",
+      "stream_start_s": 448.935034,
+      "stream_end_s": 449.316553
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-149465-A-22.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_149465",
+      "stream_start_s": 449.316553,
+      "stream_end_s": 450.271451
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-79113-A-5.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_1_79113",
+      "stream_start_s": 450.271451,
+      "stream_end_s": 450.810998
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-156827-A-46.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_156827",
+      "stream_start_s": 450.810998,
+      "stream_end_s": 451.124626
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-167077-A-20.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_4_167077",
+      "stream_start_s": 451.124626,
+      "stream_end_s": 452.148549
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-260164-A-23.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_5_260164",
+      "stream_start_s": 452.148549,
+      "stream_end_s": 454.005351
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-124564-A-15.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_124564",
+      "stream_start_s": 454.005351,
+      "stream_end_s": 454.686372
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-234145-A-28.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_5_234145",
+      "stream_start_s": 454.686372,
+      "stream_end_s": 458.449025
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-78651-A-44.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_78651",
+      "stream_start_s": 458.449025,
+      "stream_end_s": 458.655034
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-132816-A-26.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_4_132816",
+      "stream_start_s": 458.655034,
+      "stream_end_s": 462.069705
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-257839-A-14.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_5_257839",
+      "stream_start_s": 462.069705,
+      "stream_end_s": 462.637959
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-43802-A-42.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_43802",
+      "stream_start_s": 462.637959,
+      "stream_end_s": 463.799138
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-123086-A-28.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_3_123086",
+      "stream_start_s": 463.799138,
+      "stream_end_s": 468.049569
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-63871-A-10.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_1_63871",
+      "stream_start_s": 468.049569,
+      "stream_end_s": 469.641542
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-42139-A-38.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_1_42139",
+      "stream_start_s": 469.641542,
+      "stream_end_s": 472.831088
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-144259-A-29.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_144259",
+      "stream_start_s": 472.831088,
+      "stream_end_s": 474.333265
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-139958-A-37.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_139958",
+      "stream_start_s": 474.333265,
+      "stream_end_s": 476.00356
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-155801-A-11.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_2_155801",
+      "stream_start_s": 476.00356,
+      "stream_end_s": 479.237642
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-84393-A-32.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_84393",
+      "stream_start_s": 479.237642,
+      "stream_end_s": 480.563651
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-160993-A-3.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_3_160993",
+      "stream_start_s": 480.563651,
+      "stream_end_s": 485.112154
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-120218-A-30.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_120218",
+      "stream_start_s": 485.112154,
+      "stream_end_s": 486.541247
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-155570-A-32.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_155570",
+      "stream_start_s": 486.541247,
+      "stream_end_s": 490.14966
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-177614-A-5.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_5_177614",
+      "stream_start_s": 490.14966,
+      "stream_end_s": 493.049796
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-103428-A-3.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_2_103428",
+      "stream_start_s": 493.049796,
+      "stream_end_s": 494.314286
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-31251-A-6.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_1_31251",
+      "stream_start_s": 494.314286,
+      "stream_end_s": 499.094308
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-133989-B-42.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_133989",
+      "stream_start_s": 499.094308,
+      "stream_end_s": 499.778095
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-102583-B-49.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_102583",
+      "stream_start_s": 499.778095,
+      "stream_end_s": 503.404875
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-221518-A-21.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_5_221518",
+      "stream_start_s": 503.404875,
+      "stream_end_s": 504.38678
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-172500-C-27.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_172500",
+      "stream_start_s": 504.38678,
+      "stream_end_s": 505.366599
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-97909-A-49.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_97909",
+      "stream_start_s": 505.366599,
+      "stream_end_s": 508.503968
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-189795-A-4.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_5_189795",
+      "stream_start_s": 508.503968,
+      "stream_end_s": 511.889728
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-132157-A-11.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_2_132157",
+      "stream_start_s": 511.889728,
+      "stream_end_s": 516.403651
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-196660-B-8.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_1_196660",
+      "stream_start_s": 516.403651,
+      "stream_end_s": 517.510544
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-46040-A-14.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_1_46040",
+      "stream_start_s": 517.510544,
+      "stream_end_s": 519.082971
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-104761-A-7.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_3_104761",
+      "stream_start_s": 519.082971,
+      "stream_end_s": 523.839615
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-102414-B-17.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_2_102414",
+      "stream_start_s": 523.839615,
+      "stream_end_s": 525.220204
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-109371-C-16.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_2_109371",
+      "stream_start_s": 525.220204,
+      "stream_end_s": 529.33644
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-164859-A-1.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_4_164859",
+      "stream_start_s": 529.33644,
+      "stream_end_s": 531.94
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-197118-A-45.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_197118",
+      "stream_start_s": 531.94,
+      "stream_end_s": 534.993311
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-26806-A-1.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_1_26806",
+      "stream_start_s": 534.993311,
+      "stream_end_s": 538.835147
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-146697-A-43.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_146697",
+      "stream_start_s": 538.835147,
+      "stream_end_s": 539.90873
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-124376-A-3.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_3_124376",
+      "stream_start_s": 539.90873,
+      "stream_end_s": 541.895125
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-108767-C-9.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_2_108767",
+      "stream_start_s": 541.895125,
+      "stream_end_s": 545.357596
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-178402-A-43.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_178402",
+      "stream_start_s": 545.357596,
+      "stream_end_s": 547.137075
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-181286-A-10.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_4_181286",
+      "stream_start_s": 547.137075,
+      "stream_end_s": 551.701179
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-205526-A-23.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_4_205526",
+      "stream_start_s": 551.701179,
+      "stream_end_s": 553.797415
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-117630-A-25.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_117630",
+      "stream_start_s": 553.797415,
+      "stream_end_s": 557.363288
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-56380-A-5.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_1_56380",
+      "stream_start_s": 557.363288,
+      "stream_end_s": 561.807392
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-187201-A-4.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_5_187201",
+      "stream_start_s": 561.807392,
+      "stream_end_s": 565.215964
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-94343-A-25.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_94343",
+      "stream_start_s": 565.215964,
+      "stream_end_s": 569.618186
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-213293-A-23.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_5_213293",
+      "stream_start_s": 569.618186,
+      "stream_end_s": 573.666327
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-137296-A-16.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_1_137296",
+      "stream_start_s": 573.666327,
+      "stream_end_s": 574.327914
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-210593-A-29.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_210593",
+      "stream_start_s": 574.327914,
+      "stream_end_s": 575.540884
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-118104-A-21.wav",
+      "source": "ESC-50",
+      "kind": "speech",
+      "group_id": "esc50_2_118104",
+      "stream_start_s": 575.540884,
+      "stream_end_s": 577.725986
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-172299-A-5.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_5_172299",
+      "stream_start_s": 577.725986,
+      "stream_end_s": 579.664739
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-263491-A-25.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_5_263491",
+      "stream_start_s": 579.664739,
+      "stream_end_s": 581.171383
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-18527-B-44.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_18527",
+      "stream_start_s": 581.171383,
+      "stream_end_s": 581.791995
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-145719-A-17.wav",
+      "source": "ESC-50",
+      "kind": "stationary",
+      "group_id": "esc50_3_145719",
+      "stream_start_s": 581.791995,
+      "stream_end_s": 583.341791
+    },
+    {
+      "path": "data/ESC-50-master/audio/3-148932-A-34.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_3_148932",
+      "stream_start_s": 583.341791,
+      "stream_end_s": 585.566576
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-78381-A-46.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_78381",
+      "stream_start_s": 585.566576,
+      "stream_end_s": 587.247868
+    },
+    {
+      "path": "data/ESC-50-master/audio/1-181071-B-40.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_1_181071",
+      "stream_start_s": 587.247868,
+      "stream_end_s": 591.723515
+    },
+    {
+      "path": "data/ESC-50-master/audio/4-172366-A-37.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_4_172366",
+      "stream_start_s": 591.723515,
+      "stream_end_s": 594.715941
+    },
+    {
+      "path": "data/ESC-50-master/audio/5-213836-C-9.wav",
+      "source": "ESC-50",
+      "kind": "animal",
+      "group_id": "esc50_5_213836",
+      "stream_start_s": 594.715941,
+      "stream_end_s": 598.113651
+    },
+    {
+      "path": "data/ESC-50-master/audio/2-37806-C-40.wav",
+      "source": "ESC-50",
+      "kind": "loud_event",
+      "group_id": "esc50_2_37806",
+      "stream_start_s": 598.113651,
+      "stream_end_s": 600.0
+    }
+  ]
+}

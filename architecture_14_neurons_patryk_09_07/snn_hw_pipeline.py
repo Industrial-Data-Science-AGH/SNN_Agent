@@ -57,11 +57,11 @@ SIGMA_TAU_HW = 0.10                   # tolerancja RC / odczyt τ z Fazy A (mno�
 SIGMA_VLEAK_HW = 0.02 * V_TH          # pasek LED ma skończoną rozdzielczość
 
 # v3: 7 kanałów (crest wymieniona na hf_lo + hf_hi — patrz encoder_twin.py)
-CHANNELS = ["peak", "peak_cnt", "cv", "zcr", "flux", "hf_lo", "hf_hi"]
+CHANNELS = ["peak", "hjorth_mobility", "autocorr_lag1", "zcr", "flux", "hf_lo", "hf_hi"]
 CH_IN = len(CHANNELS)
 
 # maski łączności: [dla każdego neuronu post] lista indeksów pre, max 3 (fan-in płytki).
-# Indeksy: 0 peak, 1 peak_cnt, 2 cv, 3 zcr, 4 flux, 5 hf_lo, 6 hf_hi (kod termometrowy
+# Indeksy: 0 peak, 1 hjorth_mobility, 2 autocorr_lag1, 3 zcr, 4 flux, 5 hf_lo, 6 hf_hi (kod termometrowy
 # udziału energii HF). Każdy kanał trafia do >=1 płytki H; kanały widmowe (5,6)
 # rozłożone tak, że każda płytka H dostaje jeden z nich zmieszany z cechami czasowymi —
 # sieć od pierwszej epoki może uczyć się koniunkcji "głośne ORAZ wysokoczęstotliwościowe".

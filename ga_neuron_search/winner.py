@@ -31,15 +31,16 @@ from snn_hw_pipeline import (DT, V_TH, W_DEADZONE, W_MAX, CHANNELS,
 def train_full(rf, genome: Genome, epochs: int = 60, hat_frac: float = 0.4,
                lr: float = 3e-3, pos_weight: float = 1.0, patience: int = 20,
                ckpt: Optional[str] = None, log=print, seeds: int = 5,
-               select_metric: str = "clip_f1"):
+               select_metric: str = "clip_f1", batch_size: int = 128,
+               num_samples: int = 12000):
     """Pełny cykl HAT->QAT dla zadanej topologii. rf = instancja RealFitness
     (dane + urządzenie + ocena zdarzeniowa)."""
     torch_, np = rf.torch, rf.np
     dev = rf.device
     torch_.manual_seed(0); np.random.seed(0)
 
-    dl_tr = rf.DataLoader(rf.tr_ds, batch_size=128,
-                          sampler=rf.make_sampler(rf.tr_lab, 12000))
+    dl_tr = rf.DataLoader(rf.tr_ds, batch_size=batch_size,
+                        sampler=rf.make_sampler(rf.tr_lab, num_samples))
 
     hat_epochs = int(round(hat_frac * epochs))
     freeze_ep = int(0.8 * epochs)

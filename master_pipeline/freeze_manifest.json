@@ -1,13 +1,13 @@
 {
   "freeze_schema_version": "1.0",
   "milestone": "M1 punkt 1",
-  "frozen_at": "2026-09-26T08:04:48.977993+00:00",
+  "frozen_at": "2026-09-27T09:17:05.900640+00:00",
   "seed": 42,
   "splits": {
     "train": {
       "path": "/home/marceld/IDS/SNN/SNN_Agent/architecture_14_neurons_patryk_09_07/spikes_v2/train",
       "n_files": 7116,
-      "manifest_sha256": "a4b2e3f881b0cf2b8f167cd463a56d6b5282da1f62031742f53dc7a3c6e248be"
+      "manifest_sha256": "e90e2fb63d9f8cb607b2d0716392ec70e21c94754aab14ff2440a0028acd35f9"
     },
     "val": {
       "path": "/home/marceld/IDS/SNN/SNN_Agent/architecture_14_neurons_patryk_09_07/spikes_v2/val",
@@ -28,7 +28,7 @@
     "note": "profile_id 'encoder_v3' i encoder_variant 'encoder_v2_swap.ino' to TEN SAM zamrozony wariant (potwierdzone przez Kacpra 25.09.2026) -- 'v3' to wewnetrzny numer wersji configu, nie osobny firmware."
   },
   "selection_target": {
-    "metric": "clip_f1",
+    "metric": "recall_fa",
     "evaluated_on": "val",
     "note": "Cel wyboru modelu na walidacji (M1 punkt 1). Zgodny z GAConfig.fitness_metric po poprawce literowki 'recal_fa' -> 'recall_fa' (25.09.2026, Marcel)."
   }

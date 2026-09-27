@@ -107,16 +107,23 @@ class TelemetryFeed:
         self._last_sent_us: int | None = None
         self._last_status: str | None = None
         self._skipped = 0
+        self._sent = 0
 
     @property
     def skipped(self) -> int:
         """Frames offered and not sent since the feed was created."""
         return self._skipped
 
+    @property
+    def sent(self) -> int:
+        """Frames actually emitted since the feed was created."""
+        return self._sent
+
     def reset(self) -> None:
         self._last_sent_us = None
         self._last_status = None
         self._skipped = 0
+        self._sent = 0
 
     def offer(self, frame: Mapping[str, Any]) -> dict | None:
         """Return the frame if a viewer should see it, otherwise ``None``."""
@@ -132,4 +139,10 @@ class TelemetryFeed:
             return None
         self._last_sent_us = now
         self._last_status = status
-        return dict(frame)
+        # `frame_seq` is the number of frames SENT, which only the feed knows.
+        # The snapshot counter cannot serve: thinning drops frames, so reusing
+        # it would hand the viewer a sequence with holes in it, and a hole in
+        # `frame_seq` is exactly how a viewer detects that it lost frames.
+        sent = dict(frame) | {"frame_seq": self._sent}
+        self._sent += 1
+        return sent

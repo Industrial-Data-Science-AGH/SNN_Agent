@@ -63,3 +63,6 @@ architecture_14_neurons_patryk_09_07/spikes_v*/
 .pytest_cache/
 .ruff_cache/
 
+# Lokalna kopia artefaktow spikowych (spikes_v2, spikes_ext) do uruchamiania GA/benchmarkow.
+/spikes_data/
+

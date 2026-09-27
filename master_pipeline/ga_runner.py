@@ -267,7 +267,15 @@ def run_final_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[st
 
     g = Genome.from_dict(best_topology)
 
-    decoder_k = 2  # dekoder: >=k spikow D w oknie = alarm (patrz winner.tune_k)
+    # dekoder: >=k spikow neuronu D w oknie = alarm (patrz winner.tune_k, niewolane tutaj).
+    # k=1 (bylo zahardkodowane na 2, jeden z 4 miejsc -- patrz hardware.py:197,
+    # ga_runner.py GA/ext-eval rf_kwargs powyzej): na wytrenowanym checkpoincie
+    # (bez retreningu) k=1 dal TEST recall 0.828 vs 0.698 dla k=2 (cel zespolu:
+    # >=80% wykrywanych zdarzen), kosztem wiekszego FA -- PORADNIK_ZLOZENIE.md
+    # rekomenduje k=1 jako domyslna regule z tego samego powodu. Trening ponizej
+    # jest powtorzony pod k=1 (nie tylko etykieta), bo decoder_k wybiera tez,
+    # ktora epoka liczy sie jako "najlepsza" w petli winner.train_full.
+    decoder_k = 1
 
     # Prawdziwy, ROZDZIELONY val/test -- żadnego aliasingu.
     rf_kwargs = dict(

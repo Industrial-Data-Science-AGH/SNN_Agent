@@ -174,3 +174,31 @@ nie założeniem, więc pierwszy batch jest od razu `valid`. Jeżeli enkoder na
 ATmedze potrzebuje N ramek, zanim jego `floor`/`MAD` coś znaczą (a wygląda na
 to, że potrzebuje), to jest własność enkodera i musi trafić do
 `EncoderProfile`, a nie zostać zgadnięta tutaj. To pytanie do K1.
+
+## 7. Oś czasu batcha to siatka enkodera, nie krok całkowania
+
+To jest poprawka po review, warta zapisania, bo pomyłka była cicha i kosztowna.
+
+`runtime.dt_us` to **krok całkowania**: 10000 µs, bo z takim krokiem model był
+uczony i z niego wynikają `alpha` i `beta`. Oś czasu, na której leżą paczki,
+należy natomiast do **enkodera**: `rpi_agents/agent/batching.py` kotwiczy hop `k`
+w `round(k * hop_samples / sample_rate_hz)`, czyli przy 192/19231 co około
+9984 µs. Zmierzone spany prawdziwych paczek z `BatchAssembler` to 249597 i
+99839 µs; żaden nie jest wielokrotnością 10000.
+
+Runtime liczył kiedyś ramki przez `span % dt_us` i przez to **odrzucał jako
+`invalid` każdą paczkę z prawdziwego mostka**. Testy tego nie widziały, bo same
+generowały paczki na siatce `dt_us`, więc cały zestaw zgadzał się z runtimem co
+do osi czasu, której urządzenie nigdy nie wystawia.
+
+Teraz liczenie ramek i wyrównanie robi `units.FrameGrid` na dokładnej
+arytmetyce całkowitej, tej samej, której używa urządzenie, a `dt_us` odpowiada
+wyłącznie za fizykę. Rozjazd między jedną a drugą wielkością pilnuje
+`load_manifest` (`DT_ENCODER_MISMATCH`, tolerancja `DT_TOLERANCE_FRACTION`), więc
+zostaje ograniczony i widoczny, zamiast wypływać jako cisza na wyjściu.
+
+Dla eksportu wniosek jest jeden: `runtime.dt_us` i
+`encoder_profile.{sample_rate_hz, hop_samples}` muszą pochodzić z tego samego
+przebiegu. Dziś różnią się o 0,16% i to jest dopuszczone świadomie; gdyby ktoś
+wpisał tam wartości z dwóch różnych konfiguracji, pakiet zostanie odrzucony przy
+ładowaniu, a nie po cichu źle policzony.

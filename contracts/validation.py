@@ -172,6 +172,24 @@ def validate(name: str, value: dict, *, manifest: dict | None = None) -> dict:
                 set(ids) == {n["neuron_id"] for n in topology["neurons"]},
                 "Snapshot must include every neuron",
             )
+    elif name == "TopologyDraft":
+        boards = value["boards"]
+        ids = [b["id"] for b in boards]
+        require(len(set(ids)) == len(ids), "Duplicate board ID")
+        known = set(ids)
+        wires = value["connections"]
+        wire_ids = [c["id"] for c in wires]
+        require(len(set(wire_ids)) == len(wire_ids), "Duplicate connection ID")
+        ports = set()
+        for wire in wires:
+            require(wire["target"] in known, "Unknown target board")
+            if wire["source_kind"] == "board":
+                require(wire["source"] in known, "Unknown source board")
+            port = (wire["target"], wire["target_port"])
+            # The board has three screw terminals; two wires into one of them is
+            # a drawing, not a circuit, and the editor has to say so.
+            require(port not in ports, "A physical synapse port has one incoming connection")
+            ports.add(port)
     elif name == "StreamGap":
         require(value["source_end_us"] >= value["source_start_us"], "Gap end precedes start")
     elif name == "DeviceStatus":

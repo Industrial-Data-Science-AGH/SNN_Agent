@@ -12,5 +12,6 @@
   "alarm-command": "AlarmCommand",
   "vision-unavailable": "VisionResult",
   "command-ack": "CommandAck",
-  "device-status": "DeviceStatus"
+  "device-status": "DeviceStatus",
+  "topology-draft": "TopologyDraft"
 }

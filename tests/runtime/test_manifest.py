@@ -394,9 +394,9 @@ def test_every_stateful_call_checks_the_session_order_before_it_does_anything(lu
     assert err.value.code == "NOT_STARTED"  # restore included: it cannot bypass reset()
 
 
-@pytest.mark.parametrize("call", ["snapshot", "checkpoint", "restore"])
+@pytest.mark.parametrize("call", ["checkpoint", "restore"])
 def test_a_call_its_task_has_not_delivered_yet_says_so(lui8, call):
-    """step() is P2 and now runs; the rest still name the task that brings them."""
+    """step() is P2 and snapshot() is P3; checkpoint/restore still name P5."""
     args = {"restore": (b"",)}.get(call, ())
     runtime = LuiRuntime(allow_unverified_artifacts=True)
     runtime.load(lui8)

@@ -320,6 +320,8 @@ def run_final_evaluation_stage(config: Any, tracker: Any, best_topology: Dict[st
         pos_weight=1.0,
         seeds=config.train.winner_seeds,
         select_metric=metric_key,
+        batch_size=config.train.batch_size,
+        num_samples=config.train.num_samples,
         ckpt=ckpt_tmp_path,
         log=print,
     )

@@ -24,6 +24,7 @@ other direction.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from dataclasses import dataclass
@@ -31,6 +32,7 @@ from pathlib import Path
 
 import numpy as np
 
+from comparison.extract import MANIFEST, read_manifest
 from comparison.features import FS_HZ, HOP
 from snn_pipeline.stream_eval import DEFAULT_RULES, stream_report
 
@@ -74,7 +76,13 @@ class Split:
 
 
 def load(cache: Path, variant: str, split: str) -> Split:
-    data = np.load(cache / f"{variant}-{split}.npz", allow_pickle=True)
+    data = np.load(cache / f"{variant}-{split}.npz", allow_pickle=False)
+    expected = [r for r in read_manifest(MANIFEST) if r["split"] == split]
+    manifest_hash = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()
+    if "manifest_sha256" not in data or str(data["manifest_sha256"]) != manifest_hash:
+        raise ValueError("Cache manifest missing or changed; rerun comparison.extract")
+    if data["clip"].tolist() != [r["id"] for r in expected]:
+        raise ValueError("Cache does not contain the complete manifest split; rerun extraction without --limit")
     return Split(
         features=data["features"],
         lengths=data["lengths"],
@@ -171,7 +179,13 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
 
-    scores = args.cache / f"{args.variant}-scores-s{args.seed}.npz"
+    cache_hash = hashlib.sha256()
+    for split in ("train", "val", "test"):
+        with (args.cache / f"{args.variant}-{split}.npz").open("rb") as handle:
+            for block in iter(lambda: handle.read(1024 * 1024), b""):
+                cache_hash.update(block)
+    cache_hash.update(Path(__file__).read_bytes())
+    scores = args.cache / f"{args.variant}-scores-s{args.seed}-n{args.max_train_frames}-{cache_hash.hexdigest()}.npz"
     if scores.exists():
         cached = np.load(scores)
         p_val, p_test = cached["val"], cached["test"]
@@ -187,6 +201,9 @@ def main(argv: list[str] | None = None) -> int:
         "dataset": "dataset/versions/v2.0.0",
         "dt_us": round(DT_S * 1e6, 1),
         "seed": args.seed,
+        "max_train_frames": args.max_train_frames,
+        "manifest_sha256": hashlib.sha256(MANIFEST.read_bytes()).hexdigest(),
+        "score_cache": scores.name,
         "frame_label": "clip label broadcast to frames, as in snn_hw_pipeline.py:319",
         "test_background_hours": round(float(test.lengths[test.label == 0].sum()) * DT_S / 3600, 3),
         "budgets": {},

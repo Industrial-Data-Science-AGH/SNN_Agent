@@ -45,10 +45,13 @@ Zdanie „Fourier wypadł gorzej" jest wynikiem tylko wtedy, gdy nie znaczy
 | wariant | co widzi | po co |
 |---|---|---|
 | `full` | rFFT 512 punktów na ramkę, 24 pasma logarytmiczne, centroid, płaskość, rolloff, energia, plus przyrosty | sufit, jaki Fourier w ogóle osiąga na tych danych, bez żadnego budżetu sprzętowego |
-| `mcu` | 6 magnitud pasmowych liczonych na gołym hopie 192 próbek, plus energia, plus przyrosty | to, co ATmega328P mogłaby realnie policzyć |
+| `mcu` | 6 magnitud wąskich binów częstotliwościowych liczonych na gołym hopie 192 próbek, plus energia, plus przyrosty | to, co ATmega328P mogłaby realnie policzyć |
 
-Oba dostają ten sam klasyfikator ramkowy i tę samą warstwę decyzyjną, więc
-jedyna różnica między nimi to ilość widma, na którą stać sprzęt.
+Oba dostają ten sam klasyfikator ramkowy i tę samą warstwę decyzyjną.
+Różnią się zarówno widmem, jak i kontekstem czasowym: full używa okna 512
+próbek, a mcu 192 próbek. Różnicy jakości nie można przypisać wyłącznie
+rozdzielczości widmowej ani kosztowi MCU. Wariant mcu mierzy pojedyncze
+częstotliwości, a nie sumy energii w pasmach.
 
 ## Trzecia kolumna: koszt na MCU
 
@@ -77,7 +80,7 @@ firmware nie mieści się nic**, bo wolnych cykli jest 209. Front end widmowy ma
 sens wyłącznie jako **zamiennik** obecnych siedmiu kanałów, i wtedy budżet to
 46 369 cykli — w którym sześć binów Goertzela mieści się spokojnie, a FFT 256
 tylko przy szacunku, w który sam nie wierzę, i bez miejsca na cokolwiek dalej.
-Dlatego `mcu` to sześć pasm, a nie FFT.
+Dlatego `mcu` to sześć wąskich binów, a nie FFT.
 
 ## Ograniczenie, które trzeba podać razem z wynikiem
 
@@ -119,3 +122,7 @@ Wspólna oś czasu opisana wyżej jest celem protokołu; ten rozjazd wymaga
 ponownej ewaluacji, a nie ręcznej zmiany pola w JSON. Model lowfa nie jest
 modelem wdrożonym na Azure; model produkcyjny to odtworzony flagowiec
 `run_20260928_115041`, pos_weight=1.0 i operacyjny dekoder k=1.
+
+Cache po tej poprawce musi być odtworzony: ewaluacja wymaga zgodnego hasha
+manifestu oraz pełnej listy klipów splitu. Cache z --limit służy tylko ekstrakcji
+smoke i nie może wygenerować raportu pełnego zbioru.

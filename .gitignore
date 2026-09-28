@@ -85,4 +85,3 @@ comparison/cache/
 # nie ma czego zaladowac -- kontener wrocilby do SNN_RUNTIME=demo po cichu.
 !/rpi_agents/cloud/model/
 !/rpi_agents/cloud/model/**
-

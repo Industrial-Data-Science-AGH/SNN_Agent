@@ -58,18 +58,17 @@ model (`rpi_agents/cloud/model`) używa reguły operacyjnej k=1 bez ograniczenia
 FA/h — na tym samym checkpoincie to daje recall 82,8 % na teście. Ta tabela
 mierzy coś innego: recall przy NAJLEPSZEJ regule z siatki, która mieści się w
 zadanym budżecie FA/h. Reguła k=1 nie mieści się w żadnym z testowanych
-budżetów (nawet 600) na tym zbiorze tła, więc ta uprząż wybiera łagodniejszą
-regułę (`k=2, w=500`) — stąd niższy recall tutaj niż liczba wdrożeniowa. Obie
-liczby są prawdziwe i policzone na tym samym checkpoincie; mierzą różne rzeczy:
+budżetów (nawet 600) na tym zbiorze tła, więc ta uprząż wybiera ostrzejszą
+regułę (`k=2, w=500`) — stąd niższy recall tutaj niż liczba wdrożeniowa. Wcześniejsze porównanie flagowca dotyczyło jednego checkpointu; aktualna
+tabela używa osobnego lowfa. Wyniki mierzą różne rzeczy:
 recall bez ograniczenia kontra recall pod budżetem fałszywych alarmów na
 godzinę.
 
-**2. Budżet mikrokontrolera kosztuje mniej więcej dwanaście punktów recall.**
-Zejście z pełnego rFFT 512 na sześć pasm liczonych na gołym hopie zabiera
-85,3 % → 73,2 % na szczycie krzywej, a przy dopasowanym recall (~37 %) mniej
-więcej podwaja FA/h (15,6 → 28,7). To jest pierwsza liczba w tym projekcie,
-która mówi, ile naprawdę kosztuje ograniczenie sprzętowe, a nie ile się go
-obawiamy.
+**2. Warianty Fouriera różnią się o około dwanaście punktów recall.**
+Full (rFFT 512) osiąga 85,3%, a mcu (sześć wąskich binów na 192 próbkach)
+73,2%. Przy recall około 37% FA/h wynosi odpowiednio 15,6 i 28,7.
+To różnica całych front endów: zmienia się zarówno reprezentacja widmowa,
+jak i kontekst czasowy 512 versus 192 próbki. Nie izoluje to kosztu budżetu MCU.
 
 **3. Ścianą jest mowa i jest wspólna — i dla SNN jest najwyższa z trzech.**
 W punkcie o najwyższym mierzonym recall dla każdej strony: Fourier `full` 529

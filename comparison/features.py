@@ -20,14 +20,14 @@ an undertuned baseline:
     project is really making. See ``mcu_budget.py``: Kacper measured the current
     encoder's ISR at 590.5 cycles, 70.97 % of the CPU, on a real board. A 512
     point FFT does not fit in what is left, a handful of single bin evaluations
-    does. So this variant is six band magnitudes plus total energy, computed on
+    does. So this variant is six narrow-bin magnitudes plus total energy, computed on
     the 192 sample hop with no extra window.
 
 Both variants then get the same context treatment and the same classifier, so
 the only thing that differs between them is how much spectrum the hardware
 could afford to look at.
 
-The band magnitudes in ``mcu`` are computed with a direct DFT matrix rather than
+The narrow-bin magnitudes in ``mcu`` are computed with a direct DFT matrix rather than
 the Goertzel recurrence. The two are the same number; Goertzel is how you would
 compute it on the MCU cheaply, and the cost of doing so is accounted for in
 ``mcu_budget.py``, not here.
@@ -50,7 +50,7 @@ FS_HZ = 44100 * RESAMPLE_UP / RESAMPLE_DOWN
 HOP = 192
 WINDOW = 512
 
-# Six bands spanning what the microphone and an 19 kHz ADC can actually carry.
+# Six narrow frequency bins spanning what the microphone and an 19 kHz ADC can actually carry.
 # Glass breaking is broadband with most of its signature well above speech, so
 # the spacing is denser at the top than a purely log placement would be.
 MCU_BANDS_HZ = (400.0, 1000.0, 2200.0, 4000.0, 6000.0, 8200.0)
@@ -151,7 +151,7 @@ def _full_features(hops: np.ndarray) -> np.ndarray:
 
 
 def _mcu_features(hops: np.ndarray) -> np.ndarray:
-    """Six band magnitudes on the bare 192 sample hop, plus its energy."""
+    """Six narrow-bin magnitudes on the bare 192 sample hop, plus its energy."""
     n = HOP
     sample_index = np.arange(n)
     basis = np.exp(-2j * np.pi * np.outer(np.asarray(MCU_BANDS_HZ) / FS_HZ, sample_index))

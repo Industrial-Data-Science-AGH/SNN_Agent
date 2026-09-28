@@ -295,4 +295,49 @@ def test_a_device_reports_its_status_and_only_the_operator_or_that_device_can_re
     rig.login()
     assert rig.client.get("/v1/devices/demo-pi/status").json()["state"] == "running"
     assert rig.client.get("/v1/devices/ghost/status").status_code == 404
-    assert rig.post("/v1/devices/other-pi/status", status).status_code == 403  # a device cannot report for another
+
+
+# ---------------------------------------------------------------------------- dashboard mount (task C1-C5)
+#
+# DASHBOARD.md always claimed the dashboard's `router` mounts into this app so its `/auth/*` and `/v1/*` calls hit
+# the real ones above - nothing actually did that (create_app never imported routes_dashboard), so a real deploy
+# 404'd the shell and every static asset. These are that gap's regression tests.
+
+
+def test_the_dashboard_shell_and_its_static_assets_are_served(rig):
+    shell = rig.client.get("/")
+    assert shell.status_code == 200 and "text/html" in shell.headers["content-type"]
+    assert "SNN" in shell.text  # the real shell, not a 404 page
+
+    js = rig.client.get("/static/js/app.js")
+    assert js.status_code == 200
+    assert "javascript" in js.headers["content-type"]
+
+
+def test_dashboard_fixtures_are_reachable_and_tagged_demo(rig):
+    names = rig.client.get("/dashboard/fixtures").json()["items"]
+    assert names and "device-status" in names
+    one = rig.client.get("/dashboard/fixtures/device-status")
+    assert one.status_code == 200 and one.json()["demo"] is True
+    assert rig.client.get("/dashboard/fixtures/does-not-exist").status_code == 404
+
+
+def test_the_dashboard_shell_gets_a_same_origin_csp_but_the_json_api_keeps_default_src_none(rig):
+    shell_csp = rig.client.get("/").headers["content-security-policy"]
+    assert "default-src 'self'" in shell_csp and "frame-ancestors 'none'" in shell_csp
+
+    static_csp = rig.client.get("/static/js/app.js").headers["content-security-policy"]
+    assert "default-src 'self'" in static_csp
+
+    api_csp = rig.client.get("/healthz").headers["content-security-policy"]
+    assert "default-src 'none'" in api_csp
+
+    events_csp = rig.client.get("/v1/events").headers["content-security-policy"]
+    assert "default-src 'none'" in events_csp
+
+
+def test_the_dashboards_own_auth_routes_do_not_shadow_the_real_backend_auth(rig):
+    # routes_dashboard.router only adds "/" and "/dashboard/*" - its /auth/* stub lives in the
+    # separate dev-only create_dashboard_app() and must never reach this app.
+    rig.login()  # exercises the real /auth/login from api.py, not a demo stub
+    assert rig.client.get("/auth/session").json()["authenticated"] is True

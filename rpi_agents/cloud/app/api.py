@@ -307,6 +307,20 @@ def create_app(services: Services, operator: OperatorAuth, settings: ApiSettings
         either(request, id_ok(device_id, "device id"))
         return services.status.latest(device_id)
 
+    @app.get("/v1/devices/{device_id}/session")
+    def current_session(device_id: str, request: Request):
+        """The device's current session_id, or null if none -- what LiveRuntime needs before it can even
+        open the telemetry stream. Nothing before today exposed this: the dashboard's LiveSource had no
+        way to learn a real session_id and fell back to a literal "demo-session" that never exists
+        (see static/js/runtime.js's createRuntime default), so Live mode's telemetry stayed on
+        "Stale data" even once the SSE route itself worked. Operator-only, like /v1/events."""
+        operator_session(request)
+        id_ok(device_id, "device id")
+        device = services.ctx.storage.tables.get(T_DEVICES, DEVICES_PK, device_id)
+        if device is None:
+            raise ContractError("NOT_FOUND", "Device not found", 404)
+        return {"schema_version": "1.0", "device_id": device_id, "session_id": device.data.get("active_session_id")}
+
     @app.get("/v1/events")
     def list_events(request: Request, limit: int = 20, offset: int = 0):
         operator_session(request)

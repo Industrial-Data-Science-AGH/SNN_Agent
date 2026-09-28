@@ -411,10 +411,37 @@ void runCalibPulses(uint8_t pin, uint16_t n, uint16_t rate_hz) {
   Serial.print(F(" rate=")); Serial.println(rate_hz);
 }
 
+uint8_t calc_crc8(const char* str) {
+  uint8_t crc = 0;
+  while (*str) {
+    crc ^= (uint8_t)(*str++);
+    for (uint8_t i = 0; i < 8; i++) {
+      if (crc & 0x80) crc = (crc << 1) ^ 0x07;
+      else crc = (crc << 1);
+    }
+  }
+  return crc;
+}
+
+void print_boot_line() {
+  char buf[64];
+  // Format: B,<ver>,<build_id>,<fs_hz>,<hop>,<n_ch>,<pulse_us>,<chset>
+  // Wersja 1, ID=00000001 (8x HEX), 19231Hz, 192 hop, 7 kanałów, impuls 6us, chset="swapfull"
+  sprintf(buf, "B,1,00000001,19231,192,7,6,swapfull");
+  uint8_t crc = calc_crc8(buf);
+
+  Serial.print('$'); Serial.print(buf); Serial.print('*');
+  if (crc < 16) Serial.print('0');
+  Serial.println(crc, HEX);
+}
+
 void handleSerial() {
   if (!Serial.available()) return;
   char cmd = Serial.read();
-  if (cmd == 'C') {
+
+  if(cmd == 'I') {
+    print_boot_line();
+  } else if (cmd == 'C') {
     uint8_t  pin  = Serial.parseInt();
     uint16_t n    = Serial.parseInt();
     uint16_t rate = Serial.parseInt();
@@ -590,17 +617,18 @@ void loop() {
     pulse_active = true;
   }
 
-  if (debug_csv) {
-    Serial.print(frame_idx);
-#if ENC_DEBUG_FEAT
-    for (uint8_t c = 0; c < N_CH; c++) { Serial.print(','); Serial.print(feat[c], 5); }
-#endif
-    for (uint8_t c = 0; c < N_CH; c++) {
-      Serial.print(',');
-      Serial.print((fired >> c) & 1);
-    }
-    Serial.println();
-  }
+  char buf[64];
+  uint32_t t_us = micros();
+  uint8_t flags = (!floors_primed) ? 1 : 0;
+  uint16_t txdrop = 0; // brak detekcji porzuconych ramek TX na poziomie Uno
+
+  sprintf(buf, "F,%lu,%lu,%u,%02X,%02X,%u", frame_idx, t_us, s_n, fired, flags, txdrop);
+  uint8_t crc = calc_crc8(buf);
+
+  Serial.print('$'); Serial.print(buf); Serial.print('*');
+  if (crc < 16) Serial.print('0');
+  Serial.println(crc, HEX);
+
   frame_idx++;
   BENCH_FRAME_END();
 }

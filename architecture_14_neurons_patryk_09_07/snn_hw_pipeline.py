@@ -57,11 +57,27 @@ SIGMA_TAU_HW = 0.10                   # tolerancja RC / odczyt τ z Fazy A (mno�
 SIGMA_VLEAK_HW = 0.02 * V_TH          # pasek LED ma skończoną rozdzielczość
 
 # v3: 7 kanałów (crest wymieniona na hf_lo + hf_hi — patrz encoder_twin.py)
-CHANNELS = ["peak", "hjorth_mobility", "autocorr_lag1", "zcr", "flux", "hf_lo", "hf_hi"]
+#
+# POPRAWKA nazw (27.09.2026): ta tablica przez jakiś czas nazywała kanały 1/2
+# "hjorth_mobility"/"autocorr_lag1" (etykiety wariantu "swap" z
+# encoder/features-improvement/twin/encoder_twin_swap.py), ale dane, na których
+# faktycznie trenujemy (spikes_v2, budowane przez encoder_twin.py) i firmware,
+# które realnie wgrywamy (architecture_14_neurons_patryk_09_07/encoder_v2.ino),
+# liczą wariant "base": peak_cnt + cv, nie mobility/autocorr. MASK_H niżej
+# (linie z komentarzami "peak_cnt"/"cv") już zawsze miało prawidłowe nazwy —
+# rozjeżdżały się tylko te dwa miejsca. Wpływ był wyłącznie na etykiety w
+# hw_config.json (pole "from" przy syntapsach) -- CH_IN=7 i maski nie zależą
+# od nazw, więc trening/inferencja były poprawne, tylko tabela eksportu
+# sprzętowego nazywała kanał inaczej niż realnie mierzy encoder. Kto faktycznie
+# przełączy produkcję na wariant swap (patrz encoder/features-improvement/WNIOSKI.md
+# -- jest szybszy i dokładniejszy, ale nieprzetestowany na żywo), niech zmieni
+# to z powrotem świadomie, razem z encoder_v2.ino i ponownym treningiem na
+# spikes_v2_swap.
+CHANNELS = ["peak", "peak_cnt", "cv", "zcr", "flux", "hf_lo", "hf_hi"]
 CH_IN = len(CHANNELS)
 
 # maski łączności: [dla każdego neuronu post] lista indeksów pre, max 3 (fan-in płytki).
-# Indeksy: 0 peak, 1 hjorth_mobility, 2 autocorr_lag1, 3 zcr, 4 flux, 5 hf_lo, 6 hf_hi (kod termometrowy
+# Indeksy: 0 peak, 1 peak_cnt, 2 cv, 3 zcr, 4 flux, 5 hf_lo, 6 hf_hi (kod termometrowy
 # udziału energii HF). Każdy kanał trafia do >=1 płytki H; kanały widmowe (5,6)
 # rozłożone tak, że każda płytka H dostaje jeden z nich zmieszany z cechami czasowymi —
 # sieć od pierwszej epoki może uczyć się koniunkcji "głośne ORAZ wysokoczęstotliwościowe".

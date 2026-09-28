@@ -23,6 +23,23 @@
 #include <avr/interrupt.h>
 #include <util/atomic.h>
 
+// ================================================================ PROTOKÓŁ SERYJNY: CRC-8
+// CRC-8 poly 0x07, init 0, no reflection, no final XOR — zgodnie z serial_protocol.py
+uint8_t crc8(const uint8_t *data, uint8_t len) {
+  uint8_t crc = 0;
+  for (uint8_t i = 0; i < len; i++) {
+    crc ^= data[i];
+    for (uint8_t j = 0; j < 8; j++) {
+      if (crc & 0x80) {
+        crc = ((crc << 1) ^ 0x07) & 0xFF;
+      } else {
+        crc = (crc << 1) & 0xFF;
+      }
+    }
+  }
+  return crc;
+}
+
 // ================================================================ FLAGI KOMPILACJI
 // Wszystkie domyślnie ustawione pod docelowy wariant swap_full. Skrypty mogą je nadpisywać (-D).
 #ifndef ENC_SET_SWAP
@@ -59,7 +76,10 @@
 #define ENC_BENCH 0       // MUSI BYĆ 0, inaczej pętla główna nie wypisze ramek!
 #endif
 #ifndef SHOW_ADC
-#define SHOW_ADC 1        // 1: włącza wypisywanie debugowania ADC
+#define SHOW_ADC 0      // 1: włącza wypisywanie debugowania ADC
+#endif
+#ifndef HARD_DISABLE_CSV
+#define HARD_DISABLE_CSV 0
 #endif
 
 // Progi bezwzględne nowych kanałów wyznaczone w fazie 0
@@ -421,6 +441,40 @@ void runCalibPulses(uint8_t pin, uint16_t n, uint16_t rate_hz) {
   Serial.print(F(" rate=")); Serial.println(rate_hz);
 }
 
+// Wysyłanie boot line: $B,<ver>,<build_id>,<fs_hz>,<hop>,<n_ch>,<pulse_us>,<chset>*<CRC>
+void sendBootLine() {
+  char buf[64], fullbuf[80];
+  uint8_t build_id[4];
+  build_id[0] = (uint8_t)(millis() >> 24);
+  build_id[1] = (uint8_t)(millis() >> 16);
+  build_id[2] = (uint8_t)(millis() >> 8);
+  build_id[3] = (uint8_t)millis();
+  
+  // Format bez $: B,1,DEADBEEF,19231,192,7,6,default
+  int len = sprintf(buf, "B,1,%02X%02X%02X%02X,%lu,%u,%u,%u,default",
+                    build_id[0], build_id[1], build_id[2], build_id[3],
+                    FS_HZ, HOP_SAMPLES, N_CH, PULSE_MS);
+  uint8_t crc = crc8((uint8_t*)buf, len);  // CRC bez '$'
+  // Wysyłaj całość jednym print aby nie było fragmentów
+  sprintf(fullbuf, "$B,1,%02X%02X%02X%02X,%lu,%u,%u,%u,default*%02X\r\n",
+          build_id[0], build_id[1], build_id[2], build_id[3],
+          FS_HZ, HOP_SAMPLES, N_CH, PULSE_MS, crc);
+  Serial.print(fullbuf);
+}
+
+// Wysyłanie event frame: $F,<seq>,<t_us>,<n>,<mask>,<flags>,<txdrop>*<CRC>
+void sendFrameEvent(uint32_t seq, uint32_t t_us, uint16_t n, uint8_t mask, uint8_t flags, uint16_t txdrop) {
+  char buf[64], fullbuf[80];
+  // Format bez $: F,<seq>,<t_us>,<n>,<mask>,<flags>,<txdrop>
+  int len = sprintf(buf, "F,%lu,%lu,%u,%02X,%02X,%u",
+                    seq, t_us, n, mask, flags, txdrop);
+  uint8_t crc = crc8((uint8_t*)buf, len);  // CRC bez '$'
+  // Wysyłaj całość jednym print aby nie było fragmentów
+  sprintf(fullbuf, "$F,%lu,%lu,%u,%02X,%02X,%u*%02X\r\n",
+          seq, t_us, n, mask, flags, txdrop, crc);
+  Serial.print(fullbuf);
+}
+
 void handleSerial() {
   if (!Serial.available()) return;
   char cmd = Serial.read();
@@ -457,12 +511,16 @@ void setup() {
   PORTB &= ~PINB_MASK;
   setupADC();
   sei();
+  
+  // Komentarz informacyjny
 #if ENC_SET_SWAP
   Serial.println(F("# encoder_v2 dt=10ms pulse=6ms ch=peak,hjorth_mobility,autocorr_lag1,zcr,flux,hf_lo,hf_hi"));
 #else
   Serial.println(F("# encoder_v2 dt=10ms pulse=6ms ch=peak,peak_cnt,cv,zcr,flux,hf_lo,hf_hi"));
 #endif
-  Serial.println(F("frame,s0,s1,s2,s3,s4,s5,s6,t_us"));
+  
+  // Boot line zgodnie z protokołem seryjnym — parser czeka na to aby zsynchronizować sesję
+  sendBootLine();
 }
 
 void loop() {
@@ -614,26 +672,20 @@ void loop() {
     pulse_active = true;
   }
 
-  if (debug_csv) {
-    Serial.print(frame_idx);
-#if ENC_DEBUG_FEAT
-    for (uint8_t c = 0; c < N_CH; c++) { Serial.print(','); Serial.print(feat[c], 5); }
-#endif
-    for (uint8_t c = 0; c < N_CH; c++) {
-      Serial.print(',');
-      Serial.print((fired >> c) & 1);
+  // Wysyłanie event frame: $F,<seq>,<t_us>,<n>,<mask>,<flags>,<txdrop>*<CRC>
+  #if !HARD_DISABLE_CSV
+    if (debug_csv) {
+      uint8_t flags = (frame_idx == 0 ? 1 : 0);  // priming: bit 0 = 1 dla pierwszej ramki po boot
+      sendFrameEvent(frame_idx, frame_us, s_n, fired, flags, 0);
     }
-    Serial.print(',');
-    Serial.print(frame_us);
-    Serial.println();
-  }
-  frame_idx++;
-  BENCH_FRAME_END();
+    frame_idx++;
+    BENCH_FRAME_END();
+  #endif
 
-#if SHOW_ADC
-  Serial.print(F("Chwilowe ADC [LSB]: "));
-  Serial.print(safe_raw_adc);
-  Serial.print(F(" | Maks. amplituda w ramce [LSB]: "));
-  Serial.println(peak);
-#endif
+  #if SHOW_ADC
+    Serial.print(F("# Chwilowe ADC [LSB]: "));
+    Serial.print(safe_raw_adc);
+    Serial.print(F(" | Maks. amplituda w ramce [LSB]: "));
+    Serial.println(peak);
+  #endif
 }

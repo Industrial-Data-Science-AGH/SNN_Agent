@@ -13,13 +13,14 @@ are off unless explicitly enabled for development.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
 from dataclasses import dataclass
 
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from contracts.validation import ContractError
 from rpi_agents.cloud.app.auth import (
@@ -37,6 +38,8 @@ from rpi_agents.cloud.app.ingest import IngestService
 from rpi_agents.cloud.app.records import DEVICES_PK, T_DEVICES
 from rpi_agents.cloud.app.sessions import SessionService
 from rpi_agents.cloud.app.status import StatusService
+from snn_runtime.errors import RuntimeStateError
+from snn_runtime.telemetry import TelemetryFeed
 
 log = logging.getLogger("snn_backend.api")
 _ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
@@ -324,6 +327,53 @@ def create_app(services: Services, operator: OperatorAuth, settings: ApiSettings
             "Content-Disposition": f'inline; filename="{event_id}-{index}.jpg"', "Cache-Control": "private, no-store",
             "Content-Security-Policy": "default-src 'none'; sandbox",
         })  # fmt: skip
+
+    @app.get("/v1/sessions/{session_id}/telemetry")
+    async def telemetry(session_id: str, request: Request):
+        """SSE stream of NeuronFrame snapshots for a live session (dashboard C3).
+
+        `mock_api.py`'s version of this route was always a stub -- one snapshot then EOF, its own docstring said
+        "production will stream". This is that: it polls the SAME live `ctx.runtimes[session_id]` the ingest path
+        steps (task P3's `LuiRuntime.snapshot()`/`TelemetryFeed`, both already written and tested, just never
+        reachable over HTTP), under that session's lock so a snapshot never reads state mid-`step()`.
+
+        Operator-only (cookie, same as /v1/events): this is a viewer's feed, not a device credential's business.
+        Starts a fresh `TelemetryFeed` per connection -- a reconnect does not replay history, it resumes the live
+        tail, which is what a dashboard watching one session needs.
+        """
+        operator_session(request)
+        id_ok(session_id, "session id")
+        if session_id not in services.ctx.runtimes:
+            raise ContractError("NOT_FOUND", "Session not found or already ended", 404)
+
+        async def event_stream():
+            feed = TelemetryFeed()
+            lock = services.ctx.lock(f"session:{session_id}")
+            poll_s = 0.1  # matches TelemetryFeed's default 100ms thinning window
+            while True:
+                if await request.is_disconnected():
+                    return
+                runtime = services.ctx.runtimes.get(session_id)
+                if runtime is None:
+                    yield "event: end\ndata: {}\n\n"
+                    return
+                try:
+                    with lock:
+                        frame = runtime.snapshot()
+                except RuntimeStateError:
+                    # e.g. NO_STREAM_IDENTITY: the session exists but no batch has arrived yet.
+                    await asyncio.sleep(poll_s)
+                    continue
+                sent = feed.offer(frame)
+                if sent is not None:
+                    yield f"id: {sent['epoch']}:{sent['frame_seq']}\nevent: snapshot\ndata: {json.dumps(sent)}\n\n"
+                await asyncio.sleep(poll_s)
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+        )
 
     # ---------------------------------------------------------------------------- dashboard (task C1-C5)
     #

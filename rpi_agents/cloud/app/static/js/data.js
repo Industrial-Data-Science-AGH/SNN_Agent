@@ -85,13 +85,17 @@ class DemoSource {
   async getEnergy() {
     return this._demo("energy"); // { sources: [...] }
   }
+
+  async getActiveSessionId() {
+    return "demo-session"; // DemoRuntime's own fixed id; there is no real session behind it
+  }
 }
 
 //  live source
 
 // Which device the operator is looking at. In C1 there is no device picker yet,
-// so we target the demo device id the backend seeds; C4/W wire real selection.
-const LIVE_DEVICE_ID = "demo-pi";
+// so we target the one device this deployment provisions; C4/W wire real selection.
+const LIVE_DEVICE_ID = "snn-pi";
 
 class LiveSource {
   constructor() {
@@ -100,6 +104,13 @@ class LiveSource {
 
   async getDeviceStatus() {
     return getJSON(`/v1/devices/${LIVE_DEVICE_ID}/status`);
+  }
+
+  async getActiveSessionId() {
+    // Null when the device has no live session right now (never fell back to "demo-session":
+    // that string does not exist as a real session, and LiveRuntime must not be pointed at it).
+    const body = await getJSON(`/v1/devices/${LIVE_DEVICE_ID}/session`);
+    return body.session_id ?? null;
   }
 
   async getModelManifest() {

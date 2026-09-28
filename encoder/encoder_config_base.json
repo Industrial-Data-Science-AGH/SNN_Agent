@@ -1,0 +1,42 @@
+{
+  "config_schema_version": "1.0",
+  "encoder_variant": "encoder_v2.ino",
+  "firmware_note": "ADC prescaler 64 (PR #67, 27.09.2026): 250kHz/13 cykli konwersji = fs 19231Hz. Poprzedni prescaler 32 dawal fs ~38500Hz (2x za szybko).",
+
+  "sampling": {
+    "sample_rate_hz": 19231,
+    "frame_hop_samples": 192,
+    "frame_hop_ms_nominal": 9.984,
+    "pulse_width_us": 6000,
+    "clock": "source_monotonic_us"
+  },
+
+  "channel_map": [
+    { "index": 0, "channel": "ch1", "feature": "peak",     "output_pin": "D2" },
+    { "index": 1, "channel": "ch2", "feature": "peak_cnt", "output_pin": "D3" },
+    { "index": 2, "channel": "ch3", "feature": "cv",       "output_pin": "D4" },
+    { "index": 3, "channel": "ch4", "feature": "zcr",      "output_pin": "D5" },
+    { "index": 4, "channel": "ch5", "feature": "flux",     "output_pin": "D6" },
+    { "index": 5, "channel": "ch6", "feature": "hf_lo",    "output_pin": "D7" },
+    { "index": 6, "channel": "ch7", "feature": "hf_hi",    "output_pin": "D8" }
+  ],
+
+  "trigger_logic": {
+    "_note": "THR_Z (z-score) i ABS_THR (prog bezwzgledny) sie wzajemnie wykluczaja per kanal. null = nie dotyczy. Zrodlo: encoder_v2.ino, komentarz 'progi z-score' i sekcja hf_lo/hf_hi.",
+    "THR_Z": { "peak": 4.0, "peak_cnt": 3.5, "cv": 3.0, "zcr": 2.5, "flux": 3.5, "hf_lo": null, "hf_hi": null },
+    "ABS_THR": {
+      "hf_lo": { "value": 0.28, "fire_below": false },
+      "hf_hi": { "value": 0.35, "fire_below": false }
+    },
+    "hf_gate_mult": 1.5,
+    "hf_gate_rule": "hf_gated = peak > HF_GATE_MULT * (floor_peak + eps); hf_lo/hf_hi strzelaja tylko gdy hf_gated",
+    "refrac_frames": 1,
+    "floor_adapt": {
+      "a_up": 0.0015,
+      "a_dn": 0.0300,
+      "a_mad": 0.0100,
+      "eps": 1e-6,
+      "_note": "asymetryczna adaptacja floora (rosnie wolno, spada szybko); zamrozona w trakcie zdarzenia dla kanalow z-score"
+    }
+  }
+}

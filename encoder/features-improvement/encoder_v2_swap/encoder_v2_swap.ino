@@ -41,7 +41,7 @@
 #define ENC_EPS_FLOOR ENC_PARITY
 #endif
 #ifndef ENC_ACC32
-#define ENC_ACC32 1       // 1: 32-bitowe akumulatory 
+#define ENC_ACC32 1       // 1: 32-bitowe akumulatory
 #endif
 #ifndef ENC_DEBUG_FEAT
 #define ENC_DEBUG_FEAT 0  // 0: domyślnie milczy. parity_test.py samo nadpisze to na 1
@@ -58,7 +58,9 @@
 #ifndef ENC_BENCH
 #define ENC_BENCH 0       // MUSI BYĆ 0, inaczej pętla główna nie wypisze ramek!
 #endif
-
+#ifndef SHOW_ADC
+#define SHOW_ADC 1        // 1: włącza wypisywanie debugowania ADC
+#endif
 
 // Progi bezwzględne nowych kanałów wyznaczone w fazie 0
 #ifndef MOB_FIRE_BELOW
@@ -158,6 +160,10 @@ volatile uint32_t acc_dx2;              // suma (x[n]-x[n-1])^2   (max 192*2046^
 volatile int32_t  acc_xx1;              // suma x[n]*x[n-1]       (|.| <= 192*1023^2 = 2.0e8 < 2^31)
 #endif
 
+#if SHOW_ADC
+volatile int16_t raw_adc_lsb = 0;
+#endif
+
 // ---------------------------------------------------------------- stan ramki
 
 static float floor_v[N_CH] = {0}, mad_v[N_CH] = {0};
@@ -197,6 +203,10 @@ ISR(ADC_vect) {
   PORTB |= _BV(1);          // D9 wysoko
 #endif
   int16_t raw = ADC;
+
+#if SHOW_ADC
+  raw_adc_lsb = raw;
+#endif
 
   // usunięcie DC: EMA k=1/512
 #if ENC_DC_FIX
@@ -452,7 +462,7 @@ void setup() {
 #else
   Serial.println(F("# encoder_v2 dt=10ms pulse=6ms ch=peak,peak_cnt,cv,zcr,flux,hf_lo,hf_hi"));
 #endif
-  Serial.println(F("frame,s0,s1,s2,s3,s4,s5,s6"));
+  Serial.println(F("frame,s0,s1,s2,s3,s4,s5,s6,t_us"));
 }
 
 void loop() {
@@ -468,6 +478,12 @@ void loop() {
 
   if (!frame_ready || calib_mode) return;
 
+  // K2: znacznik czasu ramki. micros() korzysta z Timer0, niezależnego od ISR ADC —
+  // odczyt nie zakłóca próbkowania. uint32_t przewija się co ok. 71.58 min (2^32 us);
+  // odbiorca (Pi) ma rozszerzać ten rollover do szerszej osi czasu, jak dla source_*_us
+  // w reszcie kontraktu — nie jest to specyficzne dla tego enkodera.
+  uint32_t frame_us = micros();
+
 #if ENC_ACC32
   int32_t  s_abs; uint32_t s_sq, s_hf_sq; int16_t s_max; uint16_t s_zc, s_pk, s_n;
 #else
@@ -476,7 +492,15 @@ void loop() {
 #if ENC_SET_SWAP
   uint32_t s_dx2; int32_t s_xx1; int16_t s_xlast;
 #endif
+
+#if SHOW_ADC
+  int16_t safe_raw_adc;
+#endif
+
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+#if SHOW_ADC
+    safe_raw_adc = raw_adc_lsb;
+#endif
     s_abs = acc_abs; s_sq = acc_sq; s_hf_sq = acc_hf_sq; s_max = acc_max;
 #if ENC_SET_SWAP
     s_zc = acc_zc;  s_pk = 0;       s_n = n_samp;
@@ -599,8 +623,17 @@ void loop() {
       Serial.print(',');
       Serial.print((fired >> c) & 1);
     }
+    Serial.print(',');
+    Serial.print(frame_us);
     Serial.println();
   }
   frame_idx++;
   BENCH_FRAME_END();
+
+#if SHOW_ADC
+  Serial.print(F("Chwilowe ADC [LSB]: "));
+  Serial.print(safe_raw_adc);
+  Serial.print(F(" | Maks. amplituda w ramce [LSB]: "));
+  Serial.println(peak);
+#endif
 }

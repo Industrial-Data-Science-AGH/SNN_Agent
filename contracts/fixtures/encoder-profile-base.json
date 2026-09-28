@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "profile_id": "encoder_v2_base",
+  "provenance": "measured",
+  "implementation_sha": "34b7de3dfb48b23c6ec0214df2d0fb9f56a15eb3",
+  "config_sha256": "sha256:5ef0ab54683ce2cc896e9723b3fb535ebe7d7783e072033604d280ba9c994022",
+  "sample_rate_hz": 19231,
+  "hop_samples": 192,
+  "pulse_width_us": 6000,
+  "clock": "source_monotonic_us",
+  "channel_map": [
+    {
+      "index": 0,
+      "channel": "ch1",
+      "feature": "peak"
+    },
+    {
+      "index": 1,
+      "channel": "ch2",
+      "feature": "peak_cnt"
+    },
+    {
+      "index": 2,
+      "channel": "ch3",
+      "feature": "cv"
+    },
+    {
+      "index": 3,
+      "channel": "ch4",
+      "feature": "zcr"
+    },
+    {
+      "index": 4,
+      "channel": "ch5",
+      "feature": "flux"
+    },
+    {
+      "index": 5,
+      "channel": "ch6",
+      "feature": "hf_lo"
+    },
+    {
+      "index": 6,
+      "channel": "ch7",
+      "feature": "hf_hi"
+    }
+  ]
+}

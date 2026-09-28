@@ -81,9 +81,16 @@ class ImagesConfig:
 
 @dataclass(frozen=True)
 class AlarmConfig:
-    """LED and buzzer outputs. Off by default: no pin is touched unless `enabled` is set."""
+    """LED and buzzer outputs. Off by default: no pin/port is touched unless `enabled` is set.
+
+    `output="gpio"` (default) drives Raspberry Pi GPIO pins (GpioAlarm). `output="serial"`
+    (27.09.2026, target hardware: mic+LED+buzzer together on the encoder board) instead sends
+    the board's own 'A'/'Z' commands over the same serial link the bridge reads $F frames from
+    (SerialAlarm) -- `led_pin`/`buzzer_pin` are then unused: the board couples the two outputs,
+    there is nothing to point at separate pins."""
 
     enabled: bool = False
+    output: str = "gpio"  # "gpio" | "serial"
     led_pin: int | None = 17  # BCM; assumed from the previous agent, verify against the real wiring
     buzzer_pin: int | None = None  # BCM 27 in the previous agent, where it was not wired; opt in explicitly
     max_ms: int = 10_000  # local limit per activation, whatever the command asks for
@@ -259,23 +266,29 @@ def parse_config(data: dict) -> Config:
     )
     if images.upload and images.local_dir:
         raise ConfigError("images.upload and images.local_dir are alternatives: choose one sink")
-    al = _section(data, "alarm", {"enabled", "led_pin", "buzzer_pin", "max_ms", "max_continuous_ms"}, required=False)
+    al = _section(
+        data, "alarm", {"enabled", "output", "led_pin", "buzzer_pin", "max_ms", "max_continuous_ms"}, required=False
+    )
     enabled = _get(al, "alarm", "enabled", bool, default=False)
+    output = _get(al, "alarm", "output", str, default="gpio")
+    if output not in ("gpio", "serial"):
+        raise ConfigError("alarm.output must be 'gpio' or 'serial'")
     pins = {}
     for key, default in (("led_pin", 17), ("buzzer_pin", 0)):
         pin = _get(al, "alarm", key, int, default=default)
         if pin != 0 and not 2 <= pin <= 27:
             raise ConfigError(f"alarm.{key} must be a BCM pin 2..27, or 0 for none")
         pins[key] = pin or None
-    if pins["led_pin"] is not None and pins["led_pin"] == pins["buzzer_pin"]:
-        raise ConfigError("alarm.led_pin and alarm.buzzer_pin must differ")
+    if output == "gpio":
+        if pins["led_pin"] is not None and pins["led_pin"] == pins["buzzer_pin"]:
+            raise ConfigError("alarm.led_pin and alarm.buzzer_pin must differ")
+        if enabled and pins["led_pin"] is None and pins["buzzer_pin"] is None:
+            raise ConfigError("alarm.enabled needs at least one of led_pin and buzzer_pin when output='gpio'")
     max_ms = int(_bounded(_get(al, "alarm", "max_ms", int, default=10_000), "alarm.max_ms", 100, 30_000))
     max_cont = int(_bounded(_get(al, "alarm", "max_continuous_ms", int, default=30_000), "alarm.max_continuous_ms", 100, 300_000))
     if max_cont < max_ms:
         raise ConfigError("alarm.max_continuous_ms must be at least alarm.max_ms")
-    if enabled and pins["led_pin"] is None and pins["buzzer_pin"] is None:
-        raise ConfigError("alarm.enabled needs at least one of led_pin and buzzer_pin")
-    alarm = AlarmConfig(enabled, pins["led_pin"], pins["buzzer_pin"], max_ms, max_cont)
+    alarm = AlarmConfig(enabled, output, pins["led_pin"], pins["buzzer_pin"], max_ms, max_cont)
     return Config(DeviceConfig(device_id, kind), backend, session, serial, camera, state_dir, limits, images, alarm)
 
 

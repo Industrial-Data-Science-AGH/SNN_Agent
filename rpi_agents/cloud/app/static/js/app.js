@@ -204,7 +204,12 @@ async function renderNetwork(panel) {
   activeEditor = editor;
   wireTopToolbar(editor);
   updateTopToolbar("network");
-  const runtime = createRuntime(source.isDemo ? "demo" : "live");
+  // Live needs the device's REAL current session_id before it can open the telemetry
+  // stream at all -- createRuntime's own default ("demo-session") is not a real session
+  // and never was; without this, Live mode connects to nothing and just sits on "Stale
+  // data" even with a live device sending batches.
+  const sessionId = await source.getActiveSessionId().catch(() => null);
+  const runtime = createRuntime(source.isDemo ? "demo" : "live", sessionId ?? undefined);
   await runtime.load();
   const inspector = mountInspector(inspectorCard, runtime, editor);
   const raster = mountRaster(rasterHost, runtime, (t) => { switchMode("replay"); runtime.seek(t); });

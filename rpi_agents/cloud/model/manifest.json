@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "model_id": "lui8-v2-base-decoderk1",
+  "model_id": "lui8-v2-base-decoderk1-flagship-repro",
   "status": "evaluated_champion",
   "encoder_hash": "sha256:acd14aaaee68713f1efb33a021eb12dd3e2bac509929bdd4aed43f556edf5192",
   "encoder_profile": {
@@ -54,7 +54,7 @@
   "artifacts": [
     {
       "path": "champion_checkpoint.pt",
-      "sha256": "sha256:1582be32eaf5f60cd97ca63570e443b12958f4da6f19a8c5dfa61aec71795fb1"
+      "sha256": "sha256:379fd496ae9ac0e7e0238afebe4606462d19c5069f64f618907bc3476dce57e3"
     }
   ],
   "runtime": {
@@ -72,13 +72,13 @@
     "cooldown_us": 5000000
   },
   "topology": {
-    "topology_version": "v3-base-8n",
+    "topology_version": "v3-base-8n-flagship-repro",
     "mode": "hardware_compatible",
     "neurons": [
       {
         "neuron_id": "L1n0",
-        "tau_mem_us": 203400,
-        "tau_syn_us": 43400,
+        "tau_mem_us": 223700,
+        "tau_syn_us": 43800,
         "v_leak": 0.2,
         "v_threshold": 1.0,
         "v_reset": 0.0,
@@ -87,9 +87,9 @@
       },
       {
         "neuron_id": "L1n1",
-        "tau_mem_us": 764900,
-        "tau_syn_us": 69200,
-        "v_leak": 0.717,
+        "tau_mem_us": 728900,
+        "tau_syn_us": 65200,
+        "v_leak": 0.69,
         "v_threshold": 1.0,
         "v_reset": 0.0,
         "refractory_us": 0,
@@ -97,8 +97,8 @@
       },
       {
         "neuron_id": "L2n0",
-        "tau_mem_us": 129000,
-        "tau_syn_us": 55100,
+        "tau_mem_us": 130000,
+        "tau_syn_us": 54100,
         "v_leak": 0.2,
         "v_threshold": 1.0,
         "v_reset": 0.0,
@@ -107,9 +107,9 @@
       },
       {
         "neuron_id": "L2n1",
-        "tau_mem_us": 665300,
-        "tau_syn_us": 64400,
-        "v_leak": 0.244,
+        "tau_mem_us": 687000,
+        "tau_syn_us": 58500,
+        "v_leak": 0.288,
         "v_threshold": 1.0,
         "v_reset": 0.0,
         "refractory_us": 0,
@@ -117,9 +117,9 @@
       },
       {
         "neuron_id": "L3n0",
-        "tau_mem_us": 590100,
-        "tau_syn_us": 77200,
-        "v_leak": 0.672,
+        "tau_mem_us": 600000,
+        "tau_syn_us": 74100,
+        "v_leak": 0.709,
         "v_threshold": 1.0,
         "v_reset": 0.0,
         "refractory_us": 0,
@@ -127,8 +127,8 @@
       },
       {
         "neuron_id": "L3n1",
-        "tau_mem_us": 196800,
-        "tau_syn_us": 20900,
+        "tau_mem_us": 198100,
+        "tau_syn_us": 21600,
         "v_leak": 0.2,
         "v_threshold": 1.0,
         "v_reset": 0.0,
@@ -137,9 +137,9 @@
       },
       {
         "neuron_id": "L3n2",
-        "tau_mem_us": 461600,
-        "tau_syn_us": 68100,
-        "v_leak": 0.717,
+        "tau_mem_us": 477700,
+        "tau_syn_us": 73300,
+        "v_leak": 0.74,
         "v_threshold": 1.0,
         "v_reset": 0.0,
         "refractory_us": 0,
@@ -147,9 +147,9 @@
       },
       {
         "neuron_id": "L4n0",
-        "tau_mem_us": 108900,
-        "tau_syn_us": 16900,
-        "v_leak": 0.456,
+        "tau_mem_us": 111700,
+        "tau_syn_us": 15500,
+        "v_leak": 0.434,
         "v_threshold": 1.0,
         "v_reset": 0.0,
         "refractory_us": 0,
@@ -173,7 +173,7 @@
         "target_id": "L1n0",
         "target_port": 2,
         "sign": "excitatory",
-        "weight": 0.48,
+        "weight": 0.4,
         "weight_unit": "a.u.",
         "delay_us": 0
       },
@@ -183,7 +183,7 @@
         "target_id": "L1n1",
         "target_port": 1,
         "sign": "excitatory",
-        "weight": 0.08,
+        "weight": 0.0,
         "weight_unit": "a.u.",
         "delay_us": 0
       },
@@ -203,7 +203,7 @@
         "target_id": "L1n1",
         "target_port": 3,
         "sign": "inhibitory",
-        "weight": 1.2,
+        "weight": 1.12,
         "weight_unit": "a.u.",
         "delay_us": 0
       },
@@ -213,7 +213,7 @@
         "target_id": "L2n0",
         "target_port": 1,
         "sign": "excitatory",
-        "weight": 0.32,
+        "weight": 0.4,
         "weight_unit": "a.u.",
         "delay_us": 0
       },
@@ -233,7 +233,7 @@
         "target_id": "L2n1",
         "target_port": 1,
         "sign": "inhibitory",
-        "weight": 0.4,
+        "weight": 0.32,
         "weight_unit": "a.u.",
         "delay_us": 0
       },
@@ -273,7 +273,7 @@
         "target_id": "L3n1",
         "target_port": 1,
         "sign": "excitatory",
-        "weight": 0.16,
+        "weight": 0.24,
         "weight_unit": "a.u.",
         "delay_us": 0
       },
@@ -340,10 +340,10 @@
     ]
   },
   "provenance": {
-    "training_run_id": "run_20260927_213304",
+    "training_run_id": "run_20260928_115041_flagship_repro_of_20260927_205133",
     "dataset_manifest_hash": "sha256:52cf2cffc4ed3a1c875b594924354a437910b09a4faf71b7f7ae2a44f031817b",
-    "checkpoint_hash": "sha256:1582be32eaf5f60cd97ca63570e443b12958f4da6f19a8c5dfa61aec71795fb1",
-    "evaluation_hash": "sha256:0f30b79c601313b02104cdef94c4b3f07fadd80ff1a195aa532943066f9a16ea",
+    "checkpoint_hash": "sha256:379fd496ae9ac0e7e0238afebe4606462d19c5069f64f618907bc3476dce57e3",
+    "evaluation_hash": "sha256:1a58a9f452ba9e777af18716f8849a106b1af1d5cb4d59bcd79133a633bfd8ec",
     "seed": 42,
     "calibration_id": null
   }

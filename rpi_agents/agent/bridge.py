@@ -31,7 +31,10 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
+
+if TYPE_CHECKING:
+    from rpi_agents.agent.alarm import SourceBox
 
 from rpi_agents.agent.api import ApiClient, Backoff, Outcome, Result, UrllibTransport
 from rpi_agents.agent.batching import BatchAssembler, BatchDraft, to_spike_batch
@@ -122,6 +125,7 @@ class Bridge:
         camera: CameraAdapter | None = None,
         sink: ImageSink | None = None,
         alarm: AlarmAdapter | None = None,
+        source_box: SourceBox | None = None,
         monotonic: Callable[[], float] = time.monotonic,
         utc_now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         new_boot_id: Callable[[], str] = lambda: uuid.uuid4().hex[:16],
@@ -130,6 +134,11 @@ class Bridge:
     ):
         self._cfg, self._api, self._state, self._source_factory = config, api, state, source_factory
         self._camera, self._alarm = camera, alarm
+        # Only set when alarm.output == "serial" (SerialAlarm): the box a SerialAlarm was
+        # built with, so _main_loop can hand it the live source on every (re)connect. A
+        # GpioAlarm (or no alarm) never touches this -- GPIO pins do not come and go with
+        # the serial connection the way the board's own LED/buzzer command does.
+        self._source_box = source_box
         self._mono, self._utc_now, self._new_boot_id = monotonic, utc_now, new_boot_id
         self._version, self._tick_s = agent_version, worker_tick_s
         self._lock = threading.Lock()
@@ -188,6 +197,8 @@ class Bridge:
             self._connected, self._stalled = True, False
             if attempts > 1:
                 self._counters.reconnects += 1
+            if self._source_box is not None:
+                self._source_box.current = source
             try:
                 outcome = self._serve(source, stop)
             except SourceDisconnected as exc:
@@ -195,6 +206,8 @@ class Bridge:
                 log.warning("serial disconnected: %s", exc)
                 outcome = "disconnected"
             finally:
+                if self._source_box is not None:
+                    self._source_box.current = None  # SerialAlarm must not write to a closing port
                 source.close()
             if outcome in ("stopped", "ended"):
                 return  # _shutdown closes the boot, after the command thread has stopped
@@ -629,8 +642,15 @@ def build_bridge(config: Config, *, camera=None, sink=None) -> Bridge:
         from rpi_agents.agent.sinks import LocalDirSink
 
         sink = LocalDirSink(config.images.local_dir, config.images.keep)
-    alarm = None
-    if config.alarm.enabled:
+    alarm, source_box = None, None
+    if config.alarm.enabled and config.alarm.output == "serial":
+        from rpi_agents.agent.alarm import SerialAlarm, SourceBox
+
+        source_box = SourceBox()
+        alarm = SerialAlarm(
+            source_box, max_ms=config.alarm.max_ms, max_continuous_ms=config.alarm.max_continuous_ms,
+        )  # fmt: skip
+    elif config.alarm.enabled:
         from rpi_agents.agent.alarm import GpioAlarm
 
         alarm = GpioAlarm(
@@ -651,7 +671,7 @@ def build_bridge(config: Config, *, camera=None, sink=None) -> Bridge:
         camera = UvcCamera(CameraConfig(serial=config.camera.serial, **tuning))
     return Bridge(
         config, api=api, state=state, source_factory=source_factory, camera=camera, sink=sink, alarm=alarm,
-        agent_version=os.environ.get("SNN_EDGE_VERSION", "dev"),
+        source_box=source_box, agent_version=os.environ.get("SNN_EDGE_VERSION", "dev"),
     )  # fmt: skip
 
 

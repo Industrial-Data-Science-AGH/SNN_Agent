@@ -40,8 +40,9 @@
  *    KAŻDEGO klasycznego AVR z tym samym ADC (Uno/Nano włącznie, nie tylko Mega) --
  *    jeśli fizyczne Uno było kiedyś testowane z prescaler=32, miało ten sam błąd 2x.
  *
- *  9. (27.09.2026) Alarm LED+buzzer na płytce enkodera (D9/D13), sterowane komendą
- *     serialową 'A' z Pi/hosta ('A<ms>\n', ms opcjonalny, domyślnie ALARM_MS).
+ *  9. (27.09.2026) Alarm LED+buzzer na płytce enkodera (D9/D13), sterowane komendami
+ *     serialowymi 'A'/'Z' z Pi/hosta ('A<ms>\n' zapala na ms, opcjonalny, domyślnie
+ *     ALARM_MS; 'Z\n' gasi natychmiast -- rpi_agents/agent/alarm.py:SerialAlarm).
  *     Wcześniej LED wisiała na GPIO Raspberry Pi, sterowana zdalnym SSH z mostu --
  *     to działało, ale dodawało kabel Pi->dioda i latencję rzędu sekund. Teraz Pi
  *     wysyła jedną linię po tym samym UART, którym już dostaje $F -- most po prostu
@@ -286,6 +287,10 @@ void handleSerial() {
     led_off_us = micros() + (uint32_t)ms * 1000UL;
     led_active = true;
     tone(BUZZER_PIN, BUZZER_HZ, (unsigned long)ms);   // nieblokujące, samo się kończy
+  } else if (cmd == 'Z') {         // alarm off NATYCHMIAST (SerialAlarm.off(), rpi_agents/agent/alarm.py)
+    digitalWrite(LED_PIN, LOW);
+    led_active = false;
+    noTone(BUZZER_PIN);
   }
 }
 

@@ -79,3 +79,10 @@ comparison/cache/
 
 # Published checkpoint used by comparison/results/snn.json.
 !/comparison/champion_checkpoint_lowfa.pt
+# Pakiet championa wpiety do obrazu Docker backendu (rpi_agents/cloud/infra/Dockerfile,
+# SNN_MODEL_ARTIFACT_ROOT). Ten sam powod co wyjatek /models/ powyzej: checkpoint
+# 8-neuronowej sieci wazy ~10 kB, a bez niego SNN_RUNTIME=snn_runtime.runtime:from_environment
+# nie ma czego zaladowac -- kontener wrocilby do SNN_RUNTIME=demo po cichu.
+!/rpi_agents/cloud/model/
+!/rpi_agents/cloud/model/**
+

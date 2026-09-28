@@ -20,6 +20,9 @@ COPY rpi_agents/cloud/ rpi_agents/cloud/
 COPY rpi_agents/runtime/ rpi_agents/runtime/
 # The vision client reuses the small HTTP transport of the edge package; nothing else of the edge is shipped.
 COPY rpi_agents/agent/__init__.py rpi_agents/agent/api.py rpi_agents/agent/
+# The formal Lu.i model runtime (task P1/P2/P3). Pure Python + contracts, no torch: it reads the weights and
+# topology straight out of the ModelManifest JSON, it never imports the training stack.
+COPY snn_runtime/ snn_runtime/
 ENV PATH=/venv/bin:$PATH PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/app
 USER 10001
 EXPOSE 8000

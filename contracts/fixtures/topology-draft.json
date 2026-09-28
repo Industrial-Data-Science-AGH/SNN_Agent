@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "draft_id": "draft-lui8",
+  "boards": [
+    {"id": "H0", "label": "H0", "x": 80, "y": 60},
+    {"id": "H1", "label": "H1", "x": 80, "y": 180},
+    {"id": "G0", "label": "G0", "x": 300, "y": 120},
+    {"id": "D", "label": "D", "x": 520, "y": 120}
+  ],
+  "connections": [
+    {"id": "c1", "source": "hf_lo", "source_kind": "channel", "target": "H0", "target_port": 1, "kind": "excitatory"},
+    {"id": "c2", "source": "hf_hi", "source_kind": "channel", "target": "H1", "target_port": 1, "kind": "excitatory"},
+    {"id": "c3", "source": "H0", "source_kind": "board", "target": "G0", "target_port": 1, "kind": "excitatory"},
+    {"id": "c4", "source": "H1", "source_kind": "board", "target": "G0", "target_port": 2, "kind": "inhibitory"},
+    {"id": "c5", "source": "G0", "source_kind": "board", "target": "D", "target_port": 1, "kind": "excitatory"}
+  ]
+}

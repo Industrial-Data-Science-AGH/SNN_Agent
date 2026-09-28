@@ -101,3 +101,21 @@ python -m comparison.mcu_budget
 Ekstrakcja przechodzi raz przez 20,8 h audio i zapisuje cechy ramkowe do
 `comparison/cache/`; ocena czyta cache, więc powtórzenie eksperymentu z inną
 regułą lub innym progiem trwa sekundy. Wyniki lądują w `comparison/results/`.
+
+## Checkpoint SNN i ograniczenie osi czasu
+
+Checkpoint `comparison/champion_checkpoint_lowfa.pt` jest dołączony do repo.
+Przebieg: `run_20260928_140126`; pos_weight=0.3; 5 seedów pełnego treningu;
+decoder_k=2 podczas treningu; topologia 8 neuronów w warstwach 2→2→3→1.
+SHA-256: `cef14ddd4f9b60cc067d3acf09f29537bfd606a679aa754797cdc944d315ad9a`.
+
+```bash
+python -m comparison.evaluate_snn --ckpt comparison/champion_checkpoint_lowfa.pt
+```
+
+Wymaga odtworzonych danych `spikes_v2` zgodnie z kontraktem zbioru.
+Zapisane wyniki SNN nadal używają dt=10000 µs, a Fourier dt=9984 µs.
+Wspólna oś czasu opisana wyżej jest celem protokołu; ten rozjazd wymaga
+ponownej ewaluacji, a nie ręcznej zmiany pola w JSON. Model lowfa nie jest
+modelem wdrożonym na Azure; model produkcyjny to odtworzony flagowiec
+`run_20260928_115041`, pos_weight=1.0 i operacyjny dekoder k=1.

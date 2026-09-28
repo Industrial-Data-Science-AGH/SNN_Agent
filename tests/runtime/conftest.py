@@ -47,11 +47,22 @@ def make_batch(lui8):
     frames ``[first, first + count)`` of it and is laid on the same grid the
     device uses, so batches tile the timeline exactly.
     """
-    dt = lui8["runtime"]["dt_us"]
+    profile = lui8["encoder_profile"]
+    fs, hop = profile["sample_rate_hz"], profile["hop_samples"]
+
+    def grid(hop_index: int) -> int:
+        """The device's own timeline: rpi_agents/agent/batching.py:_grid.
+
+        Copied deliberately rather than imported, so that a change on either
+        side shows up as a failing test instead of tracking silently. Using
+        dt_us here instead was the bug that made every real batch `invalid`:
+        192/19231 is about 9984 us per hop and dt_us is 10000.
+        """
+        return (hop_index * hop * 1_000_000 + fs // 2) // fs
 
     def _make(stream, first: int, count: int, *, seq: int = 0, epoch: int = 1, origin_us: int = 0) -> dict:
         spikes = [
-            {"dt_us": (frame - first) * dt, "channel": channel}
+            {"dt_us": grid(frame) - grid(first), "channel": channel}
             for frame in range(first, first + count)
             for channel in sorted(stream[frame])
         ]
@@ -64,8 +75,8 @@ def make_batch(lui8):
             "boot_id": "boot1",
             "batch_seq": seq,
             "encoder_hash": lui8["encoder_hash"],
-            "source_start_us": origin_us + first * dt,
-            "source_end_us": origin_us + (first + count) * dt,
+            "source_start_us": origin_us + grid(first),
+            "source_end_us": origin_us + grid(first + count),
             "spikes": spikes,
             "quality": {"dropped_events": 0, "adc_clipped": False},
         }
@@ -80,3 +91,11 @@ def stream(channels):
 
     rng = random.Random(20260925)
     return [{c for c in channels if rng.random() < 0.25} for _ in range(400)]
+
+
+@pytest.fixture
+def grid(lui8):
+    """The device's hop timeline, for tests that need an absolute source time."""
+    profile = lui8["encoder_profile"]
+    fs, hop = profile["sample_rate_hz"], profile["hop_samples"]
+    return lambda hop_index: (hop_index * hop * 1_000_000 + fs // 2) // fs

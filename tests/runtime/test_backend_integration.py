@@ -101,3 +101,54 @@ def test_the_backend_refuses_a_session_on_a_package_the_runtime_rejects(backend,
             },
         )
     assert getattr(excinfo.value, "code", "") == "RUNTIME_REFUSED"
+
+
+# ------------------------------------------- the device's timeline, not ours
+
+
+def test_the_runtime_accepts_batches_the_real_assembler_produces(lui8):
+    """The regression that made every production batch `invalid`.
+
+    ``tests/runtime`` built its own batches on the ``dt_us`` grid, so the whole
+    suite agreed with a runtime that only worked on a timeline the device never
+    emits: ``BatchAssembler`` lays hop ``k`` at ``round(k*192/19231)`` seconds,
+    about 9984 us, while ``runtime.dt_us`` is 10000. Nothing synthetic can
+    catch that, so this drives the assembler itself.
+    """
+    from rpi_agents.agent.batching import BatchAssembler, to_spike_batch
+    from rpi_agents.agent.serial_protocol import FrameEvent
+
+    profile = lui8["encoder_profile"]
+    channels = [c["channel"] for c in sorted(profile["channel_map"], key=lambda c: c["index"])]
+    fs, hop = profile["sample_rate_hz"], profile["hop_samples"]
+    assembler = BatchAssembler(boot_id="boot1", channels=channels, fs_hz=fs, hop=hop)
+
+    drafts = []
+    for seq in range(200):
+        drafts += assembler.feed(
+            FrameEvent(
+                boot_id="boot1", seq=seq, source_us=(seq + 1) * hop * 1_000_000 // fs, n=seq,
+                mask=(seq * 7 + 1) % (1 << len(channels)), priming=False, covered_hops=1, txdrop=0,
+            )  # fmt: skip
+        )
+    drafts += assembler.flush()
+    assert len(drafts) > 1, "the assembler must emit several batches for this to mean anything"
+
+    runtime = LuiRuntime(allow_unverified_artifacts=True)
+    runtime.load(lui8)
+    runtime.reset(epoch=1, source_time_us=assembler.stream_start_us, device_id=DEVICE, session_id="s1")
+
+    statuses, spikes = [], 0.0
+    for draft in drafts:
+        payload = to_spike_batch(
+            draft, device_id=DEVICE, session_id="s1", epoch=1, encoder_hash=lui8["encoder_hash"]
+        )
+        validate("SpikeBatch", payload, manifest=lui8)
+        decision = runtime.step(payload)
+        statuses.append(decision["status"])
+        spikes += decision["score"] or 0.0
+
+    assert "invalid" not in statuses, f"the device's own batches were refused: {statuses[:5]}"
+    assert set(statuses) <= {"valid", "warmup"}
+    assert runtime.source_time_us == drafts[-1].source_end_us
+    assert spikes > 0, "the network never fired on the assembler's stream"

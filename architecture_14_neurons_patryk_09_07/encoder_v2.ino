@@ -1,6 +1,6 @@
 /*
  * encoder_v2.ino — Delta Spike / Wake-Up AI
- * Enkoder 6-kanałowy dla sieci Lu.i o topologii 6->4->3->1.
+ * Enkoder 7-kanałowy dla sieci Lu.i.
  *
  * Zmiany względem fixed_encoder_08_06_26.ino:
  *  1. Ramkowo-synchroniczne spike'i: max 1 impuls na kanał na ramkę (hop = 10 ms).
@@ -11,17 +11,53 @@
  *     Adaptacja zamrożona w trakcie zdarzenia (inaczej encoder "przyzwyczaja się" do szkła).
  *  4. Kanał `mean` usunięty (nie różnicował klas), dodany `flux` (dodatni przyrost log-RMS).
  *  5. Tryb CALIB: generator impulsów testowych do kalibracji wag płytek Lu.i.
+ *  6. (27.09.2026) Uno + Mega: piny D2..D8 sterowane przez digitalWrite (patrz
+ *     PULSE_PINS), nie surowe PORTD/PORTB -- te rejestry mapują się na inne
+ *     fizyczne piny na ATmega2560 (Mega) niż na ATmega328P (Uno). Kosztem: do 7
+ *     kolejnych zapisów zamiast jednego, ~kilka µs zamiast ~62 ns skewu między
+ *     kanałami -- pomijalne wobec impulsu 6 ms i ramki 10 ms.
+ *  7. (27.09.2026) Dodano protokół Uno->Pi ($B/$F, rpi_agents/agent/serial_protocol.py,
+ *     K2/W1). Wcześniej ten plik nie emitował nic, co most na Pi rozumiał -- tylko
+ *     ludzki debug CSV ("frame,s0..s6"), który most odrzuca jako NOT_PROTOCOL.
  *
- * Piny: D2..D7 = spike out (PORTD bity 2..7 -> wszystkie kanały zapalane jedną instrukcją,
- *       zero skewu między kanałami). D0/D1 zostawione dla UART.
+ * Piny: D2..D8 = spike out, jeden pin na kanał (0..6). D0/D1 zostawione dla UART.
  *
- * Mikrofon: wejście analogowe A0, ADC free-running, prescaler 32 -> fs ~= 19231 Hz.
- * Target: ATmega328P (Uno/Nano). Na innym MCU popraw setupADC() i FS.
+ * Mikrofon: wejście analogowe A0, ADC free-running, prescaler 64 -> fs ~= 19231 Hz.
+ * ADC (ADMUX/ADCSRA, kanał 0 = A0) jest identyczny na ATmega328P i ATmega2560 przy
+ * 16 MHz -- ta sama fs na obu. Gdyby kiedyś trzeba było inny kanał ADC na Mega
+ * (8..15), potrzebny dodatkowo bit MUX5 w ADCSRB -- tu nieużywany (A0=kanał 0).
+ *
+ * 8. (27.09.2026) POPRAWKA PRESKALERA: poprzedni prescaler=32 zakładał 25-26 cykli
+ *    ADC na konwersję ("fs ~= 19231 Hz" w komentarzu), ale w trybie free-running
+ *    KAŻDA konwersja po pierwszej trwa 13 cykli (arkusz katalogowy ATmega328P/2560,
+ *    rozdz. ADC Conversion Time; ten sam fakt stoi za powszechnie cytowanym "~9.6 kHz"
+ *    maksimum dla analogRead() z domyślnym preskalerem 128). Przy preskalerze 32 daje
+ *    to 500 kHz/13 ~= 38 462 Hz, DWA RAZY za szybko -- zmierzone empirycznie na
+ *    fizycznej płytce (Mega 2560, diag_sketch licząca ISR(ADC_vect)/s): 38 440-38 479 Hz.
+ *    Skutek w praktyce: loop() nie nadążał przetwarzać ramek (n per ramkę rzędu
+ *    17 000 próbek zamiast 192, ramki co ~650 ms zamiast co 10 ms). Prescaler=64
+ *    (250 kHz/13 ~= 19 231 Hz) zmierzony i potwierdzony: 19 220-19 239 Hz. To dotyczy
+ *    KAŻDEGO klasycznego AVR z tym samym ADC (Uno/Nano włącznie, nie tylko Mega) --
+ *    jeśli fizyczne Uno było kiedyś testowane z prescaler=32, miało ten sam błąd 2x.
+ *
+ *  9. (27.09.2026) Alarm LED+buzzer na płytce enkodera (D9/D13), sterowane komendami
+ *     serialowymi 'A'/'Z' z Pi/hosta ('A<ms>\n' zapala na ms, opcjonalny, domyślnie
+ *     ALARM_MS; 'Z\n' gasi natychmiast -- rpi_agents/agent/alarm.py:SerialAlarm).
+ *     Wcześniej LED wisiała na GPIO Raspberry Pi, sterowana zdalnym SSH z mostu --
+ *     to działało, ale dodawało kabel Pi->dioda i latencję rzędu sekund. Teraz Pi
+ *     wysyła jedną linię po tym samym UART, którym już dostaje $F -- most po prostu
+ *     odpowiada w drugą stronę, zamiast trzymać osobne okablowanie do aktuatorów.
+ *     Nieblokująco: LED ma własny licznik off-czasu (jak impulsy spike'owe),
+ *     buzzer przez tone(pin, freq, ms) -- ta funkcja sama się kończy przez Timer2,
+ *     bez zajmowania loop(). Timer2 nie koliduje z ADC free-running (ADC_vect) ani
+ *     z UART, więc nie zmienia fs ani jittera ramek.
  */
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/atomic.h>
+#include <string.h>
+#include <stdio.h>
 
 // ---------------------------------------------------------------- konfiguracja
 
@@ -30,14 +66,21 @@
 #define PULSE_MS     6         // < HOP_MS, inaczej impulsy się skleją
 #define N_CH         7
 
-// Piny wyjściowe: kanały 0..5 -> PORTD bity 2..7 (D2..D7), kanał 6 -> PORTB bit 0 (D8).
-// Dwie instrukcje wystawienia (PORTD, PORTB) dają ~62 ns skewu — pomijalny vs impuls 6 ms.
-#define PIND_BASE    2         // kanały 0..5 na D2..D7
-#define PIND_MASK    0b11111100
-#define PINB_MASK    0b00000001 // kanał 6 na D8 (PORTB bit 0)
-
 // v3: kolejność kanałów == kolumny s0..s6. `crest` (martwa) zastąpiona hf_lo/hf_hi.
 enum Ch { CH_PEAK = 0, CH_PEAKCNT, CH_CV, CH_ZCR, CH_FLUX, CH_HFLO, CH_HFHI };
+
+// Piny wyjściowe: kanał c -> PULSE_PINS[c] (D2..D8). Ten sam kod działa na Uno i Mega.
+static const uint8_t PULSE_PINS[N_CH] = {2, 3, 4, 5, 6, 7, 8};
+
+// Alarm LED+buzzer -- D9/D13 (27.09.2026: dopasowane do realnego okablowania Wiktora
+// na MH-ET Tiny; D13 dzieli się z wbudowaną LED płytki -- nieszkodliwe, kosmetyczne).
+// D6 (kanał 4, flux) był pierwotnie planowany pod diodę, ale jest zajęty przez
+// PULSE_PINS -- dioda migałaby razem z impulsami spike'owymi tego kanału, nie z
+// prawdziwym alarmem, więc D9 zamiast D6.
+#define LED_PIN      9
+#define BUZZER_PIN   13
+#define BUZZER_HZ    2000    // ton syczący, dobrze słyszalny na małych piezo
+#define ALARM_MS     1500UL  // domyślny czas trwania, gdy 'A' przyjdzie bez argumentu
 
 // progi z-score = (feature - floor) / (MAD + eps) — TYLKO kanały czasowe 0..4.
 // hf_lo/hf_hi (5,6) NIE używają z-score (patrz niżej), ich pola tu są nieużywane.
@@ -60,6 +103,58 @@ static float THR_Z[N_CH] = { 4.0, 3.5, 3.0, 2.5, 3.5, 0.0, 0.0 };
 
 // refrakcja w ramkach (1 = kanał może strzelać co ramkę, tj. 100 Hz)
 #define REFRAC_FRAMES 1
+
+// ---------------------------------------------------------------- protokół Pi ($B/$F)
+//
+// Wire format zaproponowany dla K2 przez W1 (rpi_agents/agent/serial_protocol.py):
+//   $B,<ver>,<build_id>,<fs_hz>,<hop>,<n_ch>,<pulse_us>,<chset>*<CRC>
+//   $F,<seq>,<t_us>,<n>,<mask>,<flags>,<txdrop>*<CRC>
+// CRC-8 (poly 0x07, init 0, bez odbicia, bez final XOR) liczony z bajtów między
+// '$' a '*' -- WŁĄCZNIE z literą typu linii (B/F). flags bit0 = priming.
+
+#define PROTO_VERSION 1
+#define PROTO_BUILD_ID "A1C0DEA0"   // 8 znaków hex [0-9A-F], stałe dla tego builda firmware
+#define PROTO_CHSET    "base"       // peak,peak_cnt,cv,zcr,flux,hf_lo,hf_hi (contracts/README.md)
+
+static uint32_t proto_txdrop = 0;   // Serial ma zapas (linia ~45 B << 10 ms przy 115200 bd);
+                                     // licznik zostaje na wypadek przyszłej realnej utraty.
+
+static uint8_t crc8(const uint8_t *data, uint8_t len) {
+  uint8_t crc = 0;
+  for (uint8_t i = 0; i < len; i++) {
+    crc ^= data[i];
+    for (uint8_t b = 0; b < 8; b++) {
+      crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x07) : (uint8_t)(crc << 1);
+    }
+  }
+  return crc;
+}
+
+static void sendProtoLine(const char *body) {
+  uint8_t len = (uint8_t)strlen(body);
+  uint8_t crc = crc8((const uint8_t *)body, len);
+  Serial.print('$');
+  Serial.print(body);
+  Serial.print('*');
+  if (crc < 0x10) Serial.print('0');   // CRC musi być zawsze 2 cyfry hex
+  Serial.println(crc, HEX);
+}
+
+static void sendBootLine() {
+  char buf[48];
+  snprintf(buf, sizeof(buf), "B,%u,%s,%lu,%u,%u,%u,%s",
+           (unsigned)PROTO_VERSION, PROTO_BUILD_ID, (unsigned long)FS_HZ,
+           (unsigned)HOP_SAMPLES, (unsigned)N_CH, (unsigned)(PULSE_MS * 1000UL), PROTO_CHSET);
+  sendProtoLine(buf);
+}
+
+static void sendFrameLine(uint32_t seq, uint32_t t_us, uint16_t n, uint8_t mask, uint8_t flags) {
+  char buf[48];
+  snprintf(buf, sizeof(buf), "F,%lu,%lu,%u,%02X,%X,%lu",
+           (unsigned long)seq, (unsigned long)t_us, (unsigned)n, (unsigned)mask,
+           (unsigned)flags, (unsigned long)proto_txdrop);
+  sendProtoLine(buf);
+}
 
 // ---------------------------------------------------------------- stan ISR
 
@@ -89,6 +184,10 @@ static uint32_t frame_idx = 0;
 static uint32_t pulse_off_us = 0;
 static bool     pulse_active = false;
 
+// alarm LED off bez blokowania (buzzer sam się wyłącza przez tone(...,ms))
+static uint32_t led_off_us = 0;
+static bool     led_active = false;
+
 // tryby
 static bool debug_csv = true;
 static bool calib_mode = false;
@@ -99,7 +198,7 @@ void setupADC() {
   ADMUX  = _BV(REFS0);                          // AVcc, kanał A0
   ADCSRB = 0;                                   // free running
   ADCSRA = _BV(ADEN) | _BV(ADSC) | _BV(ADATE) | _BV(ADIE)
-         | _BV(ADPS2) | _BV(ADPS0);             // prescaler 32
+         | _BV(ADPS2) | _BV(ADPS1);             // prescaler 64 (patrz punkt 8 na górze pliku)
 }
 
 ISR(ADC_vect) {
@@ -179,6 +278,19 @@ void handleSerial() {
   } else if (cmd == 'R') {         // reset adaptacji floorów
     floors_primed = false;
     for (uint8_t c = 0; c < N_CH; c++) { floor_v[c] = 0; mad_v[c] = 0; }
+  } else if (cmd == 'I') {         // most na Pi prosi o powtórzenie linii $B (utracił kontekst)
+    sendBootLine();
+  } else if (cmd == 'A') {         // alarm: "A<ms>\n" -- ms opcjonalny (domyślnie ALARM_MS)
+    long ms = Serial.parseInt();
+    if (ms <= 0) ms = ALARM_MS;
+    digitalWrite(LED_PIN, HIGH);
+    led_off_us = micros() + (uint32_t)ms * 1000UL;
+    led_active = true;
+    tone(BUZZER_PIN, BUZZER_HZ, (unsigned long)ms);   // nieblokujące, samo się kończy
+  } else if (cmd == 'Z') {         // alarm off NATYCHMIAST (SerialAlarm.off(), rpi_agents/agent/alarm.py)
+    digitalWrite(LED_PIN, LOW);
+    led_active = false;
+    noTone(BUZZER_PIN);
   }
 }
 
@@ -186,13 +298,14 @@ void handleSerial() {
 
 void setup() {
   Serial.begin(115200);
-  for (uint8_t p = 2; p <= 8; p++) pinMode(p, OUTPUT);   // D2..D8 = 7 kanałów
-  PORTD &= ~PIND_MASK;
-  PORTB &= ~PINB_MASK;
+  for (uint8_t c = 0; c < N_CH; c++) { pinMode(PULSE_PINS[c], OUTPUT); digitalWrite(PULSE_PINS[c], LOW); }
+  pinMode(LED_PIN, OUTPUT); digitalWrite(LED_PIN, LOW);
+  pinMode(BUZZER_PIN, OUTPUT); digitalWrite(BUZZER_PIN, LOW);
   setupADC();
   sei();
   Serial.println(F("# encoder_v2 dt=10ms pulse=6ms ch=peak,peak_cnt,cv,zcr,flux,hf_lo,hf_hi"));
   Serial.println(F("frame,s0,s1,s2,s3,s4,s5,s6"));
+  sendBootLine();
 }
 
 void loop() {
@@ -200,9 +313,14 @@ void loop() {
 
   // wyłączenie impulsu — nieblokująco, wszystkie kanały razem
   if (pulse_active && (int32_t)(micros() - pulse_off_us) >= 0) {
-    PORTD &= ~PIND_MASK;
-    PORTB &= ~PINB_MASK;
+    for (uint8_t c = 0; c < N_CH; c++) digitalWrite(PULSE_PINS[c], LOW);
     pulse_active = false;
+  }
+
+  // wyłączenie alarmowej LED — nieblokująco (buzzer kończy się sam przez tone(...,ms))
+  if (led_active && (int32_t)(micros() - led_off_us) >= 0) {
+    digitalWrite(LED_PIN, LOW);
+    led_active = false;
   }
 
   if (!frame_ready || calib_mode) return;
@@ -214,6 +332,7 @@ void loop() {
     acc_abs = 0; acc_sq = 0; acc_hf_sq = 0; acc_max = 0; acc_zc = 0; acc_pk = 0; n_samp = 0;
     frame_ready = false;
   }
+  uint32_t frame_t_us = micros();   // znacznik czasu tej ramki, dla linii $F
 
   // --- cechy ---------------------------------------------------------------
   float inv_n    = 1.0f / (float)s_n;
@@ -244,9 +363,12 @@ void loop() {
   // hf_lo/hf_hi dostają tę samą wartość hf_ratio (różni je próg bezwzględny niżej)
   float feat[N_CH] = { peak, peak_cnt, cv, zcr, flux, hf_ratio, hf_ratio };
 
-  // pierwsze ~0.5 s tylko primuje floory, nie strzela
+  // pierwsze ~0.5 s tylko primuje floory, nie strzela. Linia $F IDZIE i tu (mask=0,
+  // flags=priming) -- most na Pi liczy ciągłość seq od pierwszej ramki, nie od
+  // końca primingu; debug CSV nadal milczy w tym oknie, tak jak wcześniej.
   if (!floors_primed) {
     for (uint8_t c = 0; c < N_CH; c++) { floor_v[c] = feat[c]; mad_v[c] = 0.1f * fabsf(feat[c]) + EPS; }
+    sendFrameLine(frame_idx, frame_t_us, s_n, 0, 1);
     if (frame_idx > 50) floors_primed = true;
     frame_idx++;
     return;
@@ -279,15 +401,16 @@ void loop() {
     }
   }
 
-  // --- wystawienie impulsów: kanały 0..5 na PORTD, kanał 6 na PORTB ---
+  // --- wystawienie impulsów: jeden digitalWrite na strzelający kanał ---
   if (fired) {
-    uint8_t bitsD = (fired & 0x3F) << PIND_BASE;    // kanały 0..5 -> bity 2..7
-    uint8_t bitsB = (fired >> 6) & PINB_MASK;        // kanał 6     -> PORTB bit 0
-    PORTD |= bitsD;
-    PORTB |= bitsB;
+    for (uint8_t c = 0; c < N_CH; c++) {
+      if (fired & (1 << c)) digitalWrite(PULSE_PINS[c], HIGH);
+    }
     pulse_off_us = micros() + (uint32_t)PULSE_MS * 1000UL;
     pulse_active = true;
   }
+
+  sendFrameLine(frame_idx, frame_t_us, s_n, fired, 0);
 
   if (debug_csv) {
     Serial.print(frame_idx);

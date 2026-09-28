@@ -73,3 +73,9 @@ comparison/cache/
 # powyzej chowalaby je razem z cudzymi katalogami wynikowymi.
 !comparison/results/
 !comparison/results/*.json
+# Lokalna kopia artefaktow spikowych (spikes_v2, spikes_ext) do uruchamiania GA/benchmarkow.
+/spikes_data/
+
+
+# Published checkpoint used by comparison/results/snn.json.
+!/comparison/champion_checkpoint_lowfa.pt

@@ -13,7 +13,7 @@ ufności bootstrapowane po `group_id`. Protokół w `README.md`.
 | 6 | 4,2 % @ 1,8 | 3,3 % @ 1,5 | niewykonalne |
 | 30 | 23,8 % @ 15,2 | 20,0 % @ 9,4 | niewykonalne |
 | 120 | 36,5 % @ 28,7 | 37,9 % @ 15,6 | niewykonalne |
-| 600 | 73,2 % @ 134,6 | **85,3 % @ 107,4** | 69,3 % @ 184,0 [CI 0–72,1 %] |
+| 600 | 73,2 % @ 134,6 | **85,3 % @ 107,4** | 71,4 % @ 175,3 [CI 0–73,9 %] |
 
 Zapis „X % @ Y" to recall przy zmierzonym łącznym FA/h, nie przy budżecie.
 Budżet jest tylko ograniczeniem, przy którym wybrano punkt pracy, i wiąże
@@ -22,14 +22,25 @@ uprzężą co obie kolumny Fouriera (`comparison/evaluate_snn.py`), na
 zreprodukowanym championie (`rpi_agents/cloud/model`, recall bez ograniczenia
 FA/h = 0,828 przy regule k=1 — patrz notatka o rozbieżności niżej).
 
-**Dlaczego SNN nie ma nic przy 1/6/30/120 FA/h, a Fourier `mcu` ma coś już
-przy 1.** Uprząż wybiera na `val` najlepszą regułę k-of-w z siatki
-(`snn_pipeline.stream_eval.DEFAULT_RULES`), która mieści KAŻDY rodzaj tła w
-budżecie. Dla tego checkpointu żadna reguła z siatki nie mieści się nawet w
-120 FA/h na val — dopiero przy 600 FA/h znajduje się jedna wykonalna (`k=2,
-w=500`). To nie błąd uprzęży, tylko właściwość modelu: patrz `WNIOSKI.md`
-Kacpra, gdzie ten sam wzorzec (FA/h nieosiągalny przy niskich budżetach)
-opisany jest niezależnie na innym checkpoincie.
+**Dlaczego SNN nie ma nic przy 1/6/30/120 FA/h, mimo dwóch prób.** Uprząż
+wybiera na `val` najlepszą regułę k-of-w, która mieści KAŻDY rodzaj tła w
+budżecie. Zbadano to dwoma niezależnymi sposobami, nie jednym:
+
+1. **Rozszerzona siatka reguł** (`comparison/evaluate_snn.py`): oprócz
+   `snn_pipeline.stream_eval.DEFAULT_RULES` (do k=4, w=500) doszukano ostrzejsze
+   punkty aż do k=20 w oknie 50 s. Nic poniżej 600 FA/h się nie mieści; przy
+   120 FA/h jedna reguła (k=15, w=5000) przeszła na `val`, ale nie na `test`
+   (uczciwie zgłoszone jako niewykonalne — bez tego nie byłoby to zgodne z
+   zasadą „próg wybrany na val, nie na test").
+2. **Osobny, wytrenowany od zera wariant o niższym `pos_weight`** (0,3 zamiast
+   1,0 — mniej czuły, karany mocniej za fałszywe alarmy): poprawił punkt przy
+   600 FA/h (71,4% @ 175,3 zamiast 69,3% @ 184,0), ale **też** nie odblokował
+   żadnego niższego budżetu.
+
+Wniosek: to nie jest kwestia dekodera ani wagi pozytywnej klasy przy treningu
+— to właściwość modelu/danych. Zgadza się z niezależną obserwacją Kacpra
+(`WNIOSKI.md`, inny checkpoint, ten sam wzorzec: „budżet FA/h na poziomie 1
+oraz 6 jest całkowicie nieosiągalny").
 
 ## Trzy rzeczy, które z tego wynikają
 
@@ -37,7 +48,7 @@ opisany jest niezależnie na innym checkpoincie.
 Fourier bez ograniczeń sprzętowych osiąga 85,3 % recall przy 107,4 FA/h. Ten
 sam checkpoint SNN, oceniony identyczną uprzężą (reguła wybrana na val,
 zamrożona, raport na test), osiąga przy najluźniejszym z testowanych budżetów
-(600 FA/h) tylko 69,3 % recall przy 184,0 FA/h — **mniej recall i więcej
+(600 FA/h) tylko 71,4 % recall przy 175,3 FA/h — **mniej recall i więcej
 fałszywych alarmów** niż nieograniczony sprzętowo Fourier. To odwraca wniosek,
 który stał w tym miejscu, gdy kolumna SNN była jeszcze cytatem z innego
 przebiegu i innego dekodera.
@@ -62,7 +73,7 @@ obawiamy.
 
 **3. Ścianą jest mowa i jest wspólna — i dla SNN jest najwyższa z trzech.**
 W punkcie o najwyższym mierzonym recall dla każdej strony: Fourier `full` 529
-FA/h na mowie, Fourier `mcu` 497, SNN (ta uprząż, `k=2 w=500`) **565**. Trzy
+FA/h na mowie, Fourier `mcu` 497, SNN (ta uprząż, `k=2 w=500`) **588**. Trzy
 różne front endy, ten sam problem, a SNN nie jest tu wyjątkiem — jest najgorszy.
 To nie jest różnica między architekturami, tylko brak rozdzielności mowa/szkło
 w danych, na których uczymy. Dopóki to nie pęknie, żaden z tych trzech nie
@@ -108,7 +119,16 @@ dziś od zera: identyczny config/topologia/seed=42, trening pod `decoder_k=2`
 odczyt post-hoc przy k=1 na teście zgadza się z tabelą z commita `a58f6056` co
 do trzeciego miejsca po przecinku (`clip_f1=0,7086 recall=0,82805
 precision=0,6193`). Ten sam plik jest teraz w `rpi_agents/cloud/model` (PR
-#72).
+#72) — **to jest checkpoint, który faktycznie działa na Azure**, z regułą
+operacyjną k=1 bez ograniczenia FA/h.
+
+*Ale wiersz 600 FA/h w tabeli wyżej pochodzi z DRUGIEGO, osobnego
+checkpointu* (`pos_weight=0,3` zamiast 1,0 — mniej czuły, trenowany od zera na
+tej samej topologii/seedzie/decoder_k=2, w ramach próby domknięcia niskich
+budżetów opisanej wyżej). Nie jest wdrożony nigdzie — istnieje tylko jako
+punkt porównawczy w tej tabeli, bo przy budżecie 600 FA/h wypadł lepiej niż
+flagowiec. Dwa różne pliki, dwa różne cele: jeden do wdrożenia (wysoki
+recall bez ograniczenia), jeden do tej tabeli (najlepszy punkt pod budżet).
 
 Wciąż brakuje: adaptacyjnej normalizacji cech widmowych (floor/MAD), którą ma
 enkoder SNN, a strona Fourierowa nie — to zapas dla Fouriera, nie przeciw

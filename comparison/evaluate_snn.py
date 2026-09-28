@@ -53,6 +53,23 @@ from snn_pipeline.stream_eval_torch import d_spike_trains, load_clip_spikes, loa
 BUDGETS = (1.0, 6.0, 30.0, 120.0, 600.0)  # same grid as comparison/evaluate.py
 REFRAC_FRAMES = 500  # 5 s dead zone after an alarm; same constant as eval_stream.py
 
+# DEFAULT_RULES (snn_pipeline/stream_eval.py) is what GA fitness and checkpoint
+# selection use -- shared, not touched here. It tops out at (4, 500): stricter
+# than that was never needed for the fitness/selection use case (k=1..4, w<=500
+# frames = 5s), because nothing there scores against a FA/h budget grid this
+# wide. Comparison against Fourier's 35-threshold grid needs stricter points
+# too, to find out whether the SNN decoder has ANY operating point under the
+# tighter budgets (1/6/30/120 FA/h) rather than reporting "infeasible" just
+# because the grid never tried. Extending locally, not editing the shared
+# constant: those stricter rules are not what fitness/selection should ever
+# pick from.
+EXTENDED_RULES = DEFAULT_RULES + (
+    (5, 500), (6, 500), (8, 500),
+    (5, 1000), (6, 1000), (8, 1000), (10, 1000),
+    (6, 2000), (8, 2000), (10, 2000), (12, 2000),
+    (10, 5000), (15, 5000), (20, 5000),
+)
+
 
 def load_split(data_root: Path, split: str, ch_in: int):
     clips = load_clip_spikes(str(data_root / split), ch_in)
@@ -134,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
 
     val_report = stream_report(
         val_trains, val_labels, val_kinds, val_groups, n_frames=val_nframes,
-        dt=DT, rules=DEFAULT_RULES, budgets=BUDGETS, refrac=REFRAC_FRAMES, n_boot=0,
+        dt=DT, rules=EXTENDED_RULES, budgets=BUDGETS, refrac=REFRAC_FRAMES, n_boot=0,
     )
 
     result = {

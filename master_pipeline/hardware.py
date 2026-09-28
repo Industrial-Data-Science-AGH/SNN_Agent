@@ -478,9 +478,6 @@ def resolve_workers(
         return benchmark_workers(default_auto_options, config=config, device=device)
 
     if str(workers_arg).lower() == "auto":
-        return benchmark_workers(default_auto_options, config=config, device=device)
-
-    if str(workers_arg).lower() == "auto":
         profile = load_hardware_profile()
         if profile is not None:
             recommended = profile.get("recommended", {}).get("ga_workers")

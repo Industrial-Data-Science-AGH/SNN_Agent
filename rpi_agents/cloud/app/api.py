@@ -143,7 +143,15 @@ def create_app(services: Services, operator: OperatorAuth, settings: ApiSettings
         headers["X-Content-Type-Options"] = "nosniff"
         headers["Referrer-Policy"] = "no-referrer"
         headers["X-Frame-Options"] = "DENY"
-        headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+        # The device/operator JSON API never renders anything, so it gets the strictest
+        # possible CSP. The dashboard shell (task C1-C5) is the one thing this app serves
+        # that IS a page a browser executes: same-origin JS/CSS/SVG only (no inline, no
+        # CDN - verified against templates/index.html and static/), so 'self' is exactly
+        # as strict as the shell needs and no stricter.
+        path = request.url.path
+        is_dashboard = path == "/" or path.startswith(("/static/", "/dashboard"))
+        default_csp = "default-src 'self'; frame-ancestors 'none'" if is_dashboard else "default-src 'none'; frame-ancestors 'none'"
+        headers.setdefault("Content-Security-Policy", default_csp)
         if not settings.insecure_dev:
             headers["Strict-Transport-Security"] = "max-age=31536000"
         return response
@@ -316,5 +324,19 @@ def create_app(services: Services, operator: OperatorAuth, settings: ApiSettings
             "Content-Disposition": f'inline; filename="{event_id}-{index}.jpg"', "Cache-Control": "private, no-store",
             "Content-Security-Policy": "default-src 'none'; sandbox",
         })  # fmt: skip
+
+    # ---------------------------------------------------------------------------- dashboard (task C1-C5)
+    #
+    # The dashboard is documented (DASHBOARD.md) as mounting its `router` into this app so `/auth/*` and `/v1/*`
+    # above are the real ones it talks to - but nothing here actually did that, so the shell/static assets were
+    # 404 in any real deployment. `router` only adds `/`, `/dashboard/fixtures[/...]`; it defines no `/auth/*` or
+    # `/v1/*` of its own, so there is nothing to collide with the routes above.
+    from fastapi.staticfiles import StaticFiles
+
+    from rpi_agents.cloud.app.routes_dashboard import _STATIC_DIR
+    from rpi_agents.cloud.app.routes_dashboard import router as dashboard_router
+
+    app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+    app.include_router(dashboard_router)
 
     return app

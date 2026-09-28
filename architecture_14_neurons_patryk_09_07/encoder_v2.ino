@@ -39,6 +39,18 @@
  *    (250 kHz/13 ~= 19 231 Hz) zmierzony i potwierdzony: 19 220-19 239 Hz. To dotyczy
  *    KAŻDEGO klasycznego AVR z tym samym ADC (Uno/Nano włącznie, nie tylko Mega) --
  *    jeśli fizyczne Uno było kiedyś testowane z prescaler=32, miało ten sam błąd 2x.
+ *
+ *  9. (27.09.2026) Alarm LED+buzzer na płytce enkodera (D9/D13), sterowane komendami
+ *     serialowymi 'A'/'Z' z Pi/hosta ('A<ms>\n' zapala na ms, opcjonalny, domyślnie
+ *     ALARM_MS; 'Z\n' gasi natychmiast -- rpi_agents/agent/alarm.py:SerialAlarm).
+ *     Wcześniej LED wisiała na GPIO Raspberry Pi, sterowana zdalnym SSH z mostu --
+ *     to działało, ale dodawało kabel Pi->dioda i latencję rzędu sekund. Teraz Pi
+ *     wysyła jedną linię po tym samym UART, którym już dostaje $F -- most po prostu
+ *     odpowiada w drugą stronę, zamiast trzymać osobne okablowanie do aktuatorów.
+ *     Nieblokująco: LED ma własny licznik off-czasu (jak impulsy spike'owe),
+ *     buzzer przez tone(pin, freq, ms) -- ta funkcja sama się kończy przez Timer2,
+ *     bez zajmowania loop(). Timer2 nie koliduje z ADC free-running (ADC_vect) ani
+ *     z UART, więc nie zmienia fs ani jittera ramek.
  */
 
 #include <avr/io.h>
@@ -59,6 +71,16 @@ enum Ch { CH_PEAK = 0, CH_PEAKCNT, CH_CV, CH_ZCR, CH_FLUX, CH_HFLO, CH_HFHI };
 
 // Piny wyjściowe: kanał c -> PULSE_PINS[c] (D2..D8). Ten sam kod działa na Uno i Mega.
 static const uint8_t PULSE_PINS[N_CH] = {2, 3, 4, 5, 6, 7, 8};
+
+// Alarm LED+buzzer -- D9/D13 (27.09.2026: dopasowane do realnego okablowania Wiktora
+// na MH-ET Tiny; D13 dzieli się z wbudowaną LED płytki -- nieszkodliwe, kosmetyczne).
+// D6 (kanał 4, flux) był pierwotnie planowany pod diodę, ale jest zajęty przez
+// PULSE_PINS -- dioda migałaby razem z impulsami spike'owymi tego kanału, nie z
+// prawdziwym alarmem, więc D9 zamiast D6.
+#define LED_PIN      9
+#define BUZZER_PIN   13
+#define BUZZER_HZ    2000    // ton syczący, dobrze słyszalny na małych piezo
+#define ALARM_MS     1500UL  // domyślny czas trwania, gdy 'A' przyjdzie bez argumentu
 
 // progi z-score = (feature - floor) / (MAD + eps) — TYLKO kanały czasowe 0..4.
 // hf_lo/hf_hi (5,6) NIE używają z-score (patrz niżej), ich pola tu są nieużywane.
@@ -162,6 +184,10 @@ static uint32_t frame_idx = 0;
 static uint32_t pulse_off_us = 0;
 static bool     pulse_active = false;
 
+// alarm LED off bez blokowania (buzzer sam się wyłącza przez tone(...,ms))
+static uint32_t led_off_us = 0;
+static bool     led_active = false;
+
 // tryby
 static bool debug_csv = true;
 static bool calib_mode = false;
@@ -254,6 +280,17 @@ void handleSerial() {
     for (uint8_t c = 0; c < N_CH; c++) { floor_v[c] = 0; mad_v[c] = 0; }
   } else if (cmd == 'I') {         // most na Pi prosi o powtórzenie linii $B (utracił kontekst)
     sendBootLine();
+  } else if (cmd == 'A') {         // alarm: "A<ms>\n" -- ms opcjonalny (domyślnie ALARM_MS)
+    long ms = Serial.parseInt();
+    if (ms <= 0) ms = ALARM_MS;
+    digitalWrite(LED_PIN, HIGH);
+    led_off_us = micros() + (uint32_t)ms * 1000UL;
+    led_active = true;
+    tone(BUZZER_PIN, BUZZER_HZ, (unsigned long)ms);   // nieblokujące, samo się kończy
+  } else if (cmd == 'Z') {         // alarm off NATYCHMIAST (SerialAlarm.off(), rpi_agents/agent/alarm.py)
+    digitalWrite(LED_PIN, LOW);
+    led_active = false;
+    noTone(BUZZER_PIN);
   }
 }
 
@@ -262,6 +299,8 @@ void handleSerial() {
 void setup() {
   Serial.begin(115200);
   for (uint8_t c = 0; c < N_CH; c++) { pinMode(PULSE_PINS[c], OUTPUT); digitalWrite(PULSE_PINS[c], LOW); }
+  pinMode(LED_PIN, OUTPUT); digitalWrite(LED_PIN, LOW);
+  pinMode(BUZZER_PIN, OUTPUT); digitalWrite(BUZZER_PIN, LOW);
   setupADC();
   sei();
   Serial.println(F("# encoder_v2 dt=10ms pulse=6ms ch=peak,peak_cnt,cv,zcr,flux,hf_lo,hf_hi"));
@@ -276,6 +315,12 @@ void loop() {
   if (pulse_active && (int32_t)(micros() - pulse_off_us) >= 0) {
     for (uint8_t c = 0; c < N_CH; c++) digitalWrite(PULSE_PINS[c], LOW);
     pulse_active = false;
+  }
+
+  // wyłączenie alarmowej LED — nieblokująco (buzzer kończy się sam przez tone(...,ms))
+  if (led_active && (int32_t)(micros() - led_off_us) >= 0) {
+    digitalWrite(LED_PIN, LOW);
+    led_active = false;
   }
 
   if (!frame_ready || calib_mode) return;

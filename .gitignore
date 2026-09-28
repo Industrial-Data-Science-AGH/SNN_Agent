@@ -63,3 +63,13 @@ architecture_14_neurons_patryk_09_07/spikes_v*/
 .pytest_cache/
 .ruff_cache/
 
+
+# Cechy ramkowe porownania SNN vs Fourier: 422 MB cache odtwarzalnego jednym
+# przebiegiem `python -m comparison.extract`. Wyniki (comparison/results/*.json)
+# sa male i SA sledzone, bo to one sa deliverable.
+comparison/cache/
+
+# ...ale same wyniki tak: to one sa deliverable porownania, a regula **/results/
+# powyzej chowalaby je razem z cudzymi katalogami wynikowymi.
+!comparison/results/
+!comparison/results/*.json

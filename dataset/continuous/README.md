@@ -1,13 +1,17 @@
 # continuous_eval — generator ciągłego datasetu ewaluacyjnego
 
-Generator deterministycznego strumienia audio z **dokładnie 5 zdarzeniami
-rozbicia szkła** w losowych, nienachodzących pozycjach. Etap 3 master
-pipeline'u Marcela.
+Generator deterministycznej **pary** strumieni audio, `continuous-val` i
+`continuous-test`, każdy z dokładnie **5 zdarzeniami rozbicia szkła** w
+losowych, nienachodzących pozycjach. Etap 3 master pipeline'u Marcela.
+
+Jeden `--seed` (K3) daje jedną parę: `val` jest budowany pierwszy, a jego
+wybory (pliki tła ESC-50 po `group_id`, pliki źródłowe szkła VOICe po
+`source_stem`) są wykluczone z puli `test` — patrz sekcja 5 i 9 niżej.
 
 ## Szybki start
 
 ```bash
-# 3 warianty z różnymi seedami
+# 3 pary val+test z różnymi seedami nadrzędnymi
 # root: SNN_Agent
 python -m dataset.continuous.eval.cli \
     --glass-annotation-dir dataset/clean/clean/annotation \
@@ -21,13 +25,17 @@ python -m dataset.continuous.eval.cli \
     --out-dir dataset/continuous/out
 ```
 
-Wynik dla każdego seeda: `continuous_eval_seedXX.wav` + `continuous_eval_seedXX.manifest.json`.
+Wynik dla każdego seeda N: `continuous_eval_seedN_val.wav` +
+`continuous_eval_seedN_val.manifest.json` oraz analogicznie `..._test.wav` /
+`..._test.manifest.json`. `val` i `test` mają własne, wyprowadzone deterministycznie
+pod-seedy (`derive_seed(N, "val")` / `derive_seed(N, "test")`) — manifest
+każdego z nich zapisuje to w polach `role` i `parent_seed`.
 
 ## Testy automatyczne
 
 ```bash
 python -m pytest dataset/continuous/tests/ -v
-# 23 passed — bez torcha, bez plików produkcyjnych, uruchamialne w CI
+# 33 passed — bez torcha, bez plików produkcyjnych, uruchamialne w CI
 ```
 
 ---
@@ -97,11 +105,13 @@ Porównuje stemmy plików szkła w puli eval z każdą podaną listą treningow�
 Jeśli cokolwiek się pokrywa — `ValueError`. Blokuje generację.
 
 **Tło (ESC-50)** — `--train-manifest`:
-Porównuje `group_id` plików tła użytych w mikście z `group_id` z manifestu
-treningowego Patryka (`manifest.csv`). Overlap jest **oczekiwany** (model
-trenował na ESC-50 jako negatywach) — nie blokuje generacji, ale jest
-raportowany w manifeście pod `config.overlap_check.background` i wypisywany
-na stdout. Bez `--train-manifest` sekcja `background` w raporcie jest pusta.
+`collect_background_pool` czyta `group_id` wierszy `split == "train"` z
+`manifest.csv` i **aktywnie wyklucza je z puli tła** — te pliki nigdy nie są
+losowane, nie tylko odnotowywane. (Wcześniejsza wersja tego README opisywała
+to jako "raportowane, nie blokujące" — to nie jest już zgodne z kodem; K3
+zaostrzył to do twardego wykluczenia, żeby continuous-eval było naprawdę
+niewidziane przez model.) Overlap, gdyby mimo to wystąpił, i tak trafia do
+`config.overlap_check.background` w manifeście dla śladu.
 
 Wynik obu sprawdzeń trafia do `config.overlap_check` w manifeście.
 ### 6. Standard audio: 44100 Hz / mono / PCM_16
@@ -122,6 +132,34 @@ Cała losowość przez jeden `random.Random(seed)` w ustalonej kolejności:
 wybór klipów → pozycje → skale głośności → kolejność tła → offsety w plikach.
 Ten sam seed + te same pliki = identyczny WAV.
 
+### 9. Para continuous-val / continuous-test z jednego seeda (K3)
+
+Jeden `--seed`/element `--seeds` generuje **dwa** strumienie, nie jeden:
+
+1. `val` budowany jako pierwszy, z pod-seedem `derive_seed(seed, "val")`
+   (deterministyczny hash `sha256(f"{seed}:val")`, nie zwykła arytmetyka —
+   inaczej `val` i `test` z tym samym `seed` dałyby identyczny strumień,
+   bo `build_stream` zużywa `random.Random(seed)` w ustalonej kolejności).
+2. Z `val.background_segments` zbierane są `group_id`, a z `val.events` —
+   `source_stem` plików VOICe. Oba zbiory są **wykluczone** przy budowie
+   `test`: tło przez rozszerzony `collect_background_pool(..., extra_excluded_group_ids=...)`,
+   szkło przez odfiltrowanie kandydatów po całym pliku źródłowym (nie tylko
+   konkretnym interwale czasowym — bezpieczniej: `test` nie zawiera żadnego
+   fragmentu pliku widzianego w `val`).
+3. `validate_val_test_disjoint` sprawdza to niezależnie, od zewnątrz, po
+   zbudowaniu obu strumieni — łapie regresję, nawet jeśli ktoś kiedyś zepsuje
+   logikę wykluczania wewnątrz `build_val_test_pair`.
+4. Wczesna walidacja marginesu: zaraz po zbudowaniu `val`, liczba pozostałych
+   (niewykluczonych) `group_id` tła jest porównywana z liczbą, której użył
+   `val` (ten sam `duration_s` = podobne zapotrzebowanie) — jeśli zostaje
+   mniej, generacja przerywa się od razu z czytelnym komunikatem, zamiast
+   budować cały `test` i dopiero wtedy wywalić się głęboko w
+   `collect_background_pool`.
+
+Manifest każdego z dwóch plików ma pole `role` (`"val"`/`"test"`) i
+`parent_seed` (wspólny `--seed`), a `seed` to faktyczny pod-seed użyty do
+zbudowania TEGO konkretnego strumienia.
+
 ---
 
 ## Kontrakt manifestu (schema 1.1.0) — do akceptacji przez Marcela i Patryka
@@ -129,9 +167,11 @@ Ten sam seed + te same pliki = identyczny WAV.
 ```json
 {
   "manifest_schema_version": "1.1.0",
-  "seed": 42,
+  "role": "val",
+  "parent_seed": 42,
+  "seed": 1789234561,
   "audio": {
-    "path": "continuous_eval_seed42.wav",
+    "path": "continuous_eval_seed42_val.wav",
     "sha256": "abc123...",
     "sample_rate": 44100,
     "channels": 1,
@@ -182,15 +222,3 @@ Ten sam seed + te same pliki = identyczny WAV.
 | latency | config.overlap_check.background zawiera listę group_id ESC-50 obecnych w obu datasetach — oczekiwany, raportowany, nie błąd                                   |
 
 ---
-
-## Zależności — bez torcha
-
-```
-numpy
-scipy        # resampling audio
-soundfile    # WAV I/O
-```
-
-```bash
-pip install numpy scipy soundfile
-```

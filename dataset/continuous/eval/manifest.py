@@ -1,8 +1,7 @@
 """
 manifest.py — kontrakt manifestu ciągłego datasetu ewaluacyjnego.
 
-UWAGA: format NIE był jeszcze zaakceptowany przez Marcela (master pipeline)
-ani Patryka (standard datasetu). Projekt roboczy — zmiana formatu = tylko
+Projekt roboczy — zmiana formatu = tylko
 ten plik, generator bez zmian.
 
 Schemat (manifest_schema_version="1.1.0"):
@@ -11,10 +10,12 @@ Schemat (manifest_schema_version="1.1.0"):
   "manifest_schema_version": "1.1.0",
   "generator_version": "1.0.0",
   "generated_utc": "2026-09-01T12:00:00+00:00",
-  "seed": 42,
+  "role": "val" | "test",
+  "parent_seed": 42,
+  "seed": 1789...,       -- pod-seed faktycznie użyty dla TEGO strumienia (derive_seed(parent_seed, role))
   "git_commit": "abc1234" | null,
   "audio": {
-    "path": "continuous_eval_seed42.wav",
+    "path": "continuous_eval_seed42_val.wav",
     "sha256": "...",
     "sample_rate": 44100,
     "channels": 1,
@@ -102,6 +103,8 @@ def build_manifest_dict(
     glass_audio_root: str,
     glass_allowed_stems_files: str | None,
     overlap_check: dict | None = None,
+    role: str | None = None,
+    parent_seed: int | None = None,
 ) -> dict:
     if len(stream.events) != 5:
         raise AssertionError(
@@ -112,6 +115,8 @@ def build_manifest_dict(
         "manifest_schema_version": MANIFEST_SCHEMA_VERSION,
         "generator_version": GENERATOR_VERSION,
         "generated_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "role": role,
+        "parent_seed": parent_seed,
         "seed": seed,
         "git_commit": git_commit_short(),
         "audio": {

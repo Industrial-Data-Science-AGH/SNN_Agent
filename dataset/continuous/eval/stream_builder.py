@@ -168,7 +168,10 @@ class BackgroundPool:
 def collect_background_pool(
     background_dirs: Sequence[str],
     train_manifest_csv: str | None = None,
+    extra_excluded_group_ids: set[str] | None = None,
 ) -> BackgroundPool:
+    """extra_excluded_group_ids: dodatkowe group_id do wykluczenia POZA train (np. tło już
+    zużyte przez continuous-val, żeby continuous-test go nie powtarzał - patrz build_val_test_pair)."""
     from .annotations import _load_train_group_ids
 
     train_group_ids: set[str] = set()
@@ -176,6 +179,10 @@ def collect_background_pool(
         train_group_ids = _load_train_group_ids(train_manifest_csv)
         print(f"[overlap] załadowano {len(train_group_ids)} group_id z train "
               f"splitu manifestu — pliki ESC-50 z tego zbioru będą wykluczone z tła")
+    excluded_group_ids = train_group_ids | (extra_excluded_group_ids or set())
+    if extra_excluded_group_ids:
+        print(f"[overlap] dodatkowo wykluczono {len(extra_excluded_group_ids)} group_id "
+              f"już użytych w continuous-val")
 
     pool = BackgroundPool()
     excluded_count = 0
@@ -192,20 +199,20 @@ def collect_background_pool(
             if fname not in kind_map:
                 continue
             gid = group_id_for("esc50", Path(f))
-            if gid in train_group_ids:
+            if gid in excluded_group_ids:
                 excluded_count += 1
-                continue  # ten plik był w treningu Patryka — pomijamy
+                continue  # ten plik był w treningu Patryka lub już w continuous-val — pomijamy
             included.append((f, "ESC-50", kind_map[fname], gid))
 
         if not included:
             raise FileNotFoundError(
-                f"0 plików .wav po wykluczeniu glass breaking i train-overlap w: {d}"
+                f"0 plików .wav po wykluczeniu glass breaking i train/val-overlap w: {d}"
             )
         pool.files.extend(included)
 
     if excluded_count:
-        print(f"[overlap] wykluczono {excluded_count} plików ESC-50 "
-              f"obecnych w train splicie Patryka")
+        print(f"[overlap] wykluczono łącznie {excluded_count} plików ESC-50 "
+              f"(train Patryka + ewentualny continuous-val)")
 
     if pool.is_empty():
         raise FileNotFoundError("pula tła jest pusta — twardy fail")
@@ -395,3 +402,124 @@ def git_commit_short() -> str | None:
         ).decode().strip()
     except Exception:
         return None
+
+
+# ============================================================ para val/test z jednego seeda
+
+def derive_seed(seed: int, role: str) -> int:
+    """Deterministyczny pod-seed dla danej roli ('val'/'test') z jednego --seeds N.
+
+    Ten sam (seed, role) zawsze daje ten sam pod-seed (powtarzalny build), a różne role
+    dają niezależne ciągi losowości mimo wspólnego seeda nadrzędnego — inaczej seed=42
+    dla val i seed=42 dla test dałyby IDENTYCZNY strumień (ta sama kolejność operacji
+    w build_stream), co jest dokładnie tym, czego chcemy uniknąć.
+    """
+    digest = hashlib.sha256(f"{seed}:{role}".encode("ascii")).digest()
+    return int.from_bytes(digest[:4], "big")
+
+
+def _exclude_source_stems(clips: Sequence[GlassClip], excluded_stems: set[str]) -> list[GlassClip]:
+    return [c for c in clips if c.source_stem not in excluded_stems]
+
+
+@dataclass
+class ValTestPair:
+    val: GeneratedStream
+    test: GeneratedStream
+    val_seed: int
+    test_seed: int
+    val_background_group_ids: set[str]
+    val_glass_source_stems: set[str]
+
+
+def build_val_test_pair(
+    *,
+    seed: int,
+    duration_s: float,
+    glass_clips: Sequence[GlassClip],
+    audio_root_for_glass: str,
+    background_dirs: Sequence[str],
+    train_manifest_csv: str | None,
+    min_gap_s: float,
+    warmup_s: float,
+    end_margin_s: float,
+    event_gain_db_range: tuple[float, float] = (-3.0, 3.0),
+    standard: AudioStandard = AudioStandard(),
+    clip_guard_peak: float = 0.97,
+) -> ValTestPair:
+    """Buduje DETERMINISTYCZNĄ parę (continuous-val, continuous-test) z jednego --seeds N.
+
+    Kolejność jest ustalona i ma znaczenie: val jest budowany PIERWSZY, bo to jego
+    wykluczenia (group_id tła ESC-50 + source_stem szkła VOICe) definiują pulę dostępną
+    dla testu. Test nigdy nie wpływa na val — to jednokierunkowa zależność, tak żeby
+    dodanie/zmiana testu później nie mogła po cichu zmienić już zamrożonego val.
+
+    Wyklucza z testu:
+      - group_id tła ESC-50 użytych w val (oprócz zwykłego wykluczenia train Patryka),
+      - source_stem VOICe (cały plik miksu), z którego pochodził JAKIKOLWIEK klip
+        użyty w val — nie tylko dokładnie ten sam interwał czasowy. To bezpieczniejsze:
+        continuous-test nie zawiera żadnego fragmentu pliku źródłowego widzianego w val.
+    """
+    val_seed, test_seed = derive_seed(seed, "val"), derive_seed(seed, "test")
+
+    val_pool = collect_background_pool(background_dirs, train_manifest_csv=train_manifest_csv)
+    val = build_stream(
+        duration_s=duration_s, glass_clips=glass_clips, audio_root_for_glass=audio_root_for_glass,
+        background_pool=val_pool, seed=val_seed, min_gap_s=min_gap_s, warmup_s=warmup_s,
+        end_margin_s=end_margin_s, event_gain_db_range=event_gain_db_range, standard=standard,
+        clip_guard_peak=clip_guard_peak,
+    )
+    val_group_ids = {seg["group_id"] for seg in val.background_segments}
+    val_stems = {e.source_stem for e in val.events}
+
+    # K3: wczesna walidacja marginesu tła. Val i test mają tę samą duration_s i ten sam
+    # mechanizm losowania offsetów bez zawijania w _fill_background, więc liczba
+    # unikalnych group_id, które zużył val, jest rozsądnym dolnym oszacowaniem tego,
+    # ile będzie potrzebować test. Sprawdzamy to od razu, zamiast czekać, aż
+    # collect_background_pool dla testu wywali generyczny "0 plików" głęboko w środku.
+    candidate_group_ids = {f[3] for f in val_pool.files}
+    remaining_group_ids = candidate_group_ids - val_group_ids
+    if len(remaining_group_ids) < len(val_group_ids):
+        raise RuntimeError(
+            f"za mało tła ESC-50 na continuous-test: val zużył {len(val_group_ids)} "
+            f"unikalnych group_id (z {len(candidate_group_ids)} dostępnych po wykluczeniu "
+            f"train), zostaje {len(remaining_group_ids)} — to mniej niż potrzeba na "
+            f"strumień tej samej długości ({duration_s:.0f}s). Zwiększ pulę "
+            f"--background-dir albo skróć duration_s."
+        )
+
+    remaining_clips = _exclude_source_stems(glass_clips, val_stems)
+    if len(remaining_clips) < N_EVENTS:
+        raise RuntimeError(
+            f"za mało pozostałych kandydatów glassbreak po wykluczeniu {len(val_stems)} "
+            f"source_stem użytych w continuous-val: {len(remaining_clips)} < {N_EVENTS} "
+            f"— potrzeba więcej unikalnych plików źródłowych w --glass-allowed-stems"
+        )
+    test_pool = collect_background_pool(
+        background_dirs, train_manifest_csv=train_manifest_csv, extra_excluded_group_ids=val_group_ids,
+    )
+    test = build_stream(
+        duration_s=duration_s, glass_clips=remaining_clips, audio_root_for_glass=audio_root_for_glass,
+        background_pool=test_pool, seed=test_seed, min_gap_s=min_gap_s, warmup_s=warmup_s,
+        end_margin_s=end_margin_s, event_gain_db_range=event_gain_db_range, standard=standard,
+        clip_guard_peak=clip_guard_peak,
+    )
+    return ValTestPair(val=val, test=test, val_seed=val_seed, test_seed=test_seed,
+                        val_background_group_ids=val_group_ids, val_glass_source_stems=val_stems)
+
+
+def validate_val_test_disjoint(pair: ValTestPair) -> None:
+    """Jawna, niezależna kontrola PO fakcie (wołać z CLI po zbudowaniu obu strumieni).
+    Nie polega na tym, że build_val_test_pair "na pewno" wykluczył poprawnie — sprawdza
+    to z zewnątrz, więc łapie też błędy wprowadzone przy przyszłych refaktorach."""
+    test_group_ids = {seg["group_id"] for seg in pair.test.background_segments}
+    bg_overlap = pair.val_background_group_ids & test_group_ids
+    if bg_overlap:
+        raise ValueError(f"continuous-val/test dzielą group_id tła ESC-50: {sorted(bg_overlap)}")
+
+    test_stems = {e.source_stem for e in pair.test.events}
+    glass_overlap = pair.val_glass_source_stems & test_stems
+    if glass_overlap:
+        raise ValueError(
+            f"continuous-val/test dzielą source_stem szkła VOICe: {sorted(glass_overlap)}"
+        )

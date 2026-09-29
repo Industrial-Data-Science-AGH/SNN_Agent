@@ -35,7 +35,7 @@ def make(seconds=20.0, seed=0, bg_level=0.004):
     add(0.5, 0.12 * seg / seg.std() * env * 0.5)
     return np.clip(y, -1, 1).astype(np.float32)
 
-def make_k2_vector(seed=0, bg_level=0.004):
+def make_k2_vector(seed=0, bg_level=0.004, silence_lsb=3.0):
     """Ustalony wektor dla K2 krok 2: cisza, impuls, sinus, nagla zmiana amplitudy, szklo
     (w tej kolejnosci, jako jeden ciagly plik). Nie zastepuje realnych nagran ESC-50 -
     to synteza specjalnie pod te 5 przypadkow z opisu zadania, ktorych brakowalo w make()."""
@@ -46,9 +46,10 @@ def make_k2_vector(seed=0, bg_level=0.004):
         n = int(seconds * SR)
         return np.zeros(n, dtype=np.float64), n
 
-    # 1) cisza: tylko szum kwantyzacji ADC, bez zadnego sygnalu
+    # 1) cisza: szum tla o rms ~silence_lsb LSB ADC (1 LSB = 1/511.5 skali). Poprzednio 1e-4 skali (~0.05 LSB)
+    #    dawalo sygnal PONIZEJ 1 LSB, gdzie calkowitoliczbowy DC firmware'u i float twina rozjezdzaja sie na zcr.
     y, n = seg(2.0)
-    y += 1e-4 * rng.normal(size=n)
+    y += (silence_lsb / 511.5) * rng.normal(size=n)
     segments.append(y)
 
     # 2) impuls: pojedynczy szerokopasmowy klik ~5ms (nie 'szklo' - bez rezonansow), potem cisza

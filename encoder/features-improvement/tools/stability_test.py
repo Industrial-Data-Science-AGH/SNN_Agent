@@ -2,11 +2,19 @@
 import serial
 import time
 import sys
-from rpi_agents.agent.serial_protocol import *
+from rpi_agents.agent.serial_protocol import LineAssembler, StreamTracker, Event, FrameEvent, GapEvent, RejectedEvent, \
+    BootEvent
 
 
 def main(port, baudrate=115200):
     ser = serial.Serial(port, baudrate, timeout=1.0)
+
+    # Wymuszenie sprzętowego restartu Arduino
+    ser.dtr = False
+    time.sleep(0.1)
+    ser.dtr = True
+    time.sleep(2.5)  # Czekamy na bootloader i linijkę $B z setup()
+
     assembler = LineAssembler()
 
     def get_new_boot_id():
@@ -41,20 +49,24 @@ def main(port, baudrate=115200):
                             gaps_detected += event.missing_hops
                         elif isinstance(event, BootEvent):
                             restarts += 1
+                            print(f"Pomyślnie zsynchronizowano sesję! (Boot ID: {event.boot_id})")
                         elif isinstance(event, RejectedEvent):
-                            if event.code == "NO_BOOT" and (time.time() - last_boot_request) > 1.0:
-                                ser.write(b"I")
-                                last_boot_request = time.time()
-                            elif event.code != "NO_BOOT":
+                            if event.code == "NO_BOOT":
+                                if (time.time() - last_boot_request) > 1.0:
+                                    ser.write(b"I")  # Zgodnie z zachowaniem probe.py wysyłamy samo 'I'
+                                    ser.flush()
+                                    last_boot_request = time.time()
+                            else:
                                 print(f"Odrzucono ramkę: {event.code} - {event.detail}")
 
             elapsed = time.time() - start_time
-            if elapsed >= 3600:  # Zakończ po 60 minutach
+            if elapsed >= 3600:
                 break
 
     except KeyboardInterrupt:
         print("\nTest przerwany przez użytkownika.")
     finally:
+        elapsed = time.time() - start_time
         print("\n=== Wyniki testu stabilności ===")
         print(f"Czas trwania: {int(elapsed / 60)} min {int(elapsed % 60)} s")
         print(f"Odebrane ramki: {frames_received}")

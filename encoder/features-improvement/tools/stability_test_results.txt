@@ -1,0 +1,15 @@
+PYTHONPATH=../.. python tools/stability_test.py /dev/ttyACM0
+Rozpoczęcie testu stabilności. Zbieranie danych...
+Odrzucono ramkę: NOT_PROTOCOL - line does not start with '$' or '#': b'0A8\r'
+Odrzucono ramkę: NOT_PROTOCOL - line does not start with '$' or '#': b'687020,192,00,00,0*8C\r'
+Odrzucono ramkę: NOT_PROTOCOL - line does not start with '$' or '#': b'687020,192,00,00,0*8C\r'
+Pomyślnie zsynchronizowano sesję! (Boot ID: boot_1790632372)
+^C
+Test przerwany przez użytkownika.
+
+=== Wyniki testu stabilności ===
+Czas trwania: 30 min 33 s
+Odebrane ramki: 183498
+Utracone pakiety (GapEvent hops): 0
+Liczba restartów: 1
+Wykryte wahania opóźnień i błędy (Jitter/Anomalie): {}

@@ -68,7 +68,7 @@ def run_sim(elf, codes_u16, wait=150000):
     rows = {}
     for line in r.stdout.replace("\x1b[32m", "").replace("\x1b[0m", "").splitlines():
         p = line.strip().split(",")
-        if len(p) == 15 and p[0].isdigit():
+        if len(p) == 16 and p[0].isdigit():  # K2: +1 kolumna t_us na końcu (frame,7 cech,7 bitów,t_us)
             try:
                 rows[int(p[0])] = ([float(v) for v in p[1:8]], [int(v) for v in p[8:15]])
             except ValueError:
@@ -86,7 +86,7 @@ def _stats(a, b):
                 p99_rel=float(np.percentile(rel, 99)) if len(d) else 0.0)
 
 
-def compare(twin_mod, codes_u16, fw_rows, kind, event_rms):
+def compare(twin_mod, codes_u16, fw_rows, kind, event_rms, segments=None):
     et = twin_mod
     codes = codes_u16.astype(np.float64)
     et.wav_to_adc_codes = lambda *a, **k: codes            # twin dostaje TE SAME całkowite kody
@@ -127,6 +127,17 @@ def compare(twin_mod, codes_u16, fw_rows, kind, event_rms):
     res["agree_pct"] = 100.0 * (1 - anym.mean()) if len(anym) else 0.0
     res["agree_pct_event"] = 100.0 * (1 - anym[evt].mean()) if evt.any() else float("nan")
     res["names"] = names
+    if segments:   # K2: raport per segment; granice z czasu ramki k*HOP/FS (segments = [(nazwa, sekundy), ...])
+        edges = np.cumsum([0.0] + [d for _, d in segments])
+        tk = np.array(frames) * et.HOP_SAMPLES / et.FS_HZ
+        res["segments"] = {}
+        for i, (nm, _) in enumerate(segments):
+            m = (tk >= edges[i]) & (tk < edges[i + 1])
+            res["segments"][nm] = dict(n=int(m.sum()),
+                agree_pct=100.0 * (1 - anym[m].mean()) if m.any() else float("nan"),
+                mismatch=[int((fb_all[m, c] != tb_all[m, c]).sum()) for c in range(7)],
+                fw_spikes=[int(fb_all[m, c].sum()) for c in range(7)],
+                twin_spikes=[int(tb_all[m, c].sum()) for c in range(7)])
     return res
 
 
@@ -141,6 +152,9 @@ def report(variant, res, isr):
               f"{100*b['median_rel']:16.3f}% {100*b['p99_rel']:8.2f}%")
     print("  spike'i per kanał [rozjazd(wszystkie)/rozjazd(zdarzenia) | firmware/twin]: " +
           "  ".join(f"s{c}:{v['mismatch']}/{v['mismatch_event']}|{v['fw_spikes']}/{v['twin_spikes']}" for c, v in res["channels"].items()))
+    for nm, v in res.get("segments", {}).items():
+        print(f"  segment {nm:8s} n={v['n']:4d}  zgodność {v['agree_pct']:6.2f}%  rozjazd/kanał {v['mismatch']}  "
+              f"spike'i fw {v['fw_spikes']} twin {v['twin_spikes']}")
     if isr:
         print("  " + isr)
 
@@ -158,6 +172,7 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--bg-level", type=float, default=0.004, help="poziom tła w audio syntetycznym (amplituda, 1.0=pełna skala)")
     ap.add_argument("--event-rms", type=float, default=20.0, help="próg rms [LSB] dla ramek zdarzeniowych")
+    ap.add_argument("--segments", help="raport per segment, np. cisza:2,impuls:1,sinus:2,skok:1,szklo:1.5 (sekundy)")
     ap.add_argument("--json")
     ap.add_argument("--workdir", default=os.path.join(KIT, "build"))
     a = ap.parse_args()
@@ -186,7 +201,8 @@ def main():
         codes = np.clip(np.round(tw.wav_to_adc_codes(wav, gain=a.gain)), 0, 1023).astype(np.uint16)
         elf = build_fw(v, flags, a.workdir, a.ino)
         rows, isr = run_sim(elf, codes)
-        res = compare(tw, codes, rows, cfg["twin"], a.event_rms)
+        res = compare(tw, codes, rows, cfg["twin"], a.event_rms,
+                      [(x.split(":")[0], float(x.split(":")[1])) for x in a.segments.split(",")] if a.segments else None)
         res["isr_sim"] = isr
         report(v, res, isr)
         out[v] = res

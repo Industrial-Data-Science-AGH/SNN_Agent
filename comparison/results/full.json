@@ -1,0 +1,158 @@
+{
+  "variant": "full",
+  "dataset": "dataset/versions/v2.0.0",
+  "dt_us": 9984.0,
+  "seed": 0,
+  "frame_label": "clip label broadcast to frames, as in snn_hw_pipeline.py:319",
+  "test_background_hours": 2.756,
+  "budgets": {
+    "1.0": {
+      "chosen_on_val": {
+        "recall": 0.0,
+        "threshold": 0.999968,
+        "rule": [
+          3,
+          100
+        ],
+        "feasible": true
+      },
+      "test": {
+        "feasible": false,
+        "threshold": 0.999968,
+        "rule": [
+          3,
+          100
+        ],
+        "note": "the pair chosen on val exceeded 1.0 FA/h on test; no recall is reported"
+      }
+    },
+    "6.0": {
+      "chosen_on_val": {
+        "recall": 0.028968713789107765,
+        "threshold": 0.968377,
+        "rule": [
+          3,
+          100
+        ],
+        "feasible": true
+      },
+      "test": {
+        "feasible": true,
+        "threshold": 0.968377,
+        "rule": [
+          3,
+          100
+        ],
+        "recall": 0.0328,
+        "recall_ci": [
+          0.0,
+          0.0432
+        ],
+        "fa_h_total": 1.451,
+        "fa_h_by_kind": {
+          "animal": 2.284,
+          "loud_event": 0.0,
+          "speech": 0.0,
+          "stationary": 4.451
+        },
+        "within_budget": true
+      }
+    },
+    "30.0": {
+      "chosen_on_val": {
+        "recall": 0.3174971031286211,
+        "threshold": 0.943766,
+        "rule": [
+          2,
+          500
+        ],
+        "feasible": true
+      },
+      "test": {
+        "feasible": true,
+        "threshold": 0.943766,
+        "rule": [
+          2,
+          500
+        ],
+        "recall": 0.2002,
+        "recall_ci": [
+          0.0,
+          0.2278
+        ],
+        "fa_h_total": 9.434,
+        "fa_h_by_kind": {
+          "animal": 6.853,
+          "loud_event": 6.309,
+          "speech": 4.598,
+          "stationary": 19.287
+        },
+        "within_budget": true
+      }
+    },
+    "120.0": {
+      "chosen_on_val": {
+        "recall": 0.6303592120509849,
+        "threshold": 0.9,
+        "rule": [
+          3,
+          500
+        ],
+        "feasible": true
+      },
+      "test": {
+        "feasible": true,
+        "threshold": 0.9,
+        "rule": [
+          3,
+          500
+        ],
+        "recall": 0.379,
+        "recall_ci": [
+          0.3498,
+          0.4094
+        ],
+        "fa_h_total": 15.603,
+        "fa_h_by_kind": {
+          "animal": 9.137,
+          "loud_event": 11.216,
+          "speech": 59.771,
+          "stationary": 14.836
+        },
+        "within_budget": true
+      }
+    },
+    "600.0": {
+      "chosen_on_val": {
+        "recall": 0.9536500579374276,
+        "threshold": 0.7,
+        "rule": [
+          3,
+          250
+        ],
+        "feasible": true
+      },
+      "test": {
+        "feasible": true,
+        "threshold": 0.7,
+        "rule": [
+          3,
+          250
+        ],
+        "recall": 0.8529,
+        "recall_ci": [
+          0.0,
+          0.8721
+        ],
+        "fa_h_total": 107.408,
+        "fa_h_by_kind": {
+          "animal": 52.54,
+          "loud_event": 74.304,
+          "speech": 528.747,
+          "stationary": 77.149
+        },
+        "within_budget": true
+      }
+    }
+  }
+}

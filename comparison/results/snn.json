@@ -1,0 +1,91 @@
+{
+  "variant": "snn",
+  "dataset": "dataset/versions/v2.0.0",
+  "dt_us": 10000.0,
+  "ckpt": "comparison/champion_checkpoint_lowfa.pt",
+  "frame_label": "clip label broadcast to frames (snn_hw_pipeline.py:319), same handicap as comparison/evaluate.py",
+  "test_background_hours": 2.76,
+  "budgets": {
+    "1.0": {
+      "chosen_on_val": {
+        "recall": 0.0,
+        "rule": null,
+        "feasible": false
+      },
+      "test": {
+        "feasible": false,
+        "note": "no rule stayed within 1.0 FA/h on val"
+      }
+    },
+    "6.0": {
+      "chosen_on_val": {
+        "recall": 0.0,
+        "rule": null,
+        "feasible": false
+      },
+      "test": {
+        "feasible": false,
+        "note": "no rule stayed within 6.0 FA/h on val"
+      }
+    },
+    "30.0": {
+      "chosen_on_val": {
+        "recall": 0.0,
+        "rule": null,
+        "feasible": false
+      },
+      "test": {
+        "feasible": false,
+        "note": "no rule stayed within 30.0 FA/h on val"
+      }
+    },
+    "120.0": {
+      "chosen_on_val": {
+        "recall": 0.06488991888760139,
+        "rule": [
+          15,
+          5000
+        ],
+        "feasible": true
+      },
+      "test": {
+        "feasible": false,
+        "rule": [
+          15,
+          5000
+        ],
+        "note": "the rule chosen on val exceeded 120.0 FA/h on test; no recall is reported"
+      }
+    },
+    "600.0": {
+      "chosen_on_val": {
+        "recall": 0.7786790266512167,
+        "rule": [
+          2,
+          500
+        ],
+        "feasible": true
+      },
+      "test": {
+        "feasible": true,
+        "rule": [
+          2,
+          500
+        ],
+        "recall": 0.7138,
+        "recall_ci": [
+          0.0,
+          0.7386
+        ],
+        "fa_h_total": 175.344,
+        "fa_h_by_kind": {
+          "animal": 239.472,
+          "loud_event": 113.376,
+          "speech": 587.575,
+          "stationary": 131.831
+        },
+        "within_budget": true
+      }
+    }
+  }
+}

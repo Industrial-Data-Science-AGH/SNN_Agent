@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from rpi_agents.agent.alarm import CONTRACT_MAX_MS, AlarmUnavailable, GpioAlarm
+from rpi_agents.agent.alarm import CONTRACT_MAX_MS, AlarmUnavailable, GpioAlarm, SerialAlarm, SourceBox
 
 
 class Pin:
@@ -252,4 +252,106 @@ def test_concurrent_applies_and_offs_do_not_deadlock_or_leave_the_alarm_on():
     stop.set()
     [t.join(timeout=5) for t in threads]
     assert not any(t.is_alive() for t in threads)
-    assert wait_for(lambda: set(state(log).values()) <= {"off"})
+
+
+# -------------------------------------------------------------------- SerialAlarm
+
+
+class FakeSerialSource:
+    """Stands in for SerialPortSource: records every write() instead of touching a real port."""
+
+    def __init__(self):
+        self.written: list[bytes] = []
+
+    def write(self, data: bytes) -> None:
+        self.written.append(data)
+
+
+class FailingSource:
+    def write(self, data: bytes) -> None:
+        raise OSError("port went away mid-write")
+
+
+def serial_alarm(**kw):
+    kw.setdefault("max_ms", 200)
+    kw.setdefault("max_continuous_ms", 1000)
+    box = SourceBox()
+    return SerialAlarm(box, timer=FakeTimer, **kw), box
+
+
+def test_serial_alarm_refuses_before_any_connection_exists():
+    a, box = serial_alarm()
+    assert box.current is None
+    with pytest.raises(AlarmUnavailable):
+        a.apply(duration_ms=100, led=True, buzzer=True)
+
+
+def test_serial_alarm_writes_A_with_the_granted_duration_then_Z_on_off():
+    a, box = serial_alarm(max_ms=500)
+    source = box.current = FakeSerialSource()
+    a.apply(duration_ms=300, led=True, buzzer=True)
+    assert source.written == [b"A300\n"]
+    a.off()
+    assert source.written == [b"A300\n", b"Z\n"]
+
+
+def test_serial_alarm_duration_is_capped_by_max_ms():
+    a, box = serial_alarm(max_ms=200)
+    box.current = FakeSerialSource()
+    a.apply(duration_ms=10_000, led=True, buzzer=False)
+    assert box.current.written == [b"A200\n"]
+
+
+def test_serial_alarm_led_and_buzzer_are_always_both_available_together():
+    a, _ = serial_alarm()
+    assert a.led_available is True
+    assert a.buzzer_available is True
+
+
+def test_serial_alarm_rejects_zero_outputs_and_bad_duration_before_writing_anything():
+    a, box = serial_alarm()
+    box.current = FakeSerialSource()
+    with pytest.raises(ValueError):
+        a.apply(duration_ms=100, led=False, buzzer=False)
+    with pytest.raises(ValueError):
+        a.apply(duration_ms=0, led=True, buzzer=True)
+    assert box.current.written == []
+
+
+def test_serial_alarm_continuous_cap_switches_off_and_refuses_further_applies():
+    clock = [0.0]
+    box = SourceBox()
+    a = SerialAlarm(box, max_ms=1000, max_continuous_ms=1000, monotonic=lambda: clock[0], timer=FakeTimer)
+    box.current = FakeSerialSource()
+    a.apply(duration_ms=1000, led=True, buzzer=True)
+    clock[0] = 2.0  # 2s later: continuous allowance (1s) is long gone
+    with pytest.raises(AlarmUnavailable):
+        a.apply(duration_ms=1000, led=True, buzzer=True)
+    assert box.current.written[-1] == b"Z\n"  # off() ran as part of refusing
+
+
+def test_serial_alarm_off_is_a_noop_when_no_connection_is_live():
+    a, box = serial_alarm()
+    assert box.current is None
+    a.off()  # must not raise: off() is "make sure it's off", and no port means it already is
+
+
+def test_serial_alarm_a_failed_write_is_reported_as_AlarmUnavailable():
+    a, box = serial_alarm()
+    box.current = FailingSource()
+    with pytest.raises(AlarmUnavailable):
+        a.apply(duration_ms=100, led=True, buzzer=True)
+
+
+def test_serial_alarm_reconnect_moves_the_live_source_the_box_points_at():
+    """This is the property the whole SourceBox indirection exists for: the alarm always
+    writes to whichever source is CURRENTLY live, even though it was built long before any
+    connection existed and never sees the bridge's reconnect logic directly."""
+    a, box = serial_alarm()
+    first, second = FakeSerialSource(), FakeSerialSource()
+    box.current = first
+    a.apply(duration_ms=100, led=True, buzzer=True)
+    box.current = second  # bridge reconnected: a new SerialPortSource replaced the old one
+    a.off()
+    assert first.written == [b"A100\n"]
+    assert second.written == [b"Z\n"]

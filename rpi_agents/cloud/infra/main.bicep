@@ -54,6 +54,9 @@ param allowDemoRuntime bool = true
 @description('Path of the model manifest inside the image.')
 param manifestPath string = '/app/contracts/fixtures/model-manifest.json'
 
+@description('Directory the manifest artifact paths (e.g. the champion checkpoint) resolve against. Only read when runtime is not "demo".')
+param modelArtifactRoot string = '/app/rpi_agents/cloud/model'
+
 @allowed(['manual-review-only-v1', 'armed-glass-and-person-v1'])
 param policy string = 'manual-review-only-v1'
 
@@ -336,6 +339,7 @@ var baseEnv = [
   { name: 'SNN_RUNTIME', value: runtime }
   { name: 'SNN_ALLOW_DEMO_RUNTIME', value: allowDemoRuntime ? '1' : '0' }
   { name: 'SNN_MANIFEST_PATH', value: manifestPath }
+  { name: 'SNN_MODEL_ARTIFACT_ROOT', value: modelArtifactRoot }
   { name: 'SNN_POLICY', value: policy }
   { name: 'SNN_ALLOW_LIVE', value: allowLive ? '1' : '0' }
   { name: 'SNN_OPERATOR_USERNAME', value: operatorUsername }

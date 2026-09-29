@@ -478,7 +478,10 @@ void sendFrameEvent(uint32_t seq, uint32_t t_us, uint16_t n, uint8_t mask, uint8
 void handleSerial() {
   if (!Serial.available()) return;
   char cmd = Serial.read();
-  if (cmd == 'C') {
+
+  if(cmd == 'I') {
+    print_boot_line();
+  } else if (cmd == 'C') {
     uint8_t  pin  = Serial.parseInt();
     uint16_t n    = Serial.parseInt();
     uint16_t rate = Serial.parseInt();
